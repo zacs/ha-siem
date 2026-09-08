@@ -1,0 +1,104 @@
+"""House mode: family, sitter, service or vacant, with an override."""
+
+from __future__ import annotations
+
+from .rules import MODE_FAMILY, MODE_SERVICE, MODE_SITTER, MODE_VACANT, MODES
+
+FAMILY_LINGER_S = 30 * 60
+SITTER_AFTER_END_S = 2 * 3600
+SITTER_QUIET_S = 60 * 60
+SITTER_PREFIX = "Sitter:"
+SERVICE_PREFIX = "Service:"
+MODE_AUTO = "auto"
+
+
+class HouseModeMachine:
+    """Derive the house mode from presence, the calendar and allowed PIN use.
+
+    Precedence is override, family, sitter, service, vacant. Family lingers
+    thirty minutes after the last resident leaves. Sitter is held while a
+    Sitter calendar event runs and afterwards until two hours past its end
+    and sixty quiet minutes have both elapsed; an allowed PIN use starts the
+    same clock from the moment of the unlock.
+    """
+
+    def __init__(self, now: float) -> None:
+        """Start vacant at ``now``."""
+        self.override: str | None = None
+        self._anyone_home = False
+        self._last_home_seen: float | None = None
+        self._sitter_window: tuple[float, float] | None = None
+        self._sitter_end: float | None = None
+        self._service_window: tuple[float, float] | None = None
+        self._last_activity = now
+
+    def set_presence(self, anyone_home: bool, now: float) -> None:
+        """Record whether any resident or resident tracker is home."""
+        if anyone_home or self._anyone_home:
+            self._last_home_seen = now
+        self._anyone_home = anyone_home
+
+    def note_activity(self, now: float) -> None:
+        """Record house activity, which keeps sitter mode alive."""
+        self._last_activity = now
+
+    def set_calendar_event(self, summary: str | None, start: float, end: float) -> str | None:
+        """Apply the active calendar event; return the mode it selects, if any."""
+        summary = (summary or "").strip()
+        if summary.casefold().startswith(SITTER_PREFIX.casefold()):
+            self._sitter_window = (start, end)
+            self._sitter_end = max(self._sitter_end or end, end)
+            return MODE_SITTER
+        if summary.casefold().startswith(SERVICE_PREFIX.casefold()):
+            self._service_window = (start, end)
+            return MODE_SERVICE
+        return None
+
+    def clear_calendar_event(self) -> None:
+        """Forget the running calendar event; the sitter clock keeps running."""
+        self._sitter_window = None
+        self._service_window = None
+
+    def allowed_pin(self, now: float) -> None:
+        """An allowed PIN was used: start (or extend) the sitter clock."""
+        self._sitter_end = max(self._sitter_end or now, now)
+        self._last_activity = now
+
+    def set_override(self, mode: str | None) -> None:
+        """Force ``mode``; ``None`` or ``auto`` returns to automatic."""
+        if mode in (None, MODE_AUTO):
+            self.override = None
+        elif mode in MODES:
+            self.override = mode
+        else:
+            raise ValueError(f"unknown house mode {mode!r}")
+
+    def _family(self, now: float) -> bool:
+        if self._anyone_home:
+            return True
+        return self._last_home_seen is not None and now - self._last_home_seen < FAMILY_LINGER_S
+
+    def _sitter(self, now: float) -> bool:
+        if self._sitter_window and self._sitter_window[0] <= now < self._sitter_window[1]:
+            return True
+        if self._sitter_end is None:
+            return False
+        if now < self._sitter_end + SITTER_AFTER_END_S or now - self._last_activity < SITTER_QUIET_S:
+            return True
+        self._sitter_end = None
+        return False
+
+    def _service(self, now: float) -> bool:
+        return bool(self._service_window and self._service_window[0] <= now < self._service_window[1])
+
+    def mode(self, now: float) -> str:
+        """Return the current house mode."""
+        if self.override:
+            return self.override
+        if self._family(now):
+            return MODE_FAMILY
+        if self._sitter(now):
+            return MODE_SITTER
+        if self._service(now):
+            return MODE_SERVICE
+        return MODE_VACANT

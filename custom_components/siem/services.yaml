@@ -1,0 +1,34 @@
+label_incident:
+  fields:
+    label:
+      required: true
+      example: "false_alarm"
+      selector:
+        select:
+          translation_key: label
+          options:
+            - false_alarm
+            - thats_me
+            - sitter
+            - real
+    incident_id:
+      required: false
+      example: "3f9a1c2b"
+      selector:
+        text:
+run_digest: {}
+reset_weights: {}
+set_house_mode:
+  fields:
+    mode:
+      required: true
+      example: "auto"
+      selector:
+        select:
+          translation_key: house_mode
+          options:
+            - auto
+            - vacant
+            - sitter
+            - service
+            - family
