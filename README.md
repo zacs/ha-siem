@@ -190,7 +190,12 @@ pytest
 ruff check .
 ```
 
-Tests cover `core/` only and need no Home Assistant installation.
+Tests cover `core/` only and need no Home Assistant installation. The
+brand icon HACS shows lives in `custom_components/siem/brand/`.
+
+## License
+
+MIT, see `LICENSE`.
 
 Phase 2 (not built): an unknown-BLE baseline from the Bluetooth advertisement
 stream. It will add `bluetooth` to the manifest dependencies when it lands.
