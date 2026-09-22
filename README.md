@@ -65,9 +65,9 @@ Things the component consumes but cannot create for you:
   - Locks on [Z-Wave JS](https://www.home-assistant.io/integrations/zwave_js/)
     (Home Assistant's Z-Wave integration; the JS is JavaScript, which its
     driver is written in) for the `manual_unlock`, `pin_not_allowed` and
-    `keypad_lockout` rules, which read `zwave_js_notification` events. Locks on other stacks still
-    work with LCM and the untrusted-user rule, but those three rules stay
-    silent.
+    `keypad_lockout` rules, which read `zwave_js_notification` events. Locks
+    on other stacks still work with LCM and the untrusted-user rule, but those
+    three rules stay silent.
   - The [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/)
     integration if you want light changes made from Apple Home to score as
     `light_homekit` instead of `light_physical`. Optional.
