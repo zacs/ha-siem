@@ -1,4 +1,4 @@
-# <img src="custom_components/siem/brand/icon.png" width="36" height="36" alt="" align="middle"> SIEM for Home Assistant
+# <img src="custom_components/siem/brand/icon.png" width="90" height="90" alt="" align="middle"> SIEM for Home Assistant
 
 [![Tests](https://github.com/zacs/ha-siem/actions/workflows/tests.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/tests.yaml)
 [![Hassfest](https://github.com/zacs/ha-siem/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/hassfest.yaml)
