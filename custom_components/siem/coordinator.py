@@ -108,6 +108,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_label: str | None = None
         self._offline_since: dict[str, float] = {}
         self._break_glass_sent: set[str] = set()
+        self._last_arrival = 0.0
         self._contact_last_on: dict[str, float] = {}
         self._lock_devices: dict[str, str] = {}
         self._unsubs: list[Callable[[], None]] = []
@@ -230,7 +231,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.store.add_incident(event.incident.as_dict())
             payload = {c.ATTR_INCIDENT_ID: event.incident.id, "tier": event.tier, "previous_tier": event.previous_tier, "score": round(score, 1)}
             async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, {**payload, "room": self.room_name(event.incident.room), "mode": event.incident.mode})
-        self.publish(now, force=bool(events) or previous != (self.house_mode, self.night))
+        changed = previous != (self.house_mode, self.night)
+        if changed and (recommendation := recommend_arm_mode(self.house_mode, self.night)) != self.recommended_arm:
+            self.recommended_arm = recommendation
+            self.hass.async_create_task(self.responder.async_arm(recommendation))
+        self.publish(now, force=bool(events) or changed)
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
         if events or renotify:
@@ -342,7 +347,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _on_arrival(self, old: State | None, new: State, now: float) -> None:
         self._update_presence(now)
-        if new.state == STATE_HOME and (old is None or old.state != STATE_HOME):
+        # A person and its tracker arrive together; the suppressor applies once per arrival.
+        if new.state == STATE_HOME and (old is None or old.state != STATE_HOME) and now - self._last_arrival >= 60:
+            self._last_arrival = now
             self.engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.entity_id} arrived home")
         self._process(now)
 
@@ -369,7 +376,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         data = event.data
         if data.get("command_class_name") != "Notification":
             return
-        lock = self._lock_devices.get(str(data.get("device_id")))
+        locks = self.house.get(c.CONF_LOCKS) or []
+        lock = self._lock_devices.get(str(data.get("device_id"))) or (locks[0] if len(locks) == 1 and not self._lock_devices else None)
         if lock is None and self._lock_devices:
             return
         kind, slot = classify_lock_notification(data.get("event_label"), data.get("parameters"))
@@ -393,16 +401,13 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             now = self.now()
             self._update_presence(now)
+            if self.residual is not None:
+                self._on_load(now)
             self._process(now)
             for entity_id, since in list(self._offline_since.items()):
                 if self.house_mode == MODE_VACANT and now - since >= c.OFFLINE_BREAK_GLASS_S and entity_id not in self._break_glass_sent:
                     self._break_glass_sent.add(entity_id)
                     await self.responder.async_break_glass(f"{entity_id} unavailable for over 60 minutes while vacant")
-            recommendation = recommend_arm_mode(self.house_mode, self.night)
-            if recommendation != self.recommended_arm:
-                self.recommended_arm = recommendation
-                self.publish(now, force=True)
-                await self.responder.async_arm(recommendation)
             if self.digest.due(dt_util.now()):
                 await self.digest.async_run()
         except Exception:

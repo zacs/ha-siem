@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
 
 from . import const
@@ -28,6 +28,8 @@ class Responder:
         """Bind to the coordinator."""
         self.hass = hass
         self.coordinator = coordinator
+        # Our own actions carry a child context so the state changes they cause classify as automation and never score.
+        self._root = Context()
 
     @property
     def dry_run(self) -> bool:
@@ -89,7 +91,7 @@ class Responder:
         await self.async_run(actions)
         if incident.room and (room := c.rooms.get(incident.room)) and restore_actions(incident.room, room):
             delay = float(c.house.get(const.CONF_RESTORE_SECONDS, const.DEFAULT_RESTORE_SECONDS))
-            async_call_later(self.hass, delay, lambda _now: self.hass.async_create_task(self.async_run(restore_actions(incident.room, room))))
+            async_call_later(self.hass, delay, callback(lambda _now: self.hass.async_create_task(self.async_run(restore_actions(incident.room, room)))))
 
     async def async_run(self, actions: list[Action]) -> None:
         """Execute a plan, one service call at a time, never raising."""
@@ -101,7 +103,7 @@ class Responder:
             if action.entity_id:
                 data["entity_id"] = action.entity_id
             try:
-                await self.hass.services.async_call(action.domain, action.service, data, blocking=True)
+                await self.hass.services.async_call(action.domain, action.service, data, blocking=True, context=Context(parent_id=self._root.id))
             except Exception:
                 _LOGGER.exception("Action %s failed", action.render())
 
@@ -111,7 +113,7 @@ class Responder:
 
     def _pulse_alarm_trigger(self) -> None:
         self._set_alarm_trigger(True)
-        async_call_later(self.hass, const.ALARM_TRIGGER_SECONDS, lambda _now: self._set_alarm_trigger(False))
+        async_call_later(self.hass, const.ALARM_TRIGGER_SECONDS, callback(lambda _now: self._set_alarm_trigger(False)))
 
     async def async_arm(self, recommendation: str) -> None:
         """Arm the panel when allowed, otherwise say what would have happened."""
@@ -119,7 +121,7 @@ class Responder:
         panel = c.responses.get(const.CONF_ALARM_PANEL)
         if c.toggles[const.CONF_AUTO_ARM] and not self.dry_run and panel:
             try:
-                await self.hass.services.async_call("alarm_control_panel", ARM_SERVICES[recommendation], {"entity_id": panel}, blocking=True)
+                await self.hass.services.async_call("alarm_control_panel", ARM_SERVICES[recommendation], {"entity_id": panel}, blocking=True, context=Context(parent_id=self._root.id))
             except Exception:
                 _LOGGER.exception("Arming %s as %s failed", panel, recommendation)
             return

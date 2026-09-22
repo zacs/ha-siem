@@ -25,14 +25,12 @@ STRENGTH_AUTO = "auto"
 FlowResult = config_entries.ConfigFlowResult
 
 
-def _entity(domain: str | list[str] | None = None, device_class: Iterable[str] | None = None, multiple: bool = True, integration: str | None = None) -> sel.EntitySelector:
+def _entity(domain: str | list[str] | None = None, device_class: Iterable[str] | None = None, multiple: bool = True) -> sel.EntitySelector:
     config: dict[str, Any] = {"multiple": multiple}
     if domain:
         flt: dict[str, Any] = {"domain": domain}
         if device_class:
             flt["device_class"] = list(device_class)
-        if integration:
-            flt["integration"] = integration
         config["filter"] = flt
     return sel.EntitySelector(sel.EntitySelectorConfig(**config))
 
@@ -115,7 +113,7 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_LOAD_STEP, default=c.DEFAULT_LOAD_STEP): _number(10, 5000, 10, "W"),
         vol.Optional(c.CONF_LOAD_SUSTAIN, default=c.DEFAULT_LOAD_SUSTAIN): _number(1, 120, 1, "min"),
         vol.Optional(c.CONF_LOCKS): _entity("lock"),
-        vol.Optional(c.CONF_LCM_EVENTS): _entity("event", integration="lock_code_manager"),
+        vol.Optional(c.CONF_LCM_EVENTS): _entity("event"),
         vol.Optional(c.CONF_CALENDAR): _entity("calendar", multiple=False),
     }
 )

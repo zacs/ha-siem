@@ -165,6 +165,31 @@ vacant, `keypad_lockout`, or a watched entity unavailable for over 60 minutes
 while vacant) fan out to both notify services. In dry run every message starts
 with `[DRY RUN]` and ends with the concrete action list, entity by entity.
 
+## Dry run with test entities
+
+`dev/siem_test_entities.yaml` is a Home Assistant package that builds a fake
+house of `Test ...` entities: three rooms of motion, presence, sound, door,
+window, fridge and gate contacts, lights, power sensors, a camera-style person
+detector per room, a universal media player, a lock, a Lock Code Manager style
+event entity, two persons with device trackers, whole-house switches and
+scripts, an alarm panel, and scripts that fire Z-Wave lock notifications.
+Every watched entity is a template mirror of an `input_boolean` or
+`input_number` helper, so the whole rig is driven from the UI. Copy the file
+to `<config>/packages/`, restart, create the three areas it names, move the
+room entities into them, and follow the suggested config flow answers and the
+walkthrough in the file header.
+
+The mirrors are trigger-based templates on a two second timer on purpose. A
+helper toggled from the UI carries your user id, and the SIEM would classify
+the change as a user action rather than a physical one; re-rendering on a
+timer drops that context. Setting a mirror's state directly in Developer
+tools exercises the user-origin path instead.
+
+The file header lists what it cannot create: areas, the notify service
+(use `notify.persistent_notification` or your real Mattermost service with a
+test channel), a calendar (add a Local Calendar), a camera, an AI task entity,
+the companion app notify service, a TTS entity, and a HomeKit-origin change.
+
 ## Adding a rule
 
 1. In `core/rules.py`, add a `_rule(...)` line to `DEFAULT_RULES` with the id,

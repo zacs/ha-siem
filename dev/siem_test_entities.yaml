@@ -1,0 +1,775 @@
+# =============================================================================
+# SIEM for Home Assistant: test entities for a dry run
+# =============================================================================
+#
+# A Home Assistant *package* that builds a fake house of "Test ..." entities so
+# you can walk through the SIEM config flow and watch incidents score without
+# touching a real device. Everything is driven from helpers named "(helper)".
+#
+# INSTALL
+#   1. Copy this file to <config>/packages/siem_test_entities.yaml
+#   2. Enable packages in configuration.yaml if you have not already:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   3. Restart Home Assistant.
+#   4. Create three areas: "Test Kitchen", "Test Living Room", "Test Backyard".
+#      In Settings > Devices & services > Entities search "test kitchen",
+#      select everything, and use "Move to area". Repeat for the other rooms.
+#      Leave the whole-house entities (front door CSI, water flow, house load,
+#      EV charger, front door lock, LCM event, persons, house switches, alarm
+#      panel, kitchen speaker helpers) without an area.
+#   5. Add the SIEM integration. Suggested answers are at the end of this file.
+#
+# HOW THE SIMULATION WORKS
+#   Every entity the SIEM watches is a template mirror of a helper. Toggle the
+#   helper and the mirror follows within two seconds. The mirrors are
+#   trigger-based templates on a time_pattern trigger on purpose: a change made
+#   from the UI carries your user id, and the SIEM would classify it as a user
+#   action (trusted never scores, untrusted scores the untrusted_user rule).
+#   Re-rendering on a timer drops that context, so the SIEM sees the change as
+#   "physical", exactly like a real contact or a wall switch.
+#
+#   To exercise the user-origin path instead, set a mirror's state directly in
+#   Developer tools > States: that write carries your user id. The mirror snaps
+#   back to the helper's value within two seconds, which is fine because only
+#   the on-transition scores.
+#
+#   The deter lights (Test Kitchen Deter Light, Test Backyard Floodlight) are
+#   ordinary state-based templates, so they keep the context of whatever
+#   changed them: a UI toggle is you, and the SIEM's own deterrence is tagged
+#   as an automation and never scores, the same as with real lights.
+#
+# THINGS THIS FILE CANNOT CREATE (set up by hand, most are optional)
+#   - Areas: create the three areas above and move the entities into them.
+#   - Notify service: use notify.persistent_notification. Messages land in the
+#     notification drawer; the Mattermost attachment is dropped there but the
+#     [DRY RUN] action list is part of the message. Or point the SIEM at your
+#     real notify.mattermost with a test channel.
+#   - Calendar: add a Local Calendar (Settings > Devices & services > Add
+#     integration) named "Test House Calendar" and create events titled
+#     "Sitter: Sam" or "Service: Plumber". Or set calendar state by hand in
+#     Developer tools > States with attributes message, start_time, end_time.
+#   - Camera: not templatable. Add a Generic Camera pointing at any still image
+#     URL, or leave the room camera empty (snapshots are then skipped).
+#   - AI task entity: comes from an LLM integration (OpenAI, Anthropic, Google,
+#     Ollama). Leave it empty to see the digest fall back to raw counts.
+#   - Mobile notify service: needs the companion app (notify.mobile_app_*).
+#   - TTS entity: needs a TTS integration; the deter sound URL is used instead.
+#   - HomeKit origin: the homekit_state_change event and the light change must
+#     share one context; YAML cannot fake that, the unit tests cover it.
+#   - Lock Code Manager: event.test_lcm_sam_credential_used below imitates an
+#     LCM per-user "credential used" event entity (code_slot, name, operation).
+#   - Z-Wave lock notifications: run the script.test_front_door_* scripts; they
+#     fire zwave_js_notification events the SIEM listens to.
+#   - Device trackers: the automation at the bottom keeps three legacy
+#     trackers (device_tracker.see, stored in known_devices.yaml) in sync with
+#     the "... home" helpers.
+#
+# SUGGESTED CONFIG FLOW ANSWERS
+#   Rooms: Test Kitchen, Test Living Room, Test Backyard. The room steps are
+#     pre-filled from the areas; check the fridge door landed under interior
+#     doors and the gate under perimeter openings.
+#   Test Kitchen: deter lights light.test_kitchen_deter_light, deter players
+#     media_player.test_kitchen_speaker, deter script
+#     script.test_kitchen_deter_script.
+#   Test Backyard: deter lights light.test_backyard_floodlight.
+#   Whole house: residents person.test_alice and person.test_bob; additional
+#     tracker device_tracker.test_guest_car; CSI binary_sensor.test_front_door_csi
+#     mapped to binary_sensor.test_front_door; water sensor.test_water_flow with
+#     threshold 1; load sensor.test_house_load with automated load
+#     sensor.test_ev_charger_power, step 100 W, sustain 1 minute; locks
+#     lock.test_front_door_lock; LCM events event.test_lcm_sam_credential_used;
+#     calendar your test calendar.
+#   Trust and deterrence: add your own user id to the trusted list
+#     (Developer tools > Template: {{ states.person | selectattr('attributes.user_id')
+#     | map(attribute='attributes.user_id') | list }}); night window covering
+#     "now" if you want to see the 1.5x exterior multiplier; deter sound
+#     media-source://media_source/local/test_dog.mp3 (any text, the test speaker
+#     only records it); deter volume 0.7; restore 15 s; whole-house deter
+#     switch.test_house_deter_switch and script.test_house_deter_script;
+#     whole-house alarm switch.test_house_siren and script.test_house_alarm_script.
+#   Responses: notify.persistent_notification, any target,
+#     alarm_control_panel.test_alarm_panel, dry run on, a digest time a few
+#     minutes ahead, second notify service notify.persistent_notification again
+#     if you want to see the break-glass fan-out twice.
+#
+# WALKTHROUGH (house mode vacant, night window off)
+#   1. Turn on "Test Kitchen Back Door (helper)": score 40, tier verify, one
+#      notification with the timeline.
+#   2. Within five minutes turn on "Test Kitchen Motion (helper)": medium
+#      source 30 points x 1.5 entry chain = 45, score 85, tier alarm. The
+#      notification lists every action that would have run, entity by entity.
+#   3. Turn on "Test Alice Phone Home (helper)": -60 suppressor, house mode
+#      family, recommended alarm mode disarmed.
+#   4. Turn it off again, wait 30 minutes (or force vacant with
+#      select.siem_house_mode_override), then run
+#      script.test_front_door_manual_unlock: 60 points and a break-glass
+#      notification on both notify services.
+#   5. Press "Test Sam Uses PIN (helper)": -40, house mode sitter, incident
+#      person Sam. Run script.test_front_door_keypad_unlock_unknown: 30
+#      (pin_not_allowed); script.test_front_door_keypad_unlock_sam: nothing.
+#   6. Turn off "Test Kitchen Motion Online (helper)": sensor_offline 20; after
+#      60 minutes vacant the break-glass fan-out fires again.
+#   7. Label the incident with select.siem_label_last_incident; watch the
+#      weights in the options flow. Run siem.run_digest to post the digest.
+#   8. Turn dry run off (switch.siem_dry_run) and repeat 1 and 2: the kitchen
+#      deter light goes to 100%, the speaker plays the deter sound at 0.7 and is
+#      restored after 15 s, the house deter switch and scripts run, and at alarm
+#      the siren and alarm script run too.
+# =============================================================================
+
+input_boolean:
+  # Test Kitchen
+  test_kitchen_motion:
+    name: Test Kitchen Motion (helper)
+    icon: mdi:motion-sensor
+  test_kitchen_motion_online:
+    name: Test Kitchen Motion Online (helper)
+    icon: mdi:lan-connect
+    initial: true
+  test_kitchen_presence:
+    name: Test Kitchen Presence (helper)
+    icon: mdi:radar
+  test_kitchen_sound:
+    name: Test Kitchen Sound (helper)
+    icon: mdi:ear-hearing
+  test_kitchen_bayesian_evidence:
+    name: Test Kitchen Bayesian Evidence (helper)
+    icon: mdi:chart-bell-curve
+  test_kitchen_back_door:
+    name: Test Kitchen Back Door (helper)
+    icon: mdi:door
+  test_kitchen_window:
+    name: Test Kitchen Window (helper)
+    icon: mdi:window-closed-variant
+  test_kitchen_fridge_door:
+    name: Test Kitchen Fridge Door (helper)
+    icon: mdi:fridge
+  test_kitchen_light:
+    name: Test Kitchen Light (helper)
+    icon: mdi:lightbulb
+  test_kitchen_deter_light:
+    name: Test Kitchen Deter Light (helper)
+    icon: mdi:lightbulb-alert
+  # Test Living Room
+  test_living_room_motion:
+    name: Test Living Room Motion (helper)
+    icon: mdi:motion-sensor
+  test_living_room_camera_person:
+    name: Test Living Room Camera Person (helper)
+    icon: mdi:account-eye
+  test_front_door:
+    name: Test Front Door (helper)
+    icon: mdi:door
+  test_living_room_window:
+    name: Test Living Room Window (helper)
+    icon: mdi:window-closed-variant
+  test_living_room_light:
+    name: Test Living Room Light (helper)
+    icon: mdi:lightbulb
+  # Test Backyard
+  test_backyard_gate:
+    name: Test Backyard Gate (helper)
+    icon: mdi:gate
+  test_backyard_camera_person:
+    name: Test Backyard Camera Person (helper)
+    icon: mdi:account-eye
+  test_backyard_floodlight:
+    name: Test Backyard Floodlight (helper)
+    icon: mdi:light-flood-down
+  # Whole house
+  test_front_door_csi:
+    name: Test Front Door CSI (helper)
+    icon: mdi:wifi-strength-3
+  test_front_door_locked:
+    name: Test Front Door Locked (helper)
+    icon: mdi:lock
+    initial: true
+  test_house_deter_switch:
+    name: Test House Deter Switch (helper)
+    icon: mdi:bullhorn
+  test_house_siren:
+    name: Test House Siren (helper)
+    icon: mdi:alarm-light
+  test_alice_phone_home:
+    name: Test Alice Phone Home (helper)
+    icon: mdi:cellphone
+  test_bob_phone_home:
+    name: Test Bob Phone Home (helper)
+    icon: mdi:cellphone
+  test_guest_car_home:
+    name: Test Guest Car Home (helper)
+    icon: mdi:car
+
+input_number:
+  test_kitchen_light_brightness:
+    name: Test Kitchen Light Brightness (helper)
+    min: 0
+    max: 255
+    step: 1
+    initial: 255
+    icon: mdi:brightness-6
+  test_kitchen_deter_light_brightness:
+    name: Test Kitchen Deter Light Brightness (helper)
+    min: 0
+    max: 255
+    step: 1
+    initial: 128
+    icon: mdi:brightness-6
+  test_kitchen_coffee_maker_power:
+    name: Test Kitchen Coffee Maker Power (helper)
+    min: 0
+    max: 2000
+    step: 10
+    initial: 0
+    unit_of_measurement: W
+    icon: mdi:coffee-maker
+  test_living_room_tv_power:
+    name: Test Living Room TV Power (helper)
+    min: 0
+    max: 500
+    step: 5
+    initial: 2
+    unit_of_measurement: W
+    icon: mdi:television
+  test_kitchen_speaker_volume:
+    name: Test Kitchen Speaker Volume (helper)
+    min: 0
+    max: 1
+    step: 0.05
+    initial: 0.3
+    icon: mdi:volume-medium
+  test_water_flow:
+    name: Test Water Flow (helper)
+    min: 0
+    max: 30
+    step: 0.5
+    initial: 0
+    unit_of_measurement: L/min
+    icon: mdi:water-pump
+  test_house_load:
+    name: Test House Load (helper)
+    min: 0
+    max: 5000
+    step: 50
+    initial: 300
+    unit_of_measurement: W
+    icon: mdi:home-lightning-bolt
+  test_ev_charger_power:
+    name: Test EV Charger Power (helper)
+    min: 0
+    max: 8000
+    step: 100
+    initial: 0
+    unit_of_measurement: W
+    icon: mdi:ev-station
+
+input_select:
+  test_kitchen_speaker_state:
+    name: Test Kitchen Speaker State (helper)
+    options: ["off", idle, playing, paused]
+    initial: "off"
+    icon: mdi:speaker
+  test_alarm_panel_state:
+    name: Test Alarm Panel State (helper)
+    options: [disarmed, armed_home, armed_away, armed_night, armed_vacation, triggered]
+    initial: disarmed
+    icon: mdi:shield-home
+
+input_text:
+  test_kitchen_speaker_media:
+    name: Test Kitchen Speaker Media (helper)
+    max: 255
+    icon: mdi:music
+
+input_button:
+  test_sam_uses_pin:
+    name: Test Sam Uses PIN (helper)
+    icon: mdi:dialpad
+  test_sam_locks_up:
+    name: Test Sam Locks Up (helper)
+    icon: mdi:lock-check
+
+template:
+  # ---------------------------------------------------------------------------
+  # Mirrors the SIEM watches. Re-rendered every two seconds so that their state
+  # changes carry no user context (see the header).
+  # ---------------------------------------------------------------------------
+  - triggers:
+      - trigger: time_pattern
+        seconds: "/2"
+    binary_sensor:
+      # Test Kitchen
+      - name: Test Kitchen Motion
+        unique_id: siem_test_kitchen_motion
+        device_class: motion
+        state: "{{ is_state('input_boolean.test_kitchen_motion', 'on') }}"
+        availability: "{{ is_state('input_boolean.test_kitchen_motion_online', 'on') }}"
+      - name: Test Kitchen Presence
+        unique_id: siem_test_kitchen_presence
+        device_class: presence
+        state: "{{ is_state('input_boolean.test_kitchen_presence', 'on') }}"
+      - name: Test Kitchen Sound
+        unique_id: siem_test_kitchen_sound
+        device_class: sound
+        state: "{{ is_state('input_boolean.test_kitchen_sound', 'on') }}"
+      - name: Test Kitchen Bayesian Evidence
+        unique_id: siem_test_kitchen_bayesian_evidence
+        state: "{{ is_state('input_boolean.test_kitchen_bayesian_evidence', 'on') }}"
+      - name: Test Kitchen Back Door
+        unique_id: siem_test_kitchen_back_door
+        device_class: door
+        state: "{{ is_state('input_boolean.test_kitchen_back_door', 'on') }}"
+      - name: Test Kitchen Window
+        unique_id: siem_test_kitchen_window
+        device_class: window
+        state: "{{ is_state('input_boolean.test_kitchen_window', 'on') }}"
+      - name: Test Kitchen Fridge Door
+        unique_id: siem_test_kitchen_fridge_door
+        device_class: door
+        state: "{{ is_state('input_boolean.test_kitchen_fridge_door', 'on') }}"
+      # Test Living Room
+      - name: Test Living Room Motion
+        unique_id: siem_test_living_room_motion
+        device_class: motion
+        state: "{{ is_state('input_boolean.test_living_room_motion', 'on') }}"
+      - name: Test Living Room Camera Person
+        unique_id: siem_test_living_room_camera_person
+        device_class: occupancy
+        state: "{{ is_state('input_boolean.test_living_room_camera_person', 'on') }}"
+      - name: Test Front Door
+        unique_id: siem_test_front_door
+        device_class: door
+        state: "{{ is_state('input_boolean.test_front_door', 'on') }}"
+      - name: Test Living Room Window
+        unique_id: siem_test_living_room_window
+        device_class: window
+        state: "{{ is_state('input_boolean.test_living_room_window', 'on') }}"
+      # Test Backyard
+      - name: Test Backyard Gate
+        unique_id: siem_test_backyard_gate
+        device_class: opening
+        state: "{{ is_state('input_boolean.test_backyard_gate', 'on') }}"
+      - name: Test Backyard Camera Person
+        unique_id: siem_test_backyard_camera_person
+        device_class: occupancy
+        state: "{{ is_state('input_boolean.test_backyard_camera_person', 'on') }}"
+      # Whole house
+      - name: Test Front Door CSI
+        unique_id: siem_test_front_door_csi
+        device_class: motion
+        state: "{{ is_state('input_boolean.test_front_door_csi', 'on') }}"
+    sensor:
+      - name: Test Kitchen Coffee Maker Power
+        unique_id: siem_test_kitchen_coffee_maker_power
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: W
+        state: "{{ states('input_number.test_kitchen_coffee_maker_power') | float(0) }}"
+      - name: Test Living Room TV Power
+        unique_id: siem_test_living_room_tv_power
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: W
+        state: "{{ states('input_number.test_living_room_tv_power') | float(0) }}"
+      - name: Test Water Flow
+        unique_id: siem_test_water_flow
+        device_class: volume_flow_rate
+        state_class: measurement
+        unit_of_measurement: L/min
+        state: "{{ states('input_number.test_water_flow') | float(0) }}"
+      - name: Test House Load
+        unique_id: siem_test_house_load
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: W
+        state: "{{ states('input_number.test_house_load') | float(0) }}"
+      - name: Test EV Charger Power
+        unique_id: siem_test_ev_charger_power
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: W
+        state: "{{ states('input_number.test_ev_charger_power') | float(0) }}"
+    light:
+      - name: Test Kitchen Light
+        unique_id: siem_test_kitchen_light
+        state: "{{ is_state('input_boolean.test_kitchen_light', 'on') }}"
+        level: "{{ states('input_number.test_kitchen_light_brightness') | int(255) }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_kitchen_light
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_kitchen_light
+        set_level:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.test_kitchen_light_brightness
+            data:
+              value: "{{ brightness }}"
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_kitchen_light
+      - name: Test Living Room Light
+        unique_id: siem_test_living_room_light
+        state: "{{ is_state('input_boolean.test_living_room_light', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_living_room_light
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_living_room_light
+    lock:
+      - name: Test Front Door Lock
+        unique_id: siem_test_front_door_lock
+        state: "{{ 'locked' if is_state('input_boolean.test_front_door_locked', 'on') else 'unlocked' }}"
+        lock:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_front_door_locked
+        unlock:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_front_door_locked
+
+  # ---------------------------------------------------------------------------
+  # Imitation of a Lock Code Manager "credential used" event entity for the
+  # user Sam in code slot 3. Press the helper buttons to fire it.
+  # ---------------------------------------------------------------------------
+  - triggers:
+      - trigger: state
+        entity_id:
+          - input_button.test_sam_uses_pin
+          - input_button.test_sam_locks_up
+    event:
+      - name: Test LCM Sam Credential Used
+        unique_id: siem_test_lcm_sam_credential_used
+        event_type: pin
+        event_types: "{{ ['pin', 'fingerprint'] }}"
+        attributes:
+          code_slot: 3
+          slot_field: credential_used
+          name: Sam
+          active: true
+          operation: "{{ 'lock' if trigger.entity_id == 'input_button.test_sam_locks_up' else 'unlock' }}"
+          credential_type: pin
+          source: lock.test_front_door_lock
+          target: lock.test_front_door_lock
+          config_entry_title: Test Lock Code Manager
+
+  # ---------------------------------------------------------------------------
+  # Things the SIEM acts on rather than watches. Plain state-based templates.
+  # ---------------------------------------------------------------------------
+  - light:
+      - name: Test Kitchen Deter Light
+        unique_id: siem_test_kitchen_deter_light
+        state: "{{ is_state('input_boolean.test_kitchen_deter_light', 'on') }}"
+        level: "{{ states('input_number.test_kitchen_deter_light_brightness') | int(128) }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_kitchen_deter_light
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_kitchen_deter_light
+        set_level:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.test_kitchen_deter_light_brightness
+            data:
+              value: "{{ brightness }}"
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_kitchen_deter_light
+      - name: Test Backyard Floodlight
+        unique_id: siem_test_backyard_floodlight
+        state: "{{ is_state('input_boolean.test_backyard_floodlight', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_backyard_floodlight
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_backyard_floodlight
+    switch:
+      - name: Test House Deter Switch
+        unique_id: siem_test_house_deter_switch
+        state: "{{ is_state('input_boolean.test_house_deter_switch', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_house_deter_switch
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_house_deter_switch
+      - name: Test House Siren
+        unique_id: siem_test_house_siren
+        state: "{{ is_state('input_boolean.test_house_siren', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.test_house_siren
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.test_house_siren
+    alarm_control_panel:
+      - name: Test Alarm Panel
+        unique_id: siem_test_alarm_panel
+        code_arm_required: false
+        code_format: no_code
+        state: "{{ states('input_select.test_alarm_panel_state') }}"
+        arm_away:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.test_alarm_panel_state
+            data:
+              option: armed_away
+        arm_home:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.test_alarm_panel_state
+            data:
+              option: armed_home
+        arm_night:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.test_alarm_panel_state
+            data:
+              option: armed_night
+        arm_vacation:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.test_alarm_panel_state
+            data:
+              option: armed_vacation
+        disarm:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.test_alarm_panel_state
+            data:
+              option: disarmed
+
+# A Bayesian sensor is "strong" for the SIEM whatever its device class. It
+# watches the evidence mirror rather than the helper so its changes stay
+# context free like the other mirrors.
+binary_sensor:
+  - platform: bayesian
+    name: Test Kitchen Bayesian Occupancy
+    unique_id: siem_test_kitchen_bayesian_occupancy
+    device_class: motion
+    prior: 0.2
+    probability_threshold: 0.5
+    observations:
+      - platform: state
+        entity_id: binary_sensor.test_kitchen_bayesian_evidence
+        to_state: "on"
+        prob_given_true: 0.95
+        prob_given_false: 0.05
+
+# A universal media player driven entirely by helpers. The SIEM snapshots it
+# with scene.create, sets the deter volume, plays the deter sound and restores
+# it afterwards; every step is visible in the helpers.
+media_player:
+  - platform: universal
+    name: Test Kitchen Speaker
+    unique_id: siem_test_kitchen_speaker
+    device_class: speaker
+    state_template: "{{ states('input_select.test_kitchen_speaker_state') }}"
+    attributes:
+      volume_level: input_number.test_kitchen_speaker_volume
+    commands:
+      turn_on:
+        action: input_select.select_option
+        target:
+          entity_id: input_select.test_kitchen_speaker_state
+        data:
+          option: idle
+      turn_off:
+        action: input_select.select_option
+        target:
+          entity_id: input_select.test_kitchen_speaker_state
+        data:
+          option: "off"
+      media_play:
+        action: input_select.select_option
+        target:
+          entity_id: input_select.test_kitchen_speaker_state
+        data:
+          option: playing
+      media_pause:
+        action: input_select.select_option
+        target:
+          entity_id: input_select.test_kitchen_speaker_state
+        data:
+          option: paused
+      media_stop:
+        action: input_select.select_option
+        target:
+          entity_id: input_select.test_kitchen_speaker_state
+        data:
+          option: idle
+      volume_set:
+        action: input_number.set_value
+        target:
+          entity_id: input_number.test_kitchen_speaker_volume
+        data:
+          value: "{{ volume_level }}"
+      play_media:
+        action: script.test_kitchen_speaker_play_media
+        data:
+          media_content_id: "{{ media_content_id }}"
+
+person:
+  - name: Test Alice
+    id: test_alice
+    device_trackers:
+      - device_tracker.test_alice_phone
+  - name: Test Bob
+    id: test_bob
+    device_trackers:
+      - device_tracker.test_bob_phone
+
+# Loads the device_tracker integration so device_tracker.see exists even when
+# nothing else provides a tracker.
+device_tracker: []
+
+script:
+  test_kitchen_deter_script:
+    alias: Test Kitchen Deter Script
+    icon: mdi:bullhorn
+    sequence:
+      - action: persistent_notification.create
+        data:
+          title: SIEM test rig
+          message: "Test Kitchen deter script ran at {{ now().strftime('%H:%M:%S') }}"
+  test_house_deter_script:
+    alias: Test House Deter Script
+    icon: mdi:home-alert
+    sequence:
+      - action: persistent_notification.create
+        data:
+          title: SIEM test rig
+          message: "Test House deter script ran at {{ now().strftime('%H:%M:%S') }}"
+  test_house_alarm_script:
+    alias: Test House Alarm Script
+    icon: mdi:alarm-light
+    sequence:
+      - action: persistent_notification.create
+        data:
+          title: SIEM test rig
+          message: "Test House alarm script ran at {{ now().strftime('%H:%M:%S') }}"
+  test_kitchen_speaker_play_media:
+    alias: Test Kitchen Speaker Play Media (helper)
+    icon: mdi:music
+    fields:
+      media_content_id:
+        description: What the speaker was asked to play
+        example: media-source://media_source/local/test_dog.mp3
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.test_kitchen_speaker_media
+        data:
+          value: "{{ (media_content_id | default('') | string)[:255] }}"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.test_kitchen_speaker_state
+        data:
+          option: playing
+  # Z-Wave lock notifications, as zwave_js would fire them for the front door.
+  test_front_door_manual_unlock:
+    alias: Test Front Door Manual Unlock (Z-Wave event)
+    icon: mdi:lock-open-variant
+    sequence:
+      - event: zwave_js_notification
+        event_data:
+          domain: zwave_js
+          command_class_name: Notification
+          command_class: 113
+          type: 6
+          label: Access Control
+          event: 2
+          event_label: Manual unlock operation
+          parameters: {}
+  test_front_door_keypad_unlock_sam:
+    alias: Test Front Door Keypad Unlock Sam, slot 3 (Z-Wave event)
+    icon: mdi:dialpad
+    sequence:
+      - event: zwave_js_notification
+        event_data:
+          domain: zwave_js
+          command_class_name: Notification
+          command_class: 113
+          type: 6
+          label: Access Control
+          event: 6
+          event_label: Keypad unlock operation
+          parameters:
+            userId: 3
+  test_front_door_keypad_unlock_unknown:
+    alias: Test Front Door Keypad Unlock Unknown, slot 9 (Z-Wave event)
+    icon: mdi:dialpad
+    sequence:
+      - event: zwave_js_notification
+        event_data:
+          domain: zwave_js
+          command_class_name: Notification
+          command_class: 113
+          type: 6
+          label: Access Control
+          event: 6
+          event_label: Keypad unlock operation
+          parameters:
+            userId: 9
+  test_front_door_keypad_lockout:
+    alias: Test Front Door Keypad Lockout (Z-Wave event)
+    icon: mdi:dialpad-off
+    sequence:
+      - event: zwave_js_notification
+        event_data:
+          domain: zwave_js
+          command_class_name: Notification
+          command_class: 113
+          type: 6
+          label: Access Control
+          event: 16
+          event_label: Keypad temporarily disabled
+          parameters: {}
+
+# Keeps three legacy device trackers in step with the "... home" helpers.
+# device_tracker.see creates the trackers on first use (known_devices.yaml).
+automation:
+  - id: siem_test_trackers
+    alias: Test SIEM Trackers (helper)
+    description: Mirrors the phone and car helpers into device_tracker entities.
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_boolean.test_alice_phone_home
+          - input_boolean.test_bob_phone_home
+          - input_boolean.test_guest_car_home
+        to:
+          - "on"
+          - "off"
+      - trigger: homeassistant
+        event: start
+    actions:
+      - repeat:
+          for_each:
+            - test_alice_phone
+            - test_bob_phone
+            - test_guest_car
+          sequence:
+            - action: device_tracker.see
+              data:
+                dev_id: "{{ repeat.item }}"
+                location_name: "{{ 'home' if is_state('input_boolean.' ~ repeat.item ~ '_home', 'on') else 'not_home' }}"
