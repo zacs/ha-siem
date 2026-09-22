@@ -53,8 +53,9 @@ Things the component consumes but cannot create for you:
   - [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM),
     which manages the PIN (personal identification number) codes on your
     locks and publishes the per-user *credential used* event entities SIEM
-    consumes. Without it the `pin_not_allowed` rule and the sitter-by-PIN mode
-    switch have nothing to listen to.
+    consumes, plus a lock event SIEM reads for manual and keypad unlocks on
+    every lock LCM supports. Without it the sitter-by-PIN mode switch has
+    nothing to listen to, and only Z-Wave JS locks feed the lock rules.
   - [Mattermost notification component](https://github.com/cerebrate/ha-mattermost),
     which provides `notify.mattermost` and forwards `data.attachments` and
     `data.file.path` to Mattermost. Any other notify service works too, but
@@ -67,12 +68,15 @@ Things the component consumes but cannot create for you:
     for the digest: OpenAI Conversation, Anthropic, Google Generative AI or
     Ollama all expose an `ai_task` entity. Optional; without one the digest
     posts raw counts.
-  - Locks on [Z-Wave JS](https://www.home-assistant.io/integrations/zwave_js/)
-    (Home Assistant's Z-Wave integration; the JS is JavaScript, which its
-    driver is written in) for the `manual_unlock`, `pin_not_allowed` and
-    `keypad_lockout` rules, which read `zwave_js_notification` events. Locks
-    on other stacks still work with LCM and the untrusted-user rule, but those
-    three rules stay silent.
+  - Locks: any `lock` entity LCM supports. SIEM reads LCM's
+    `lock_code_manager_lock_state_changed` event for the `manual_unlock` and
+    `pin_not_allowed` rules, and `zwave_js_notification` directly for locks on
+    [Z-Wave JS](https://www.home-assistant.io/integrations/zwave_js/) (Home
+    Assistant's Z-Wave integration; the JS is JavaScript, which its driver is
+    written in). Z-Wave JS, ZHA and Zigbee2MQTT report whether an unlock was
+    manual or by code; Matter reports only the code slot, so it never flags a
+    manual unlock. The `keypad_lockout` rule keys on lockout labels that only
+    Z-Wave JS sends.
   - The [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/)
     integration if you want light changes made from Apple Home to score as
     `light_homekit` instead of `light_physical`. Optional.
@@ -175,9 +179,9 @@ exterior-tagged rules by 1.5.
 | `load_residual` | interior | 10, 0, 0, 0 | Optional: house load minus automated loads steps up by *step watts* and stays there for *sustain minutes* |
 | `person_interior_camera` | interior | 40, 5, 5, 0 | An occupancy source named *person* in an interior room turns on |
 | `person_exterior_camera` | exterior | 10, 5, 5, 2 | The same in an area named like a yard, driveway, porch or patio |
-| `manual_unlock` | perimeter | 60, 40, 40, 0 | `zwave_js_notification` with an event label containing *Manual unlock* |
-| `pin_not_allowed` | perimeter | 30, 30, 30, 20 | A keypad unlock whose slot is unknown to the LCM event entities or marked inactive |
-| `keypad_lockout` | perimeter | 40, 40, 40, 30 | A lock notification reading as repeated bad codes or a disabled keypad. Most locks never send this; nothing depends on it |
+| `manual_unlock` | perimeter | 60, 40, 40, 0 | A lock reports a manual (thumb-turn) unlock, through LCM's lock event or a `zwave_js_notification` |
+| `pin_not_allowed` | perimeter | 30, 30, 30, 20 | A code unlock whose slot is unknown to the LCM event entities or marked inactive |
+| `keypad_lockout` | perimeter | 40, 40, 40, 30 | A Z-Wave JS notification reading as repeated bad codes or a disabled keypad. Most locks never send this; nothing depends on it |
 | `sensor_offline` | tamper | 20, 5, 5, 0 | A watched entity becomes unavailable |
 
 Occupancy source strength is derived in code: device class `occupancy` or

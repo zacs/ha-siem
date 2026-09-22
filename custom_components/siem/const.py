@@ -87,6 +87,9 @@ DEFAULT_TARGET = "home_security"
 DEFAULT_DIGEST_TIMES = ["08:00"]
 
 EVENT_ZWAVE_NOTIFICATION = "zwave_js_notification"
+# Lock Code Manager normalises every provider's lock activity into this event.
+EVENT_LCM_LOCK = "lock_code_manager_lock_state_changed"
+LOCK_EVENT_DEDUPE_S = 5
 # Core fires ``homekit_state_change``; the documented name is also watched.
 EVENTS_HOMEKIT = ("homekit_state_change", "homekit_state_changed")
 EVENT_MOBILE_ACTION = "mobile_app_notification_action"

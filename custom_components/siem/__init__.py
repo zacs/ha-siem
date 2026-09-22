@@ -92,10 +92,6 @@ def _register_services(hass: HomeAssistant) -> None:
     async def set_house_mode(call: ServiceCall) -> None:
         _coordinator(hass).set_house_mode(call.data[ATTR_MODE])
 
-    for name, handler, schema in (
-        (SERVICE_LABEL_INCIDENT, label_incident, LABEL_SCHEMA),
-        (SERVICE_RUN_DIGEST, run_digest, None),
-        (SERVICE_RESET_WEIGHTS, reset_weights, None),
-        (SERVICE_SET_HOUSE_MODE, set_house_mode, MODE_SCHEMA),
-    ):
+    services = ((SERVICE_LABEL_INCIDENT, label_incident, LABEL_SCHEMA), (SERVICE_RUN_DIGEST, run_digest, None), (SERVICE_RESET_WEIGHTS, reset_weights, None))
+    for name, handler, schema in (*services, (SERVICE_SET_HOUSE_MODE, set_house_mode, MODE_SCHEMA)):
         hass.services.async_register(DOMAIN, name, handler, schema=schema)

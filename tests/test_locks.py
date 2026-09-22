@@ -11,10 +11,20 @@ from custom_components.siem.core.locks import (
 
 
 def test_classification():
+    # Z-Wave JS and ZHA wording
     assert classify_lock_notification("Manual unlock operation", None) == (KIND_MANUAL_UNLOCK, None)
-    assert classify_lock_notification("Keypad unlock operation", {"userId": 3}) == (KIND_KEYPAD_UNLOCK, 3)
-    assert classify_lock_notification("Keypad temporarily disabled", {}) == (KIND_KEYPAD_LOCKOUT, None)
-    assert classify_lock_notification("Lock jammed", {"userId": "x"}) == (None, None)
+    assert classify_lock_notification("Keypad unlock operation", 3) == (KIND_KEYPAD_UNLOCK, 3)
+    assert classify_lock_notification("Keypad temporarily disabled", 0) == (KIND_KEYPAD_LOCKOUT, None)
+    assert classify_lock_notification("Manual lock operation", 0) == (None, None)
+    assert classify_lock_notification("Lock jammed", "x") == (None, None)
+    # Zigbee2MQTT action names, with the slot in action_user
+    assert classify_lock_notification("manual_unlock", 0) == (KIND_MANUAL_UNLOCK, None)
+    assert classify_lock_notification("unlock", 4) == (KIND_KEYPAD_UNLOCK, 4)
+    assert classify_lock_notification("lock", 4) == (None, 4)
+    # Matter reports only the direction and the slot, so a manual unlock is not distinguishable
+    assert classify_lock_notification("unlocked", 2) == (KIND_KEYPAD_UNLOCK, 2)
+    assert classify_lock_notification("unlocked", 0) == (None, None)
+    assert classify_lock_notification(None, True) == (None, None)
 
 
 def test_lcm_slots_and_allowance():

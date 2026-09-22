@@ -111,6 +111,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_arrival = 0.0
         self._contact_last_on: dict[str, float] = {}
         self._lock_devices: dict[str, str] = {}
+        self._lock_seen: dict[tuple[str | None, str, int | None], float] = {}
         self._unsubs: list[Callable[[], None]] = []
         self._state_unsub: Callable[[], None] | None = None
         self.notifier = Notifier(hass, self)
@@ -152,6 +153,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for name in c.EVENTS_HOMEKIT:
             self._unsubs.append(self.hass.bus.async_listen(name, self._on_homekit))
         self._unsubs.append(self.hass.bus.async_listen(c.EVENT_ZWAVE_NOTIFICATION, self._on_zwave))
+        self._unsubs.append(self.hass.bus.async_listen(c.EVENT_LCM_LOCK, self._on_lcm_lock))
         self._unsubs.append(self.hass.bus.async_listen(c.EVENT_MOBILE_ACTION, self._on_mobile_action))
         self._unsubs.append(async_track_time_interval(self.hass, self._tick, timedelta(seconds=c.TICK_SECONDS)))
         if self.store.last_digest is None:
@@ -167,9 +169,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_stop(self) -> None:
         """Drop every subscription and flush the store."""
-        for unsub in [*self._unsubs, self._state_unsub]:
-            if unsub:
-                unsub()
+        for unsub in filter(None, [*self._unsubs, self._state_unsub]):
+            unsub()
         self._unsubs, self._state_unsub = [], None
         await self.store.async_save()
 
@@ -374,14 +375,28 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @_safe
     def _on_zwave(self, event: Event) -> None:
         data = event.data
-        if data.get("command_class_name") != "Notification":
-            return
+        if data.get("command_class_name") == "Notification":
+            self._lock_event(self._lock_devices.get(str(data.get("device_id"))), data.get("event_label"), (data.get("parameters") or {}).get("userId"))
+
+    @callback
+    @_safe
+    def _on_lcm_lock(self, event: Event) -> None:
+        self._lock_event(event.data.get("entity_id"), event.data.get("action_text"), event.data.get("code_slot"))
+
+    def _lock_event(self, lock: str | None, label: Any, slot: Any) -> None:
+        """Score a lock event from either source once, attributed to a configured lock."""
         locks = self.house.get(c.CONF_LOCKS) or []
-        lock = self._lock_devices.get(str(data.get("device_id"))) or (locks[0] if len(locks) == 1 and not self._lock_devices else None)
-        if lock is None and self._lock_devices:
+        if lock is None and len(locks) == 1 and not self._lock_devices:
+            lock = locks[0]
+        if locks and lock not in locks:
             return
-        kind, slot = classify_lock_notification(data.get("event_label"), data.get("parameters"))
-        now, label = self.now(), str(data.get("event_label") or kind)
+        kind, slot = classify_lock_notification(label, slot)
+        now = self.now()
+        if kind is None or now - self._lock_seen.get((lock, kind, slot), -1e12) < c.LOCK_EVENT_DEDUPE_S:
+            return
+        self._lock_seen[(lock, kind, slot)] = now
+        self._refresh_lcm_slots()
+        label = str(label or kind)
         if kind == KIND_MANUAL_UNLOCK:
             self._score("manual_unlock", now, lock, None, label)
         elif kind == KIND_KEYPAD_UNLOCK and not pin_allowed(slot, self.lcm_slots):

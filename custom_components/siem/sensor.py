@@ -35,11 +35,7 @@ def _incident_attrs(coordinator: SiemCoordinator) -> dict[str, Any]:
 
 DESCRIPTIONS: tuple[SiemSensorDescription, ...] = (
     SiemSensorDescription(
-        key="risk_score",
-        icon="mdi:shield-search",
-        native_unit_of_measurement="points",
-        value_fn=lambda c: round(c.score, 1),
-        attrs_fn=lambda c: {"top_contributors": c.top, "incident_id": c.incident_id},
+        key="risk_score", icon="mdi:shield-search", native_unit_of_measurement="points", value_fn=lambda c: round(c.score, 1), attrs_fn=lambda c: {"top_contributors": c.top, "incident_id": c.incident_id}
     ),
     SiemSensorDescription(key="tier", icon="mdi:shield-alert", device_class=SensorDeviceClass.ENUM, options=list(TIERS), value_fn=lambda c: c.tier),
     SiemSensorDescription(key="incident", icon="mdi:file-alert", value_fn=lambda c: c.incident_id or "none", attrs_fn=_incident_attrs),

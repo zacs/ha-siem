@@ -40,10 +40,8 @@ class Notifier:
             "color": TIER_COLORS[tier],
             "title": f"{tier} in {c.room_name(incident.room) or 'the house'}",
             "fields": [
-                {"short": True, "title": "Room", "value": c.room_name(incident.room) or "-"},
-                {"short": True, "title": "Mode", "value": incident.mode},
-                {"short": True, "title": "Score", "value": f"{c.score:.0f}"},
-                {"short": True, "title": "Top contributors", "value": contributors},
+                {"short": True, "title": title, "value": value}
+                for title, value in (("Room", c.room_name(incident.room) or "-"), ("Mode", incident.mode), ("Score", f"{c.score:.0f}"), ("Top contributors", contributors))
             ],
             "text": timeline or "_no events yet_",
         }

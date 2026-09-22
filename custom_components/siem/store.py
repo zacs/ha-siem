@@ -56,12 +56,9 @@ class SiemStore:
         self.incidents = [*self.incidents, dict(incident)][-MAX_INCIDENTS:]
         self.async_schedule_save()
 
-    def record_weight_changes(
-        self, changes: Mapping[str, tuple[float, float]], at: float, label: str, incident_id: str
-    ) -> None:
+    def record_weight_changes(self, changes: Mapping[str, tuple[float, float]], at: float, label: str, incident_id: str) -> None:
         """Log what a label did to the weights, for the digest."""
-        for rule_id, (old, new) in changes.items():
-            self.weight_changes.append({"at": at, "rule": rule_id, "old": old, "new": new, "label": label, "incident_id": incident_id})
+        self.weight_changes += [{"at": at, "rule": r, "old": o, "new": n, "label": label, "incident_id": incident_id} for r, (o, n) in changes.items()]
         self.weight_changes = self.weight_changes[-MAX_WEIGHT_CHANGES:]
         self.async_schedule_save()
 

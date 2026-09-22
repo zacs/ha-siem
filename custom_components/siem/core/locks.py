@@ -16,15 +16,17 @@ LOCKOUT_HINTS: tuple[str, ...] = (
 )
 
 
-def classify_lock_notification(event_label: str | None, parameters: Mapping[str, Any] | None) -> tuple[str | None, int | None]:
-    """Map a ``zwave_js_notification`` label to a lock event kind and slot."""
-    label = (event_label or "").casefold()
-    slot = None
-    if parameters and isinstance(parameters.get("userId"), int):
-        slot = int(parameters["userId"])
+def classify_lock_notification(label: str | None, slot: Any) -> tuple[str | None, int | None]:
+    """Map a lock event label and code slot to a lock event kind.
+
+    Labels come from ``zwave_js_notification`` or Lock Code Manager's lock event: ZHA says "Manual unlock operation" like
+    Z-Wave, Zigbee2MQTT sends ``manual_unlock`` or ``unlock`` with a slot, and Matter only ``unlocked`` with a slot.
+    """
+    label = (label or "").casefold().replace("_", " ")
+    slot = int(slot) if isinstance(slot, int) and not isinstance(slot, bool) and slot > 0 else None
     if "manual unlock" in label:
         return KIND_MANUAL_UNLOCK, slot
-    if "keypad unlock" in label:
+    if "keypad unlock" in label or ("unlock" in label and slot):
         return KIND_KEYPAD_UNLOCK, slot
     if any(hint in label for hint in LOCKOUT_HINTS):
         return KIND_KEYPAD_LOCKOUT, slot

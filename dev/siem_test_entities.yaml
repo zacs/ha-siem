@@ -108,6 +108,9 @@
 #   5. Press "Test Sam Uses PIN (helper)": -40, house mode sitter, incident
 #      person Sam. Run script.test_front_door_keypad_unlock_unknown: 30
 #      (pin_not_allowed); script.test_front_door_keypad_unlock_sam: nothing.
+#      Press Sam's button once before the keypad scripts after a restart: the
+#      rig's event entity only publishes Sam's slot after its first press,
+#      while a real Lock Code Manager entity carries it from startup.
 #   6. Turn off "Test Kitchen Motion Online (helper)": sensor_offline 20; after
 #      60 minutes vacant the break-glass fan-out fires again.
 #   7. Label the incident with select.siem_label_last_incident; watch the
