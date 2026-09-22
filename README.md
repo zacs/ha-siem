@@ -1,15 +1,20 @@
 # SIEM for Home Assistant
 
-A SIEM-style risk engine for a house. Every sensor event is a scored, decaying
-contribution to an incident. Incidents climb through **verify**, **deter** and
-**alarm** tiers, and each tier has a response: a Mattermost message, room and
-whole-house deterrence, an alarm trigger. Labels you give incidents adjust the
-weight of the rules that fired, so the engine learns which sensors you trust.
+A SIEM (security information and event management) style risk engine for a
+house. Every sensor event is a scored, decaying contribution to an incident.
+Incidents climb through **verify**, **deter** and **alarm** tiers, and each
+tier has a response: a Mattermost message, room and whole-house deterrence, an
+alarm trigger. Labels you give incidents adjust the weight of the rules that
+fired, so the engine learns which sensors you trust.
 
 The scoring engine lives in `custom_components/siem/core/` and is pure Python
 with no Home Assistant imports. The rest of the component is a thin adapter.
 
 ## Installation via HACS
+
+Install the prerequisites listed under [Hand setup](#hand-setup) first. At a
+minimum that is Home Assistant 2025.8 or newer, HACS (Home Assistant Community
+Store) and a notify service.
 
 1. In HACS, open **Integrations**, then the three-dot menu, then **Custom
    repositories**. Add `https://github.com/zacs/ha-siem` with category
@@ -21,11 +26,12 @@ with no Home Assistant imports. The rest of the component is a thin adapter.
    - **Room** (one per area): every field is pre-filled from the entity
      registry by area, falling back to the device's area. Each filtered field
      has an unfiltered *additional* companion for entities the filter misses.
-   - **Whole house**: residents, trackers, CSI sensors, water flow, the load
-     sensor, locks, Lock Code Manager event entities and the calendar, then
-     trusted users, the night window and deterrence.
-   - **Responses**: notify service, alarm panel, AI task, digest times and the
-     safety toggles. Dry run defaults to on.
+   - **Whole house**: residents, trackers, CSI (channel state information,
+     Wi-Fi motion) sensors, water flow, the load sensor, locks, Lock Code
+     Manager event entities and the calendar, then trusted users, the night
+     window and deterrence.
+   - **Responses**: notify service, alarm panel, AI (artificial intelligence)
+     task entity, digest times and the safety toggles. Dry run defaults to on.
 
 Everything can be revisited later from the integration's **Configure** menu:
 rule points per mode, half-life, thresholds and chain factors, the learned
@@ -36,6 +42,45 @@ per-entity occupancy strength overrides.
 
 Things the component consumes but cannot create for you:
 
+- **Install the prerequisites.**
+  - [HACS](https://www.hacs.xyz/docs/use/download/download/), the Home
+    Assistant Community Store, to install this component and the two below.
+  - [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM),
+    which manages the PIN (personal identification number) codes on your
+    locks and publishes the per-user *credential used* event entities SIEM
+    consumes. Without it the `pin_not_allowed` rule and the sitter-by-PIN mode
+    switch have nothing to listen to.
+  - [Mattermost notification component](https://github.com/cerebrate/ha-mattermost),
+    which provides `notify.mattermost` and forwards `data.attachments` and
+    `data.file.path` to Mattermost. Any other notify service works too, but
+    only the one-line message survives; the core `rest` notify platform does
+    not forward `data` at all.
+  - [Alarmo](https://github.com/nielsfaber/alarmo), or any
+    `alarm_control_panel` integration, for the arm recommendation and the
+    alarm trigger sensor. Optional.
+  - An [AI task](https://www.home-assistant.io/integrations/ai_task/) provider
+    for the digest: OpenAI Conversation, Anthropic, Google Generative AI or
+    Ollama all expose an `ai_task` entity. Optional; without one the digest
+    posts raw counts.
+  - Locks on [Z-Wave JS](https://www.home-assistant.io/integrations/zwave_js/)
+    (Home Assistant's Z-Wave integration; the JS is JavaScript, which its
+    driver is written in) for the `manual_unlock`, `pin_not_allowed` and
+    `keypad_lockout` rules, which read `zwave_js_notification` events. Locks on other stacks still
+    work with LCM and the untrusted-user rule, but those three rules stay
+    silent.
+  - The [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/)
+    integration if you want light changes made from Apple Home to score as
+    `light_homekit` instead of `light_physical`. Optional.
+  - A calendar entity such as
+    [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/)
+    for the sitter and service modes. Optional.
+  - The [companion app](https://companion.home-assistant.io/) if you want
+    actionable label buttons on your phone. Optional.
+  - CSI sensors, if you have them: Wi-Fi motion sensing from an ESP32
+    (Espressif's Wi-Fi microcontroller) running
+    [ESP-CSI](https://github.com/espressif/esp-csi) or
+    [ESPectre](https://github.com/francescopace/espectre), placed at a door
+    and exposed as a `binary_sensor`. Optional.
 - **Lock Code Manager users with calendar conditions.** Give each guest or
   sitter an LCM user whose condition entity is a calendar. SIEM listens to the
   LCM per-user *credential used* event entities: an allowed PIN use flips the
@@ -46,16 +91,20 @@ Things the component consumes but cannot create for you:
   starts with `Sitter:` puts the house in sitter mode, and `Service:` in
   service mode. Sitter mode ends two hours after the event plus sixty quiet
   minutes; service mode ends with the event.
+- **CSI sensors mapped to doors.** In the whole-house step, map each CSI
+  sensor to the perimeter contact on the same door. Motion at the door with no
+  opening of that contact within 60 seconds scores `door_csi_motion`: someone
+  is at the door but did not come through it.
 - **Register the alarm trigger sensor in Alarmo.** Add
   `binary_sensor.siem_alarm_trigger` to Alarmo as an *always on* sensor of type
   *other*. When auto alarm is on and dry run is off, an alarm-tier incident
   turns it on for 60 seconds.
 - **Deter script.** Optional, per room and whole house. Room deterrence
   snapshots the room's media players, sets the deter lights to 100 %, sets the
-  deter volume, plays the deter sound (or speaks the TTS message), runs the room
-  script, then runs the whole-house deter scripts and switches. Players are
-  restored after the configured seconds through a `scene.turn_on` of the
-  snapshot.
+  deter volume, plays the deter sound (or speaks the TTS (text to speech)
+  message), runs the room script, then runs the whole-house deter scripts and
+  switches. Players are restored after the configured seconds through a
+  `scene.turn_on` of the snapshot.
 - **Mattermost channel.** A `notify.mattermost` service (or any notify service
   that accepts `data.attachments`) and a target channel, default
   `home_security`. If the service rejects the rich payload, SIEM resends the
@@ -110,13 +159,13 @@ exterior-tagged rules by 1.5.
 | --- | --- | --- | --- |
 | `exterior_door_opened` | exterior | 40, 5, 5, 0 | A perimeter contact turns on |
 | `gate_opened` | exterior | 30, 5, 5, 0 | A perimeter contact named *gate* turns on |
-| `door_csi_motion` | exterior | 15, 2, 2, 0 | A CSI sensor turns on with no mapped contact opening within 60 s |
+| `door_csi_motion` | exterior | 15, 2, 2, 0 | A CSI (Wi-Fi motion) sensor turns on with no mapped contact opening within 60 s |
 | `interior_occupied` | interior | 50, 5, 5, 0 | Room occupancy; strongest source in a 5 min window, two independent sources within 60 s ×1.3, a weak source alone never opens an incident in vacant |
 | `interior_door_opened` | interior | 40, 0, 5, 0 | A fridge, cabinet, drawer or closet contact turns on |
 | `light_physical` | interior | 45, 0, 0, 0 | A light turns on with physical origin |
 | `light_homekit` | interior | 5, 0, 0, 0 | A light turns on through HomeKit |
 | `untrusted_user` | account | 70, 50, 50, 30 | Any watched entity changed by a user outside the trusted list |
-| `tv_power` | interior | 35, 0, 0, 0 | A power sensor rises above its threshold (default 30 W) |
+| `tv_power` | interior | 35, 0, 0, 0 | A power sensor rises above its threshold (default 30 W); named for the TV (television) but any appliance works |
 | `water_flow` | interior | 30, 0, 10, 0 | Water flow rises above its threshold |
 | `load_residual` | interior | 10, 0, 0, 0 | Optional: house load minus automated loads steps up by *step watts* and stays there for *sustain minutes* |
 | `person_interior_camera` | interior | 40, 5, 5, 0 | An occupancy source named *person* in an interior room turns on |
@@ -174,10 +223,10 @@ detector per room, a universal media player, a lock, a Lock Code Manager style
 event entity, two persons with device trackers, whole-house switches and
 scripts, an alarm panel, and scripts that fire Z-Wave lock notifications.
 Every watched entity is a template mirror of an `input_boolean` or
-`input_number` helper, so the whole rig is driven from the UI. Copy the file
-to `<config>/packages/`, restart, create the three areas it names, move the
-room entities into them, and follow the suggested config flow answers and the
-walkthrough in the file header.
+`input_number` helper, so the whole rig is driven from the UI (user
+interface). Copy the file to `<config>/packages/`, restart, create the three
+areas it names, move the room entities into them, and follow the suggested
+config flow answers and the walkthrough in the file header.
 
 The mirrors are trigger-based templates on a two second timer on purpose. A
 helper toggled from the UI carries your user id, and the SIEM would classify
@@ -202,7 +251,7 @@ the companion app notify service, a TTS entity, and a HomeKit-origin change.
    `core/entities.py`, and a line in `build_entity_meta` so the entity gets a
    role in the per-entity metadata dict. New per-entity fields go in that dict;
    no config entry migration is needed.
-3. In `coordinator.py`, handle the role in `_handle_state` (or in the event
+3. In `coordinator.py`, handle the role in `_on_state` (or in the event
    listeners) and call `self._score("<rule id>", now, entity_id, room, detail)`.
 4. Add the translation strings for the new field to `translations/en.json`
    and a test under `tests/` for the core behaviour.
@@ -218,9 +267,10 @@ ruff check .
 Tests cover `core/` only and need no Home Assistant installation. The
 brand icon HACS shows lives in `custom_components/siem/brand/`.
 
+Phase 2 (not built): an unknown-BLE (Bluetooth Low Energy) baseline from the
+Bluetooth advertisement stream. It will add `bluetooth` to the manifest
+dependencies when it lands.
+
 ## License
 
-MIT, see `LICENSE`.
-
-Phase 2 (not built): an unknown-BLE baseline from the Bluetooth advertisement
-stream. It will add `bluetooth` to the manifest dependencies when it lands.
+MIT (Massachusetts Institute of Technology) license, see `LICENSE`.
