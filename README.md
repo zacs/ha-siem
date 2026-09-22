@@ -1,4 +1,9 @@
-# SIEM for Home Assistant
+# <img src="https://raw.githubusercontent.com/zacs/ha-siem/main/custom_components/siem/brand/icon.png" width="48" height="48" alt="" align="top"> SIEM for Home Assistant
+
+[![Tests](https://github.com/zacs/ha-siem/actions/workflows/tests.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/tests.yaml)
+[![Hassfest](https://github.com/zacs/ha-siem/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/hassfest.yaml)
+[![HACS](https://github.com/zacs/ha-siem/actions/workflows/hacs.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/hacs.yaml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A SIEM (security information and event management) style risk engine for a
 house. Every sensor event is a scored, decaying contribution to an incident.
@@ -265,7 +270,13 @@ ruff check .
 ```
 
 Tests cover `core/` only and need no Home Assistant installation. The
-brand icon HACS shows lives in `custom_components/siem/brand/`.
+badges above track the three GitHub Actions workflows: `tests.yaml` runs ruff
+and pytest, `hassfest.yaml` runs Home Assistant's manifest checks, and
+`hacs.yaml` runs HACS validation.
+
+The icon lives in `custom_components/siem/brand/` as `icon.png` (256 px),
+`icon@2x.png` (512 px) and matching logos. Home Assistant 2026.3 and newer
+serves it from there on the integration page, and HACS shows it in its store.
 
 Phase 2 (not built): an unknown-BLE (Bluetooth Low Energy) baseline from the
 Bluetooth advertisement stream. It will add `bluetooth` to the manifest

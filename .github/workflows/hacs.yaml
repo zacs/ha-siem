@@ -1,4 +1,4 @@
-name: Validate
+name: HACS
 
 on:
   push:
@@ -19,22 +19,5 @@ jobs:
           # repository settings, then drop it from this list.
           # hacsjson, integration_manifest: HACS downloads both files from
           # raw.githubusercontent.com without a token, which 404s while the
-          # repository is private. Drop them if the repository goes public.
+          # repository is private. Drop them once the repository is public.
           ignore: topics hacsjson integration_manifest
-
-  hassfest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: home-assistant/actions/hassfest@master
-
-  tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - run: pip install -r requirements_test.txt
-      - run: ruff check .
-      - run: pytest
