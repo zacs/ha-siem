@@ -231,17 +231,42 @@ window, fridge and gate contacts, lights, power sensors, a camera-style person
 detector per room, a universal media player, a lock, a Lock Code Manager style
 event entity, two persons with device trackers, whole-house switches and
 scripts, an alarm panel, and scripts that fire Z-Wave lock notifications.
-Every watched entity is a template mirror of an `input_boolean` or
-`input_number` helper, so the whole rig is driven from the UI (user
-interface). Copy the file to `<config>/packages/`, restart, create the three
-areas it names, move the room entities into them, and follow the suggested
-config flow answers and the walkthrough in the file header.
+Copy the file to `<config>/packages/`, restart, create the three areas it
+names, move the room entities into them, and follow the suggested config flow
+answers in the file header.
+
+A simulated household drives the sensors on its own. Every two seconds each
+sensor rolls dice: the chance of turning on depends on the scene of the day,
+and the state then holds for a realistic while (45 seconds for motion, twenty
+minutes for a window, ninety for the TV) before it clears. Scenes follow the
+clock: asleep at night, a busy kitchen in the morning, an empty house on
+weekday daytimes with deliveries at the gate and a dog walker most afternoons
+(who uses a Lock Code Manager PIN, so the house flips to sitter), a full house
+on weekends, and an evening with the TV on, dinner and the EV (electric
+vehicle) charging. The persons' trackers follow the scene, so the SIEM house
+mode does too. Three helpers control it:
+
+- `Test Simulation (helper)` turns the dice off. It is on after every restart.
+- `Test Sim Scene Override (helper)` forces a scene. Force `away` to watch a
+  vacant house collect verify-tier incidents; force `evening` to watch a full
+  house score nothing.
+- `Test Simulation Rate (helper)` scales every probability. At 5 a quiet
+  afternoon compresses into minutes.
+
+Every sensor also has a `(helper)` input that forces it on by hand, whether
+or not the simulation is running, and two scripts play fixed scenarios through
+those helpers: `script.test_sim_break_in` (gate, camera, back door, motion,
+light, fridge) and `script.test_sim_delivery` (gate, then motion at the front
+door only). The file header has a step-by-step walkthrough with the exact
+scores to expect; turn the simulation off first so the dice do not add to the
+numbers.
 
 The mirrors are trigger-based templates on a two second timer on purpose. A
-helper toggled from the UI carries your user id, and the SIEM would classify
-the change as a user action rather than a physical one; re-rendering on a
-timer drops that context. Setting a mirror's state directly in Developer
-tools exercises the user-origin path instead.
+helper toggled from the UI (user interface) carries your user id, and the SIEM
+would classify the change as a user action rather than a physical one;
+re-rendering on a timer drops that context, so simulated and forced changes
+both look physical. Setting a mirror's state directly in Developer tools
+exercises the user-origin path instead.
 
 The file header lists what it cannot create: areas, the notify service
 (use `notify.persistent_notification` or your real Mattermost service with a
