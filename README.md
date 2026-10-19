@@ -36,16 +36,12 @@ alerts for a week before you let anything act on them.
 
 ## Requirements
 
-- Home Assistant 2026.10 or newer, and [HACS](https://www.hacs.xyz/docs/use/download/download/)
-  (Home Assistant Community Store) to install it.
 - Door, window or motion sensors, assigned to areas.
 - A device tracker for everyone who lives there, so SIEM knows when someone is
   home. Residents are person entities; anyone without a Home Assistant login
   can be an extra tracker, such as their phone seen by your router.
-- Automations that do something with SIEM's alerts. The sample packages are a
+- Automations that do something with SIEM's alerts. There are sample packages to be a
   starting point.
-
-That's it. Everything below is optional.
 
 ## Nice to haves
 
@@ -55,7 +51,7 @@ Each of these adds something. None of them is required.
 | --- | --- |
 | An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | Add `binary_sensor.siem_alarm_trigger` to it and SIEM's alarm tier sets off your alarm. Pick it in setup and arming it night tells SIEM everyone's in bed; SIEM only reads it. |
 | [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM) | Codes and hand unlocks from any lock LCM supports, with the code's name on the incident, and an alert when a code LCM has switched off still opens the lock. Z-Wave JS locks report codes and hand unlocks without it. |
-| A calendar, such as [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/) | `Guest:` and `Service:` events set the house mode. |
+| A calendar, such as [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/) | `Guest:` and `Service:` on event names set the house mode. |
 | An [AI task](https://www.home-assistant.io/integrations/ai_task/) entity | A daily digest written in plain English instead of raw counts. OpenAI, Anthropic, Google and Ollama all provide one. |
 | Cameras | A snapshot from the room's camera with each alert. |
 | Wi-Fi motion sensors | Someone at a door that never opened. These are CSI (channel state information) sensors: an ESP32 running [ESP-CSI](https://github.com/espressif/esp-csi) or [ESPectre](https://github.com/francescopace/espectre) senses motion from changes in the Wi-Fi signal. |
