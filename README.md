@@ -10,7 +10,7 @@ that's weird." A door opening while you're out could be a friend with a key, a
 delivery, or someone who shouldn't be there. Write one automation per sensor
 and you end up with alerts for everything, or alerts you've learned to ignore.
 
-SIEM (security information and event management) borrows the trick security
+SIEM (security information and event management) borrows an approach tech security
 teams use to watch networks: nothing alerts on its own, but everything adds
 up. Every sensor event becomes a bit of evidence with a score that fades over
 a few minutes. A door opening while the house is empty is worth a look. The
