@@ -28,9 +28,9 @@ alerts for a week before you let anything act on them.
 
 - **Three tiers.** Verify, deter and alarm, each one an event your automations
   can act on.
-- **Four house modes.** Family, guest, service and vacant, worked out from
-  presence, a calendar and lock codes. The same open door means something
-  different in each.
+- **Five house modes.** Family, night, guest, service and vacant, worked out
+  from presence, bedtime, a calendar and lock codes. The same open door means
+  something different in each.
 - **Plain Home Assistant state and events.** Sensors for the score, tier,
   incident and house mode, and an event for every alert.
 
@@ -53,7 +53,7 @@ Each of these adds something. None of them is required.
 
 | Add | What you get |
 | --- | --- |
-| An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | Add `binary_sensor.siem_alarm_trigger` to it and SIEM's alarm tier sets off your alarm. |
+| An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | Add `binary_sensor.siem_alarm_trigger` to it and SIEM's alarm tier sets off your alarm. Pick it in setup and arming it night tells SIEM everyone's in bed; SIEM only reads it. |
 | [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM) | Codes and hand unlocks from any lock LCM supports, with the code's name on the incident, and an alert when a code LCM has switched off still opens the lock. Z-Wave JS locks report codes and hand unlocks without it. |
 | A calendar, such as [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/) | `Guest:` and `Service:` events set the house mode. |
 | An [AI task](https://www.home-assistant.io/integrations/ai_task/) entity | A daily digest written in plain English instead of raw counts. OpenAI, Anthropic, Google and Ollama all provide one. |
@@ -78,8 +78,9 @@ The setup flow walks through:
   (rooms named like one start ticked): anything there only means someone is
   outside.
 - **Whole house.** Residents, extra trackers, water and power sensors, locks,
-  Lock Code Manager event entities, the calendar, the night window, and Wi-Fi
-  motion sensors with the door each one watches.
+  Lock Code Manager event entities, the calendar, the alarm panel to read
+  bedtime from, the night window, and Wi-Fi motion sensors with the door each
+  one watches.
 - **Digest.** The AI task and the digest times.
 
 You can change any of it later from the integration's **Configure** menu.
@@ -242,26 +243,28 @@ rule at most once every five minutes, so a door used to come in and to go out
 is one visit, and lights count once per room, because one switch can turn on a
 whole group of bulbs.
 
-**Rules.** Points are for the house modes vacant, guest, service and family.
-With anyone trusted home, SIEM stays out of the way: only lock trouble scores.
-Rules marked *exterior* score 1.5 times as much inside the night window.
+**Rules.** Points are for the house modes vacant, guest, service, family and
+night. With anyone trusted home and awake, SIEM stays out of the way: only lock
+trouble scores. At night it watches the house again; see below. Rules marked
+*exterior* score 1.5 times as much at night: inside the night window, or in
+night mode.
 
 | Rule | Points | Fires when |
 | --- | --- | --- |
-| `exterior_door_opened` | 40, 0, 0, 0 | An exterior door or window opens (exterior) |
-| `gate_opened` | 30, 0, 0, 0 | A perimeter contact with *gate* in its name opens (exterior) |
-| `door_csi_motion` | 5, 0, 0, 0 | A Wi-Fi motion sensor sees someone at a door that is closed and hasn't opened in the last 60 seconds (exterior) |
-| `exterior_occupied` | 10, 0, 0, 0 | Someone is outside; see below (exterior) |
-| `interior_occupied` | 50, 0, 0, 0 | Someone is in a room; see below |
-| `interior_door_opened` | 40, 0, 0, 0 | A fridge, freezer, pantry, cabinet, cupboard, drawer or closet contact opens |
-| `light_physical` | 45, 0, 0, 0 | A light is turned on at the switch |
-| `appliance_on` | 35, 0, 0, 0 | A room's power sensor rises above its threshold (default 30 W) |
-| `water_flow` | 30, 0, 0, 0 | Water flow rises above its threshold |
-| `load_residual` | 10, 0, 0, 0 | House power, minus loads that run on their own, steps up and stays up |
-| `manual_unlock` | 60, 0, 0, 0 | A lock is unlocked by hand |
-| `pin_not_allowed` | 30, 30, 30, 20 | A code Lock Code Manager has switched off still opens a lock |
-| `keypad_lockout` | 40, 40, 40, 30 | A lock reports a keypad lockout after repeated bad codes; one wrong code does not count, and few locks send this |
-| `sensor_offline` | 20, 0, 0, 0 | A door, window, motion or Wi-Fi motion sensor, or a lock, stays unavailable for two minutes; several at once count once |
+| `exterior_door_opened` | 40, 0, 0, 0, 40 | An exterior door or window opens (exterior) |
+| `gate_opened` | 30, 0, 0, 0, 30 | A perimeter contact with *gate* in its name opens (exterior) |
+| `door_csi_motion` | 5, 0, 0, 0, 5 | A Wi-Fi motion sensor sees someone at a door that is closed and hasn't opened in the last 60 seconds (exterior) |
+| `exterior_occupied` | 10, 0, 0, 0, 10 | Someone is outside; see below (exterior) |
+| `interior_occupied` | 50, 0, 0, 0, 50 | Someone is in a room; see below |
+| `interior_door_opened` | 40, 0, 0, 0, 40 | A fridge, freezer, pantry, cabinet, cupboard, drawer or closet contact opens |
+| `light_physical` | 45, 0, 0, 0, 45 | A light is turned on at the switch |
+| `appliance_on` | 35, 0, 0, 0, 35 | A room's power sensor rises above its threshold (default 30 W) |
+| `water_flow` | 30, 0, 0, 0, 30 | Water flow rises above its threshold |
+| `load_residual` | 10, 0, 0, 0, 0 | House power, minus loads that run on their own, steps up and stays up |
+| `manual_unlock` | 60, 0, 0, 0, 0 | A lock is unlocked by hand |
+| `pin_not_allowed` | 30, 30, 30, 20, 20 | A code Lock Code Manager has switched off still opens a lock |
+| `keypad_lockout` | 40, 40, 40, 30, 30 | A lock reports a keypad lockout after repeated bad codes; one wrong code does not count, and few locks send this |
+| `sensor_offline` | 20, 0, 0, 0, 0 | A door, window, motion or Wi-Fi motion sensor, or a lock, stays unavailable for two minutes; several at once count once |
 
 **Someone in a room.** Camera person detection (an occupancy sensor with
 *person* in its name), occupancy, presence and Bayesian sensors are strong,
@@ -278,6 +281,19 @@ once per fifteen minutes, at its strongest source, times 1.3 when two agree.
 A visit to the front door is a few points; someone hanging around builds up
 slowly; someone who also opens the gate or a door is another matter. Power
 sensors in outdoor rooms are not used.
+
+**At night.** With the family home and in bed (night mode), SIEM watches the
+yard, the doors and the windows the way it watches an empty house, and tells
+one of you from an intruder by the order of events. Someone moving inside first
+and then a door or gate is one of you going out: inside means a sensor that
+came on in the last two minutes, or one that came on in the last fifteen and is
+still on, but not a weak one, which may be the dog. The doors and the yard are
+then yours until fifteen minutes after your last sign out there. The same goes
+for ten minutes after a resident arrives home or someone is let in. Anything
+else that opens a door, window or gate counts in full. Inside (motion, lights,
+the fridge, water) counts only in the five minutes after an entry that counted:
+the intruder moving in. Hand unlocks, outages and power steps don't count at
+night.
 
 **Locks.** Lock Code Manager reports hand and code unlocks for every lock it
 supports, and SIEM also reads Z-Wave JS lock notifications directly. Matter
@@ -309,7 +325,10 @@ and leave the weights alone: the sensors were right and presence detection was
 late, and lowering the weights would only blunt the next real break-in.
 
 **House mode.** Family while any resident or tracker is home and for 30
-minutes after. Guest during a `Guest:` event, or after someone was let in,
+minutes after. Night instead of family while the household is in bed: while the
+alarm panel you picked is armed night (pending or triggered keeps it), or, with
+no panel picked, inside the night window, midnight to 5:30 unless you change
+it. Guest during a `Guest:` event, or after someone was let in,
 until two hours have passed and the house has been quiet for an hour. Quiet
 means no doors, switches, water or appliances; motion doesn't count, so a pet
 can't hold guest mode open. Service during a `Service:` event. Vacant
@@ -317,8 +336,10 @@ otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
 restarts.
 
-**Recommended alarm mode.** Armed away while vacant, armed night at night when
-someone is home, and disarmed by day and during service visits. SIEM only
+**Recommended alarm mode.** Armed away while vacant, armed night inside the
+night window when someone is home, and disarmed by day and during service
+visits. It follows the clock, never the panel, so a panel that follows it
+can't get stuck in armed night. SIEM only
 publishes it, as `sensor.siem_recommended_alarm_mode`; it never arms or
 disarms anything. If you want your panel to follow it, that's an automation
 of your own.
@@ -332,16 +353,16 @@ unavailable for over an hour while vacant.
 
 These are the end-to-end scenarios in
 [`tests/ha/test_scenarios.py`](tests/ha/test_scenarios.py), each run against a
-whole house in a real Home Assistant. Points are the defaults; the numbers in
-brackets are scores.
+whole house in a real Home Assistant. Points are the defaults, the house's night
+window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 
 | What happens | House | What SIEM does |
 | --- | --- | --- |
 | A family evening: switches, the fridge, the kettle, the TV, kids in and out | Family | Nothing |
-| A business trip: one parent away, the other home using Apple Home, the kids home | Family, from the spouse's phone as a tracker | Nothing |
-| The same trip with no tracker for the spouse | Vacant | Alerts, until you set the mode to family |
+| A business trip: you away, your partner home using Apple Home, the kids home | Family: your partner's person entity follows their phone and watch | Nothing |
+| The same trip with your partner not among the residents | Vacant | Alerts, until you set the mode to family |
 | Kids in the yard and through the gate | Family | Nothing |
-| Someone tries codes until the keypad locks out, 2 a.m. | Family | Verify and break glass |
+| Someone tries codes until the keypad locks out, 2 a.m. | Night | Verify and break glass |
 | A kid comes home with their code | Family | Nothing |
 | The mail carrier rings the doorbell | Vacant | Nothing (18) |
 | A parcel at the door at 11 p.m. | Vacant | Verify (27) |
@@ -367,7 +388,18 @@ brackets are scores.
 | A light switched by its own app, such as a Hue schedule | Vacant | Verify; see below |
 | Z-Wave JS restarts | Vacant | Nothing |
 | The Z-Wave stick dies on vacation | Vacant | Verify after two minutes, break glass after an hour |
-| A break-in while the family sleeps | Family | Nothing; see below |
+| Someone lingers in the backyard at 1 a.m. while you sleep | Night | Verify, once |
+| Someone comes through the side gate at 1 a.m. while you sleep | Night | Deter (64) |
+| Gate, back door, kitchen, at 3 a.m. | Night | Alarm; the trigger a minute later |
+| A window opens at 2:30 a.m. with nobody up, then motion in that room | Night | Deter, then alarm |
+| Letting the dog out at 2 a.m. | Night | Nothing |
+| Ten minutes in the kitchen, then out the back door | Night | Nothing |
+| A kid up for water | Night | Nothing |
+| Your partner home at 1 a.m., their phone on time | Night | Nothing |
+| A teenager home at 11:45 p.m. with a code | Night | Verify for someone at the door in the dark, then nothing |
+| A teenager sneaking out | Night | Nothing; see below |
+| A burglar at the back door a minute after someone walked down the hall | Night | Nothing; see below |
+| The panel armed night at 11:30 p.m. | Family, then night | Bedtime comes from the panel, not the clock |
 
 ## Known limits
 
@@ -375,9 +407,12 @@ brackets are scores.
   the house reads vacant once the tracked people leave, and their footsteps
   are an intruder's. Add their phone as an extra tracker (a router or Wi-Fi
   integration works without the Home Assistant app), or set the mode by hand.
-- **SIEM is for the empty house.** With anyone trusted home it scores only lock
-  trouble, at night too. Arm your panel at night for a break-in while you
-  sleep.
+- **At night, the order of events is a judgment call.** Someone sneaking out
+  reads as one of you going out, and so does a burglar who opens a door a
+  minute after one of you walked down the hall. The other way round, one of you
+  heading out without passing a sensor reads as someone coming in, so put a
+  motion sensor on the way to each outside door. An armed-night alarm panel
+  is still the backstop.
 - **Late phones.** If your phone reports home after you're already inside, you
   get the alerts your arrival set off. The arrival cancels them, and the alarm
   trigger waits a minute for it, but a phone that's minutes late can still set
@@ -398,7 +433,7 @@ brackets are scores.
 | `sensor.siem_risk_score` | The live score, with `top_contributors` and `incident_id` |
 | `sensor.siem_tier` | `none`, `verify`, `deter` or `alarm` |
 | `sensor.siem_incident` | The open incident's id, with `started`, `room`, `mode`, `person` and the `timeline` (not recorded) |
-| `sensor.siem_house_mode` | `vacant`, `guest`, `service` or `family` |
+| `sensor.siem_house_mode` | `vacant`, `guest`, `service`, `family` or `night` |
 | `select.siem_house_mode_override` | Force a mode, or `auto` |
 | `sensor.siem_recommended_alarm_mode` | `armed_away`, `armed_night`, `armed_home` or `disarmed` |
 | `binary_sensor.siem_night` | On inside the night window |
@@ -432,7 +467,7 @@ delivery. The file header walks through exact scores step by step.
 
 1. In `core/rules.py`, add a `_rule(...)` line to `DEFAULT_RULES` with the
    id, the tag (`exterior` gets the night multiplier), points for vacant,
-   guest, service and family, and a plain description. Add it to
+   guest, service, family and night, and a plain description. Add it to
    `DEFAULT_CHAINS` if it should amplify or be amplified.
 2. If it needs a new kind of entity, add the config key to `const.py`, the
    selector to the schema in `config_flow.py`, a role in `core/entities.py`,

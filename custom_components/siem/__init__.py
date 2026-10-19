@@ -16,7 +16,7 @@ from . import const as c
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core import entities as ent
 from .core.house_mode import MODE_AUTO
-from .core.rules import MODES, RuleConfigError
+from .core.rules import DEFAULT_RULES, MODE_NIGHT, MODES, RuleConfigError
 from .core.weights import LABELS
 from .store import SiemStore
 
@@ -93,14 +93,17 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate older 1.x entries to 1.5: renamed modes and rules, the settings and rules removed, outdoor rooms.
+    """Migrate older 1.x entries to 1.6: renamed modes and rules, the settings and rules removed, outdoor rooms, night.
 
     Every step is safe to run again, so one pass covers any older minor version.
     """
     if entry.version > 1:
         return False
-    if entry.minor_version < 5:
+    if entry.minor_version < 6:
         data, options = copy.deepcopy(dict(entry.data)), copy.deepcopy(dict(entry.options))
+        # The panel SIEM used to arm is now only read, for armed night.
+        if panel := data.get(c.CONF_RESPONSES, {}).get(c.CONF_ALARM_PANEL):
+            data.setdefault(c.CONF_HOUSE, {}).setdefault(c.CONF_ALARM_PANEL, panel)
         for section in (c.CONF_HOUSE, c.CONF_RESPONSES):
             for key in c.REMOVED_SETTINGS[section]:
                 data.setdefault(section, {}).pop(key, None)
@@ -111,10 +114,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
         rules = {
             c.RENAMED_RULES.get(rule_id, rule_id): value for rule_id, value in (options.get(c.OPT_RULES) or {}).items() if rule_id not in c.REMOVED_RULES
         }
-        for value in rules.values():
+        for rule_id, value in rules.items():
             points = value.get("points") if isinstance(value, dict) else None
             if isinstance(points, dict):
                 value["points"] = {c.RENAMED_MODES.get(mode, mode): pts for mode, pts in points.items()}
+                # Overrides from before the night mode take its default points.
+                if rule_id in DEFAULT_RULES:
+                    value["points"].setdefault(MODE_NIGHT, DEFAULT_RULES[rule_id].points[MODE_NIGHT])
         if rules:
             options[c.OPT_RULES] = rules
         else:
@@ -123,6 +129,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
         for key in c.REMOVED_SWITCHES:
             if entity_id := registry.async_get_entity_id("switch", c.DOMAIN, f"{entry.entry_id}_{key}"):
                 registry.async_remove(entity_id)
-        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=5)
-        _LOGGER.info("Migrated SIEM config entry to 1.5")
+        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=6)
+        _LOGGER.info("Migrated SIEM config entry to 1.6")
     return True

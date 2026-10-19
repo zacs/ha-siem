@@ -6,8 +6,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY = "vacant", "guest", "service", "family"
-MODES: tuple[str, ...] = (MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY)
+MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY, MODE_NIGHT = "vacant", "guest", "service", "family", "night"
+MODES: tuple[str, ...] = (MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY, MODE_NIGHT)
 TAG_EXTERIOR, TAG_INTERIOR, TAG_PERIMETER, TAG_TAMPER = "exterior", "interior", "perimeter", "tamper"
 
 NIGHT_MULTIPLIER = 1.5
@@ -37,22 +37,25 @@ def _rule(rule_id: str, tag: str, pts: tuple[float, ...], description: str) -> R
 DEFAULT_RULES: dict[str, Rule] = {
     r.id: r
     for r in (
-        # Points are (vacant, guest, service, family). With anyone trusted at home, SIEM stays quiet about what happens
-        # in the house, which is what the house is for, and only speaks up about lock trouble.
-        _rule("exterior_door_opened", TAG_EXTERIOR, (40, 0, 0, 0), "An exterior door or window opened"),
-        _rule("gate_opened", TAG_EXTERIOR, (30, 0, 0, 0), "A gate opened"),
-        _rule("door_csi_motion", TAG_EXTERIOR, (5, 0, 0, 0), "Someone was at a door that did not open"),
-        _rule("exterior_occupied", TAG_EXTERIOR, (10, 0, 0, 0), "Someone is outside"),
-        _rule("interior_occupied", TAG_INTERIOR, (50, 0, 0, 0), "Someone is in a room"),
-        _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 0, 0), "A fridge, cabinet, drawer or closet opened"),
-        _rule("light_physical", TAG_INTERIOR, (45, 0, 0, 0), "A light was turned on at the switch"),
-        _rule("appliance_on", TAG_INTERIOR, (35, 0, 0, 0), "An appliance turned on"),
-        _rule("water_flow", TAG_INTERIOR, (30, 0, 0, 0), "Water is running"),
-        _rule("load_residual", TAG_INTERIOR, (10, 0, 0, 0), "The house is drawing power nothing explains"),
-        _rule("manual_unlock", TAG_PERIMETER, (60, 0, 0, 0), "A lock was unlocked by hand"),
-        _rule("pin_not_allowed", TAG_PERIMETER, (30, 30, 30, 20), "A lock was unlocked with a code that is disabled"),
-        _rule("keypad_lockout", TAG_PERIMETER, (40, 40, 40, 30), "A keypad locked out after bad codes"),
-        _rule("sensor_offline", TAG_TAMPER, (20, 0, 0, 0), "A sensor went offline"),
+        # Points are (vacant, guest, service, family, night). With anyone trusted at home and awake, SIEM stays quiet
+        # about what happens in the house, which is what the house is for, and only speaks up about lock trouble.
+        # Night (the family home and in bed) watches the yard, doors and windows like an empty house, but the
+        # coordinator lets a door or the yard count only when nobody was up first, and the inside only right after an
+        # entry that counted.
+        _rule("exterior_door_opened", TAG_EXTERIOR, (40, 0, 0, 0, 40), "An exterior door or window opened"),
+        _rule("gate_opened", TAG_EXTERIOR, (30, 0, 0, 0, 30), "A gate opened"),
+        _rule("door_csi_motion", TAG_EXTERIOR, (5, 0, 0, 0, 5), "Someone was at a door that did not open"),
+        _rule("exterior_occupied", TAG_EXTERIOR, (10, 0, 0, 0, 10), "Someone is outside"),
+        _rule("interior_occupied", TAG_INTERIOR, (50, 0, 0, 0, 50), "Someone is in a room"),
+        _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 0, 0, 40), "A fridge, cabinet, drawer or closet opened"),
+        _rule("light_physical", TAG_INTERIOR, (45, 0, 0, 0, 45), "A light was turned on at the switch"),
+        _rule("appliance_on", TAG_INTERIOR, (35, 0, 0, 0, 35), "An appliance turned on"),
+        _rule("water_flow", TAG_INTERIOR, (30, 0, 0, 0, 30), "Water is running"),
+        _rule("load_residual", TAG_INTERIOR, (10, 0, 0, 0, 0), "The house is drawing power nothing explains"),
+        _rule("manual_unlock", TAG_PERIMETER, (60, 0, 0, 0, 0), "A lock was unlocked by hand"),
+        _rule("pin_not_allowed", TAG_PERIMETER, (30, 30, 30, 20, 20), "A lock was unlocked with a code that is disabled"),
+        _rule("keypad_lockout", TAG_PERIMETER, (40, 40, 40, 30, 30), "A keypad locked out after bad codes"),
+        _rule("sensor_offline", TAG_TAMPER, (20, 0, 0, 0, 0), "A sensor went offline"),
     )
 }
 

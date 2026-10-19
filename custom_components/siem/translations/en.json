@@ -30,7 +30,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity, and re-read when it changes. Exterior rules score 1.5 times as much inside the night window.",
+        "description": "Each resident's device trackers are read from their person entity, and re-read when it changes. With residents home, the house is in night mode while the alarm panel is armed night, or, with no panel picked, inside the night window; SIEM never arms or disarms the panel. Exterior rules score 1.5 times as much at night.",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -45,6 +45,7 @@
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
           "calendar": "Calendar with 'Guest:' and 'Service:' events",
+          "alarm_panel": "Alarm panel, only read: armed night means everyone is in bed",
           "night_start": "Night starts",
           "night_end": "Night ends"
         }
@@ -99,7 +100,8 @@
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
-          "family": "Family"
+          "family": "Family",
+          "night": "Night (family in bed)"
         }
       },
       "engine": {
@@ -157,7 +159,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity, and re-read when it changes. Exterior rules score 1.5 times as much inside the night window.",
+        "description": "Each resident's device trackers are read from their person entity, and re-read when it changes. With residents home, the house is in night mode while the alarm panel is armed night, or, with no panel picked, inside the night window; SIEM never arms or disarms the panel. Exterior rules score 1.5 times as much at night.",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -172,6 +174,7 @@
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
           "calendar": "Calendar with 'Guest:' and 'Service:' events",
+          "alarm_panel": "Alarm panel, only read: armed night means everyone is in bed",
           "night_start": "Night starts",
           "night_end": "Night ends"
         }
@@ -235,7 +238,8 @@
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
-          "family": "Family"
+          "family": "Family",
+          "night": "Night"
         }
       },
       "recommended_alarm_mode": {
@@ -264,7 +268,8 @@
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
-          "family": "Family"
+          "family": "Family",
+          "night": "Night"
         }
       },
       "label_last_incident": {
@@ -330,7 +335,7 @@
       "fields": {
         "mode": {
           "name": "Mode",
-          "description": "Auto, vacant, guest, service or family."
+          "description": "Auto, vacant, guest, service, family or night."
         }
       }
     }
@@ -350,7 +355,8 @@
         "vacant": "Vacant",
         "guest": "Guest",
         "service": "Service",
-        "family": "Family"
+        "family": "Family",
+        "night": "Night"
       }
     }
   }

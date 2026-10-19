@@ -16,8 +16,8 @@ from custom_components.siem.core.rules import (
 
 
 def test_default_points_follow_the_design_table():
-    assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "guest": 0, "service": 0, "family": 0}
-    assert DEFAULT_RULES["pin_not_allowed"].points == {"vacant": 30, "guest": 30, "service": 30, "family": 20}
+    assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "guest": 0, "service": 0, "family": 0, "night": 40}
+    assert DEFAULT_RULES["pin_not_allowed"].points == {"vacant": 30, "guest": 30, "service": 30, "family": 20, "night": 20}
     for removed in ("untrusted_user", "light_homekit", "person_interior_camera", "person_exterior_camera"):
         assert removed not in DEFAULT_RULES
     assert len(DEFAULT_RULES) == 14
@@ -29,7 +29,15 @@ def test_only_lock_trouble_scores_with_someone_trusted_home():
         assert scoring == {"pin_not_allowed", "keypad_lockout"}, mode
 
 
-@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 0), ("service", 0), ("family", 0)])
+def test_night_watches_like_an_empty_house_but_never_locks_by_hand_or_outages():
+    for rule in DEFAULT_RULES.values():
+        if rule.tag in ("exterior", "interior") and rule.id != "load_residual":
+            assert rule.points["night"] == rule.points["vacant"], rule.id
+    assert DEFAULT_RULES["manual_unlock"].points["night"] == DEFAULT_RULES["sensor_offline"].points["night"] == 0
+    assert DEFAULT_RULES["load_residual"].points["night"] == 0
+
+
+@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 0), ("service", 0), ("family", 0), ("night", 40)])
 def test_per_mode_point_selection(mode, expected):
     assert DEFAULT_RULES["exterior_door_opened"].points_for(mode) == expected
 
@@ -46,7 +54,7 @@ def test_night_multiplies_exterior_only():
 
 
 def test_validation_merges_overrides():
-    rules = validate_rule_config({"gate_opened": {"points": {"vacant": 10, "guest": 1, "service": 1, "family": 0}}})
+    rules = validate_rule_config({"gate_opened": {"points": {"vacant": 10, "guest": 1, "service": 1, "family": 0, "night": 5}}})
     assert rules["gate_opened"].points_for("vacant") == 10
     assert rules["gate_opened"].tag == DEFAULT_RULES["gate_opened"].tag
     assert rules["exterior_door_opened"] is DEFAULT_RULES["exterior_door_opened"]

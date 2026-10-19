@@ -21,7 +21,8 @@
           "vacant": "mdi:home-outline",
           "guest": "mdi:account-key",
           "service": "mdi:tools",
-          "family": "mdi:home-heart"
+          "family": "mdi:home-heart",
+          "night": "mdi:bed"
         }
       },
       "recommended_alarm_mode": {

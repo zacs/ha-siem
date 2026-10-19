@@ -122,7 +122,9 @@
 #     sensor.test_ev_charger_power, step 100 W, sustain 5 minutes; locks
 #     lock.test_front_door_lock; LCM events event.test_lcm_guest_credential_used;
 #     calendar your test calendar; a night window covering "now" if you want
-#     to see the 1.5x exterior multiplier.
+#     to see the 1.5x exterior multiplier, and night mode while someone is
+#     home. Leave the alarm panel empty: the rig has none, and without one the
+#     night window is bedtime.
 #   Digest: a digest time a few minutes ahead.
 #
 # WATCHING THE SIMULATION
@@ -130,7 +132,9 @@
 #   incident every couple of hours from a stray motion or a delivery, most of
 #   them verify tier, and the guest's visit flipping the house to guest. Turn the
 #   rate up to 5 to compress that into minutes. Force "evening" to see a full
-#   house score nothing.
+#   house score nothing. Force "asleep" with a night window covering now to
+#   see night mode: the odd fridge visit scores nothing, while a back door
+#   that opens with nobody up first is a deter.
 #
 # WALKTHROUGH (simulation off, house mode vacant, night window off)
 #   Turn "Test Simulation (helper)" off first, or the dice will add events to

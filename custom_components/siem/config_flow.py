@@ -113,6 +113,7 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_LOCKS): _entity("lock"),
         vol.Optional(c.CONF_LCM_EVENTS): _entity("event"),
         vol.Optional(c.CONF_CALENDAR): _entity("calendar", multiple=False),
+        vol.Optional(c.CONF_ALARM_PANEL): _entity("alarm_control_panel", multiple=False),
         vol.Optional(c.CONF_NIGHT_START, default=c.DEFAULT_NIGHT_START): sel.TimeSelector(),
         vol.Optional(c.CONF_NIGHT_END, default=c.DEFAULT_NIGHT_END): sel.TimeSelector(),
     }
@@ -169,7 +170,7 @@ def build_entity_meta(hass: HomeAssistant, data: Mapping[str, Any], existing: Ma
             if role == ent.ROLE_WATER:
                 item["threshold"] = house.get(c.CONF_WATER_THRESHOLD, c.DEFAULT_WATER_THRESHOLD)
             meta[entity_id] = item
-    for key, role in ((c.CONF_LOAD, ent.ROLE_LOAD), (c.CONF_CALENDAR, ent.ROLE_CALENDAR)):
+    for key, role in ((c.CONF_LOAD, ent.ROLE_LOAD), (c.CONF_CALENDAR, ent.ROLE_CALENDAR), (c.CONF_ALARM_PANEL, ent.ROLE_PANEL)):
         if house.get(key):
             meta[house[key]] = {"role": role, "room": None}
     for entity_id, old in (existing or {}).items():
@@ -266,7 +267,7 @@ class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN)
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 5
+    MINOR_VERSION = 6
 
     def __init__(self) -> None:
         """Start with empty sections."""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .rules import MODE_FAMILY, MODE_GUEST, MODE_SERVICE, MODE_VACANT, MODES
+from .rules import MODE_FAMILY, MODE_GUEST, MODE_NIGHT, MODE_SERVICE, MODE_VACANT, MODES
 
 FAMILY_LINGER_S = 30 * 60
 GUEST_AFTER_END_S = 2 * 3600
@@ -13,9 +13,11 @@ MODE_AUTO = "auto"
 
 
 class HouseModeMachine:
-    """Derive the house mode from presence, the calendar and people being let in.
+    """Derive the house mode from presence, bedtime, the calendar and people being let in.
 
-    Precedence is override, family, guest, service, vacant. Family lingers
+    Precedence is override, family, guest, service, vacant; family is night
+    while the household is in bed (the panel armed night, or the night
+    window, as the coordinator decides). Family lingers
     thirty minutes after the last resident leaves. Guest is held while a
     Guest calendar event runs and afterwards until two hours past its end
     and sixty quiet minutes have both elapsed; letting someone in (a code at
@@ -28,6 +30,7 @@ class HouseModeMachine:
         """Start vacant at ``now``."""
         self.override: str | None = None
         self._anyone_home = False
+        self._asleep = False
         self._last_home_seen: float | None = None
         self._guest_window: tuple[float, float] | None = None
         self._guest_end: float | None = None
@@ -39,6 +42,10 @@ class HouseModeMachine:
         if anyone_home or self._anyone_home:
             self._last_home_seen = now
         self._anyone_home = anyone_home
+
+    def set_asleep(self, asleep: bool) -> None:
+        """Record whether the household is in bed, which turns family into night."""
+        self._asleep = asleep
 
     def note_activity(self, now: float) -> None:
         """Record something only a person does (a door, a switch, a tap), which keeps guest mode alive."""
@@ -98,7 +105,7 @@ class HouseModeMachine:
         if self.override:
             return self.override
         if self._family(now):
-            return MODE_FAMILY
+            return MODE_NIGHT if self._asleep else MODE_FAMILY
         if self._guest(now):
             return MODE_GUEST
         if self._service(now):

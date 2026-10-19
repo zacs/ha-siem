@@ -43,6 +43,8 @@ CONF_LOAD_SUSTAIN = "load_sustain_minutes"
 CONF_LOCKS = "locks"
 CONF_LCM_EVENTS = "lcm_events"
 CONF_CALENDAR = "calendar"
+# Read only: armed night means the household is in bed. SIEM never arms or disarms it.
+CONF_ALARM_PANEL = "alarm_panel"
 CONF_NIGHT_START = "night_start"
 CONF_NIGHT_END = "night_end"
 
@@ -74,8 +76,8 @@ DEFAULT_POWER_THRESHOLD = 30
 DEFAULT_WATER_THRESHOLD = 1.0
 DEFAULT_LOAD_STEP = 100
 DEFAULT_LOAD_SUSTAIN = 5
-DEFAULT_NIGHT_START = "22:00:00"
-DEFAULT_NIGHT_END = "06:00:00"
+DEFAULT_NIGHT_START = "00:00:00"
+DEFAULT_NIGHT_END = "05:30:00"
 DEFAULT_DIGEST_TIMES = ["08:00"]
 
 # Events SIEM fires for automations to build on.
@@ -130,5 +132,19 @@ ARRIVAL_EXPLAINS_S = 600
 LET_IN_DEDUPE_S = 60
 # The alarm trigger turns on once an incident has held the alarm tier this long.
 ALARM_GRACE_S = 60
+# Night mode: the household is in bed while the picked panel is armed night. While it is pending or triggered it
+# still is; any other armed or disarmed state means it is not.
+PANEL_ASLEEP = "armed_night"
+PANEL_KEEPS = ("arming", "pending", "triggered", "unavailable", "unknown")
+# A door, window or gate that opens within two minutes of someone moving inside is someone going out; the yard and
+# the doors are theirs for fifteen minutes after their last sign out there. So is a resident's arrival or a code.
+NIGHT_INSIDE_FIRST_S = 120
+# Someone is still up when an inside sensor that turned on in the last fifteen minutes is on; one on for longer is
+# more likely a presence sensor watching people asleep.
+NIGHT_UP_S = 900
+NIGHT_FAMILY_OUTSIDE_S = 900
+NIGHT_EXPECTED_S = 600
+# Inside counts at night only this soon after an entry that counted: the intruder moving in.
+NIGHT_AFTER_ENTRY_S = 300
 AI_TASK_TIMEOUT_S = 20
 SNAPSHOT_TIMEOUT_S = 10

@@ -63,11 +63,16 @@ ENTITIES: dict[str, tuple[str | None, str | None, str, str, str | None]] = {
     "sensor.water_flow": (None, "volume_flow_rate", "Water Flow", "0", None),
     "lock.front_door": ("hallway", None, "Front Door Lock", "locked", None),
 }
+# Two adults live here: you, who use Home Assistant, and your partner, who never opens it but has a person entity
+# that follows their phone and watch. The kids have no trackers.
+TRACKERS = {"resident": ["device_tracker.resident_phone"], "partner": ["device_tracker.partner_phone", "device_tracker.partner_watch"]}
 PEOPLE: dict[str, tuple[str, dict[str, Any]]] = {
-    "device_tracker.alex_phone": ("home", {"friendly_name": "Alex Phone"}),
-    "person.alex": ("home", {"device_trackers": ["device_tracker.alex_phone"], "user_id": RESIDENT, "friendly_name": "Alex"}),
-    # Jordan does not use Home Assistant; their phone is seen by the router integration.
-    "device_tracker.jordan_phone": ("home", {"friendly_name": "Jordan Phone"}),
+    "device_tracker.resident_phone": ("home", {"friendly_name": "Your Phone"}),
+    "person.resident": ("home", {"device_trackers": TRACKERS["resident"], "user_id": RESIDENT, "friendly_name": "You"}),
+    "device_tracker.partner_phone": ("home", {"friendly_name": "Partner Phone"}),
+    "device_tracker.partner_watch": ("home", {"friendly_name": "Partner Watch"}),
+    "person.partner": ("home", {"device_trackers": TRACKERS["partner"], "friendly_name": "Partner"}),
+    "alarm_control_panel.house": ("disarmed", {"friendly_name": "House Alarm"}),
     "event.lcm_cleaner": ("unknown", {"code_slot": 5, "name": "Cleaner", "active": True, "friendly_name": "Cleaner code used"}),
     "event.lcm_old_sitter": ("unknown", {"code_slot": 6, "name": "Old sitter", "active": False, "friendly_name": "Old sitter code used"}),
     "calendar.house": ("off", {"friendly_name": "House"}),
@@ -126,17 +131,22 @@ class House:
             self.hass.states.async_set(event_entity, dt_util.utcnow().isoformat(), {**old.attributes, "operation": "unlock"})
         await self.physical("lock.front_door", "unlocked")
 
-    async def leave(self, *trackers: str) -> None:
-        for tracker in trackers:
-            await self.physical(tracker, "not_home")
-            if tracker == "device_tracker.alex_phone":
-                await self.physical("person.alex", "not_home")
+    async def leave(self, *people: str) -> None:
+        """``resident`` or ``partner`` leaves: their trackers, then their person entity."""
+        for person in people:
+            for tracker in TRACKERS[person]:
+                await self.physical(tracker, "not_home")
+            await self.physical(f"person.{person}", "not_home")
 
-    async def arrive(self, *trackers: str) -> None:
-        for tracker in trackers:
-            await self.physical(tracker, "home")
-            if tracker == "device_tracker.alex_phone":
-                await self.physical("person.alex", "home")
+    async def arrive(self, *people: str) -> None:
+        for person in people:
+            for tracker in TRACKERS[person]:
+                await self.physical(tracker, "home")
+            await self.physical(f"person.{person}", "home")
+
+    async def panel(self, state: str) -> None:
+        """The alarm panel changing state; SIEM only reads it."""
+        await self.physical("alarm_control_panel.house", state)
 
     async def calendar(self, message: str, start: str, end: str) -> None:
         self.hass.states.async_set("calendar.house", "on", {"message": message, "start_time": start, "end_time": end, "friendly_name": "House"})
@@ -144,7 +154,7 @@ class House:
 
     async def vacation(self) -> None:
         """Everyone leaves and the half hour of grace for a forgotten phone runs out."""
-        await self.leave("device_tracker.alex_phone", "device_tracker.jordan_phone")
+        await self.leave("resident", "partner")
         await self.wait(31 * 60)
         assert self.mode == "vacant"
 
@@ -218,7 +228,7 @@ async def house(hass, freezer, siem_events):
     hass.services.async_register("lock", "unlock", device("lock.front_door", "unlocked"))
     hass.services.async_register("cover", "open_cover", device("cover.garage", "open"))
 
-    async def load(*, trackers: tuple[str, ...] = ("device_tracker.jordan_phone",), weak: tuple[str, ...] = ()) -> House:
+    async def load(*, residents: tuple[str, ...] = ("person.resident", "person.partner"), panel: bool = False, weak: tuple[str, ...] = ()) -> House:
         rooms: dict[str, dict[str, Any]] = {}
         for area_id, name in {**INDOORS, **OUTDOORS}.items():
             rooms[area_id] = {"name": name, "outdoors": area_id in OUTDOORS, "power_threshold": 30}
@@ -228,8 +238,7 @@ async def house(hass, freezer, siem_events):
         data = {
             "rooms": rooms,
             "house": {
-                "residents": ["person.alex"],
-                "extra_trackers": list(trackers),
+                "residents": list(residents),
                 "csi_sensors": ["binary_sensor.front_door_csi"],
                 "csi_map": {"binary_sensor.front_door_csi": "binary_sensor.front_door"},
                 "water_flow": ["sensor.water_flow"],
@@ -239,13 +248,14 @@ async def house(hass, freezer, siem_events):
                 "calendar": "calendar.house",
                 "night_start": "22:00:00",
                 "night_end": "06:00:00",
+                **({"alarm_panel": "alarm_control_panel.house"} if panel else {}),
             },
             "responses": {"digest_times": ["08:00"]},
         }
         data["entities"] = build_entity_meta(hass, data)
         for entity_id in weak:
             data["entities"][entity_id]["strength_override"] = "weak"
-        entry = MockConfigEntry(domain=DOMAIN, title="SIEM", data=data, version=1, minor_version=5)
+        entry = MockConfigEntry(domain=DOMAIN, title="SIEM", data=data, version=1, minor_version=6)
         entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -275,11 +285,12 @@ async def test_a_family_evening_is_silent(house, freezer):
 
 
 async def test_a_business_trip_with_the_family_home_and_apple_home(house, freezer):
-    """Alex leaves for a week. Jordan and the kids stay; Jordan never opens Home Assistant but uses Apple Home,
-    which reaches the house through HomeKit Bridge. Jordan's phone is a router tracker, so the house stays family."""
+    """You leave for a week. Your partner and the kids stay; your partner never opens Home Assistant but uses Apple
+    Home, which reaches the house through HomeKit Bridge. Their person entity follows their phone and watch, so the
+    house stays family."""
     freezer.move_to("2026-10-19 07:00:00-07:00")
     home = await house()
-    await home.leave("device_tracker.alex_phone")
+    await home.leave("resident")
     await home.wait(45 * 60)
     assert home.mode == "family"
     for hour in range(14):
@@ -290,12 +301,12 @@ async def test_a_business_trip_with_the_family_home_and_apple_home(house, freeze
     assert home.alerts == [] and home.rules() == []
 
 
-async def test_without_a_tracker_for_the_spouse_the_house_reads_vacant(house, freezer):
-    """The same trip, but nothing tells SIEM that Jordan is home: once Alex's grace runs out, Jordan's own
-    footsteps are an intruder's. This is why everyone who lives there needs a tracker, or the mode override."""
+async def test_without_a_tracker_for_your_partner_the_house_reads_vacant(house, freezer):
+    """The same trip, but your partner is not among SIEM's residents: once your grace runs out, their own footsteps
+    are an intruder's. This is why everyone who lives there needs a tracker, or the mode override."""
     freezer.move_to("2026-10-19 07:00:00-07:00")
-    home = await house(trackers=())
-    await home.leave("device_tracker.alex_phone")
+    home = await house(residents=("person.resident",))
+    await home.leave("resident")
     await home.wait(31 * 60)
     assert home.mode == "vacant"
     await home.pulse("binary_sensor.hall_motion")
@@ -344,13 +355,165 @@ async def test_a_kid_comes_home_with_their_own_code(house, freezer):
     assert home.alerts == [] and home.mode == "family"
 
 
-async def test_a_family_asleep_leaves_intruders_to_the_alarm_panel(house, freezer):
-    """A known limit: with residents home SIEM scores nothing but lock trouble, at night too. An armed-night
-    alarm panel covers a break-in while everyone sleeps; SIEM's job is the empty house."""
-    freezer.move_to("2026-10-20 03:00:00-07:00")
+# --- Night: the family in bed ------------------------------------------------------------------------------------
+#
+# This house has no alarm panel picked, so the night window (22:00 to 06:00 here) is bedtime. At night SIEM watches
+# the yard, doors and windows as it does an empty house, and tells one of the family from an intruder by the order
+# of events: someone up inside first is one of you going out; outside first, or nothing at all, is someone coming in.
+
+
+async def test_someone_lingering_in_the_yard_while_you_sleep(house, freezer):
+    """1 a.m., everyone asleep, someone hangs around the backyard for forty minutes: a verify, as if you were away."""
+    freezer.move_to("2026-10-21 01:00:00-07:00")
     home = await house()
-    await home.pulse("binary_sensor.side_gate", "binary_sensor.back_door", "binary_sensor.kitchen_presence")
+    assert home.mode == "night"
+    for _ in range(40):
+        await home.pulse("binary_sensor.backyard_motion", "binary_sensor.backyard_person")
+        await home.wait(60)
+    assert home.alerts == ["verify"]
+    assert 20 <= home.score < 50
+
+
+async def test_someone_through_the_gate_while_you_sleep(house, freezer):
+    """1 a.m.: the side gate (45 at night), then someone in the backyard (19.5). A deter lights the yard up before
+    anyone tries a door."""
+    freezer.move_to("2026-10-21 01:00:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.side_gate", "binary_sensor.backyard_motion", "binary_sensor.backyard_person")
+    assert home.alerts == ["verify", "deter"]
+    assert not home.trigger_seen
+
+
+async def test_a_break_in_while_you_sleep(house, freezer):
+    """3 a.m.: the gate and someone in the backyard, then the back door (40 x 1.5 at night x 1.5 after the gate),
+    then the kitchen, which counts at night only because a door just let someone in."""
+    freezer.move_to("2026-10-21 03:00:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.side_gate", "binary_sensor.backyard_person")
+    await home.wait(20)
+    await home.physical("binary_sensor.back_door")
+    await home.pulse("binary_sensor.kitchen_presence")
+    assert home.alerts == ["verify", "deter", "alarm"]
+    assert home.rules() == ["gate_opened", "exterior_occupied", "exterior_door_opened", "interior_occupied"]
+    await home.wait(60)
+    assert home.trigger
+
+
+async def test_a_window_opens_with_nobody_up(house, freezer):
+    """2:30 a.m., nothing has moved inside for hours and the bedroom window opens: 60, a deter. The bedroom motion
+    right after it makes it an alarm."""
+    freezer.move_to("2026-10-21 02:30:00-07:00")
+    home = await house()
+    await home.physical("binary_sensor.bedroom_window")
+    assert home.alerts == ["deter"]
+    await home.pulse("binary_sensor.bedroom_motion")
+    assert home.alerts == ["deter", "alarm"]
+
+
+async def test_letting_the_dog_out_in_the_night(house, freezer):
+    """2 a.m., you get up, walk through the hall and the kitchen and let the dog out the back door. The dog
+    wanders the backyard for ten minutes (the camera calls it a person), then you let it back in."""
+    freezer.move_to("2026-10-21 02:00:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.hall_motion", "binary_sensor.kitchen_presence")
+    await home.wait(40)
+    await home.pulse("binary_sensor.back_door")
+    for _ in range(5):
+        await home.pulse("binary_sensor.backyard_motion", "binary_sensor.backyard_person")
+        await home.wait(120)
+    await home.pulse("binary_sensor.back_door", "binary_sensor.kitchen_presence")
     assert home.alerts == [] and home.rules() == []
+
+
+async def test_a_midnight_snack_then_the_back_door(house, freezer):
+    """Someone spends ten minutes in the kitchen, the presence sensor on the whole time, then steps out the back
+    door. The kitchen sensor turned on recently and is still on: someone is up."""
+    freezer.move_to("2026-10-21 00:30:00-07:00")
+    home = await house()
+    await home.physical("binary_sensor.kitchen_presence", "on")
+    await home.wait(600)
+    await home.pulse("binary_sensor.back_door", "binary_sensor.backyard_motion")
+    assert home.alerts == [] and home.rules() == []
+
+
+async def test_a_kid_up_for_water(house, freezer):
+    """3 a.m.: the hall, the kitchen light, the fridge, the tap. Nothing inside counts at night on its own."""
+    freezer.move_to("2026-10-21 03:00:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.hall_motion", "binary_sensor.kitchen_presence", "binary_sensor.fridge_door")
+    await home.physical("light.kitchen")
+    await home.physical("sensor.water_flow", "2")
+    assert home.alerts == [] and home.rules() == []
+
+
+async def test_your_partner_comes_home_while_you_sleep(house, freezer):
+    """Your partner was out for the evening. At 1 a.m. their phone reports home as they pull in: the driveway, the
+    doorbell camera, the garage, the hall are all them."""
+    freezer.move_to("2026-10-20 19:00:00-07:00")
+    home = await house()
+    await home.leave("partner")
+    freezer.move_to("2026-10-21 01:00:00-07:00")
+    await home.wait(30)
+    assert home.mode == "night"
+    await home.arrive("partner")
+    await home.pulse("binary_sensor.driveway_motion", "binary_sensor.porch_person")
+    await home.physical("binary_sensor.garage_door")
+    await home.pulse("binary_sensor.garage_motion", "binary_sensor.hall_motion")
+    assert home.alerts == [] and home.rules() == []
+
+
+async def test_a_teenager_home_late_with_a_code(house, freezer):
+    """11:45 p.m., a kid without a tracker comes home: someone at the door in the dark is a verify, and the code
+    the lock accepts lets them in. The rest is quiet."""
+    freezer.move_to("2026-10-20 23:45:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.driveway_motion", "binary_sensor.porch_person", "binary_sensor.front_door_csi")
+    assert home.alerts == ["verify"]
+    await home.code(slot=3)
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    await home.physical("light.hallway")
+    assert home.alerts == ["verify"] and home.score == 0
+
+
+async def test_a_teenager_sneaking_out(house, freezer):
+    """A known limit: someone up inside, then a door, then the yard is one of the family going out, whoever it is."""
+    freezer.move_to("2026-10-21 01:30:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.hall_motion", "binary_sensor.front_door", "binary_sensor.porch_motion", "binary_sensor.driveway_motion")
+    assert home.alerts == []
+
+
+async def test_a_break_in_just_after_someone_was_up(house, freezer):
+    """A known limit: if someone walked through the hall a minute before a burglar opens the back door, the door
+    reads as one of you going out, and what follows inside does not count."""
+    freezer.move_to("2026-10-21 02:00:00-07:00")
+    home = await house()
+    await home.pulse("binary_sensor.hall_motion")
+    await home.wait(60)
+    await home.physical("binary_sensor.back_door")
+    await home.pulse("binary_sensor.kitchen_presence")
+    assert home.alerts == []
+
+
+async def test_the_alarm_panel_decides_bedtime(house, freezer):
+    """With a panel picked, bedtime is the panel armed night, whatever the clock says, and it holds while the
+    panel is pending or triggered. SIEM only reads the panel."""
+    freezer.move_to("2026-10-20 23:30:00-07:00")
+    home = await house(panel=True)
+    assert home.mode == "family", "inside the night window, but the panel is disarmed"
+    await home.pulse("binary_sensor.side_gate", "binary_sensor.back_door")
+    assert home.alerts == []
+    await home.panel("armed_night")
+    assert home.mode == "night"
+    await home.wait(600)
+    await home.pulse("binary_sensor.side_gate", "binary_sensor.backyard_person", "binary_sensor.backyard_motion")
+    assert home.alerts == ["verify", "deter"]
+    for state in ("pending", "triggered"):
+        await home.panel(state)
+        assert home.mode == "night"
+    freezer.move_to("2026-10-21 06:30:00-07:00")
+    await home.panel("disarmed")
+    assert home.mode == "family"
 
 
 # --- The house is empty ------------------------------------------------------------------------------------------
@@ -486,7 +649,7 @@ async def test_a_neighbor_with_a_key_nobody_told_siem_about(house, freezer):
 
 
 async def test_coming_home_with_the_phone_a_little_late(house, freezer):
-    """Back from the trip. Alex drives in and the garage opens before the phone reports home: the garage door (40)
+    """Back from the trip. You drive in and the garage opens before your phone reports home: the garage door (40)
     and the garage motion (30 x 1.5) reach alarm, and the alerts go out. Thirty seconds later the phone reports
     home; the arrival explains the minutes before it, the score drops to nothing, and the panel is never triggered."""
     home = await house()
@@ -497,7 +660,7 @@ async def test_coming_home_with_the_phone_a_little_late(house, freezer):
     await home.pulse("binary_sensor.garage_motion")
     assert home.alerts == ["verify", "alarm"]
     await home.wait(30)
-    await home.arrive("device_tracker.alex_phone")
+    await home.arrive("resident")
     assert home.score == 0 and home.mode == "family"
     await home.wait(120)
     assert not home.trigger_seen
@@ -508,7 +671,7 @@ async def test_coming_home_with_the_phone_on_time(house, freezer):
     home = await house()
     await home.vacation()
     freezer.move_to("2026-10-25 18:00:00-07:00")
-    await home.arrive("device_tracker.alex_phone")
+    await home.arrive("resident")
     await home.pulse("binary_sensor.driveway_motion")
     await home.physical("binary_sensor.garage_door")
     await home.pulse("binary_sensor.garage_motion", "binary_sensor.hall_motion")
@@ -528,7 +691,7 @@ async def test_coming_home_late_at_night_with_a_code(house, freezer):
     await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
     await home.physical("light.hallway")
     await home.wait(60)
-    await home.arrive("device_tracker.alex_phone")
+    await home.arrive("resident")
     assert home.alerts == ["verify"] and not home.trigger_seen
 
 
@@ -574,7 +737,7 @@ async def test_a_neighbor_on_the_calendar(house, freezer):
 
 
 async def test_letting_the_plumber_in_from_the_app(house, freezer):
-    """Alex, away, unlocks the front door from the app for the plumber. An unlock from Home Assistant lets
+    """Away, you unlock the front door from the app for the plumber. An unlock from Home Assistant lets
     someone in, like a code: the plumber's visit is quiet."""
     home = await house()
     await home.vacation()
@@ -588,7 +751,7 @@ async def test_letting_the_plumber_in_from_the_app(house, freezer):
 
 
 async def test_opening_the_garage_from_the_app_for_a_delivery(house, freezer):
-    """Alex, away, opens the garage from the app so a parcel can go inside. The garage door's own contact sensor
+    """Away, you open the garage from the app so a parcel can go inside. The garage door's own contact sensor
     reports the opening with no trace of the command; Home Assistant opening a garage door, gate or door lets
     someone in, like an unlock from the app."""
     home = await house()
@@ -681,7 +844,7 @@ async def test_scheduled_automations_and_slow_lights(house, freezer):
 
 
 async def test_apple_home_from_far_away(house, freezer):
-    """Jordan, away too, turns on the bedroom light from Apple Home to check on things. HomeKit Bridge is Home
+    """Your partner, away too, turns on the bedroom light from Apple Home to check on things. HomeKit Bridge is Home
     Assistant acting on a service call, like the app or a voice assistant."""
     home = await house()
     await home.vacation()

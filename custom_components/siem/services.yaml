@@ -32,3 +32,4 @@ set_house_mode:
             - guest
             - service
             - family
+            - night

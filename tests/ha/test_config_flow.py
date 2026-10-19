@@ -56,7 +56,7 @@ async def test_full_flow_prefills_rooms(hass):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["08:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.minor_version == 5
+    assert entry.minor_version == 6
     assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True}
     assert entry.data["house"]["csi_map"] == {"binary_sensor.front_door_csi": "binary_sensor.front_door"}
     assert entry.data["house"]["night_start"] == "23:00:00"
@@ -77,11 +77,11 @@ async def test_options_edit_points_engine_and_strength(hass, freezer):
     assert result["type"] is FlowResultType.MENU
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "rules"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"rule": "appliance_on"})
-    assert suggested(result) == {"vacant": 35, "guest": 0, "service": 0, "family": 0}
-    result = await hass.config_entries.options.async_configure(result["flow_id"], {"vacant": 10, "guest": 0, "service": 0, "family": 0})
+    assert suggested(result) == {"vacant": 35, "guest": 0, "service": 0, "family": 0, "night": 35}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"vacant": 10, "guest": 0, "service": 0, "family": 0, "night": 5})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
-    assert entry.options["rules"] == {"appliance_on": {"points": {"vacant": 10, "guest": 0, "service": 0, "family": 0}}}
+    assert entry.options["rules"] == {"appliance_on": {"points": {"vacant": 10, "guest": 0, "service": 0, "family": 0, "night": 5}}}
     assert entry.runtime_data.rules["appliance_on"].points_for("vacant") == 10
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -98,7 +98,14 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     old = {
         "rooms": {"kitchen": {"name": "Kitchen", "power": ["sensor.coffee_power"], "power_threshold": 30}, "porch": {"name": "Front Porch", "power_threshold": 30}},
         "house": {},
-        "responses": {"notify_service": "notify.mattermost", "target": "home_security", "notify_service_2": "notify.mobile_app_phone", "mobile_notify_service": "notify.mobile_app_phone", "dry_run": True},
+        "responses": {
+            "notify_service": "notify.mattermost",
+            "target": "home_security",
+            "notify_service_2": "notify.mobile_app_phone",
+            "mobile_notify_service": "notify.mobile_app_phone",
+            "dry_run": True,
+            "alarm_panel": "alarm_control_panel.house",
+        },
         "entities": {"sensor.coffee_power": {"role": "power", "room": "kitchen", "threshold": 30}},
     }
     options = {"rules": {"tv_power": {"points": {"vacant": 20, "sitter": 0, "service": 0, "family": 0}}, "gate_opened": {"points": {"vacant": 25, "sitter": 5, "service": 5, "family": 0}}}}
@@ -106,14 +113,16 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 5
+    assert entry.minor_version == 6
     assert entry.data["responses"] == {}
+    # The panel SIEM used to arm is kept, to be read for armed night.
+    assert entry.data["house"] == {"alarm_panel": "alarm_control_panel.house"}
     # Rooms named like the outdoors start out as outdoor rooms.
     assert entry.data["rooms"]["kitchen"]["outdoors"] is False and entry.data["rooms"]["porch"]["outdoors"] is True
     assert entry.runtime_data.outdoor_rooms == {"porch"}
     assert entry.options["rules"] == {
-        "appliance_on": {"points": {"vacant": 20, "guest": 0, "service": 0, "family": 0}},
-        "gate_opened": {"points": {"vacant": 25, "guest": 5, "service": 5, "family": 0}},
+        "appliance_on": {"points": {"vacant": 20, "guest": 0, "service": 0, "family": 0, "night": 35}},
+        "gate_opened": {"points": {"vacant": 25, "guest": 5, "service": 5, "family": 0, "night": 30}},
     }
     coordinator = entry.runtime_data
     assert coordinator.rules["appliance_on"].points_for("vacant") == 20
@@ -136,9 +145,9 @@ async def test_migration_drops_notify_panel_deterrence_and_trust_settings(hass, 
     orphans = [registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry) for key in ("dry_run", "auto_arm", "auto_alarm")]
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 5
+    assert entry.minor_version == 6
     assert entry.data["rooms"] == {"kitchen": {"name": "Kitchen", "power_threshold": 30, "outdoors": False}}
-    assert entry.data["house"] == {"night_start": "22:00:00"}
+    assert entry.data["house"] == {"night_start": "22:00:00", "alarm_panel": "alarm_control_panel.house"}
     assert entry.data["responses"] == {"digest_times": ["08:00"]}
     assert "rules" not in entry.options
     assert all(registry.async_get(orphan.entity_id) is None for orphan in orphans)

@@ -15,6 +15,16 @@ def test_family_lingers_thirty_minutes():
     assert machine.mode(100 + FAMILY_LINGER_S) == "vacant"
 
 
+def test_family_in_bed_is_night():
+    machine = HouseModeMachine(0)
+    machine.set_asleep(True)
+    assert machine.mode(0) == "vacant", "an empty house is vacant, asleep or not"
+    machine.set_presence(True, 10)
+    assert machine.mode(10) == "night"
+    machine.set_asleep(False)
+    assert machine.mode(10) == "family"
+
+
 def test_guest_from_calendar_leaves_after_end_plus_two_hours_and_quiet():
     machine = HouseModeMachine(0)
     assert machine.set_calendar_event("Guest: Pat", 100, 1000) == "guest"
