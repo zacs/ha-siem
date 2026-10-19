@@ -10,21 +10,15 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.siem.const import DOMAIN
 
-from .conftest import TRUSTED, set_house_states, setup_siem
+from .conftest import set_house_states, setup_siem
 
 
 def suggested(result) -> dict:
     return {str(key): (key.description or {}).get("suggested_value") for key in result["data_schema"].schema}
 
 
-def options_of(result, name: str) -> list:
-    selector = next(value for key, value in result["data_schema"].schema.items() if str(key) == name)
-    return selector.config["options"]
-
-
-async def test_full_flow_prefills_rooms_and_trust(hass):
+async def test_full_flow_prefills_rooms(hass):
     set_house_states(hass)
-    presence = await hass.auth.async_create_system_user("Presence Simulation")
     kitchen = ar.async_get(hass).async_get_or_create("Kitchen")
     registry = er.async_get(hass)
     ids = {}
@@ -51,24 +45,20 @@ async def test_full_flow_prefills_rooms_and_trust(hass):
     assert room["power"] == [ids["plug"]]
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {k: v for k, v in room.items() if v})
     assert result["step_id"] == "house"
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"residents": ["person.alice"], "csi_sensors": ["binary_sensor.front_door_csi"]})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"residents": ["person.alice"], "csi_sensors": ["binary_sensor.front_door_csi"], "night_start": "23:00:00", "night_end": "06:00:00"})
     assert result["step_id"] == "csi_map"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"binary_sensor.front_door_csi": "binary_sensor.front_door"})
-    assert result["step_id"] == "house_deter"
-    assert sorted(suggested(result)["trusted_user_ids"]) == sorted([TRUSTED, presence.id])
-    labels = {o["value"]: o["label"] for o in options_of(result, "trusted_user_ids")}
-    assert labels[presence.id] == "Presence Simulation (system)" and labels[TRUSTED] == "Alice"
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"trusted_user_ids": [TRUSTED, presence.id]})
     assert result["step_id"] == "responses"
-    assert sorted(suggested(result)) == ["ai_task_entity", "auto_alarm", "digest_post_when_empty", "digest_times", "dry_run"]
+    assert sorted(suggested(result)) == ["ai_task_entity", "digest_post_when_empty", "digest_times"]
     bad = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["8am"]})
     assert bad["errors"] == {"digest_times": "invalid_time"}
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["08:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.minor_version == 3
-    assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True, "dry_run": True, "auto_alarm": False}
+    assert entry.minor_version == 4
+    assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True}
     assert entry.data["house"]["csi_map"] == {"binary_sensor.front_door_csi": "binary_sensor.front_door"}
+    assert entry.data["house"]["night_start"] == "23:00:00"
     meta = entry.data["entities"]
     assert meta[ids["motion"]] == {"role": "occupancy", "room": kitchen.id, "strength": "medium", "person_detector": False, "exterior": False}
     assert meta[ids["fridge"]]["role"] == "interior_door"
@@ -113,8 +103,8 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 3
-    assert entry.data["responses"] == {"dry_run": True}
+    assert entry.minor_version == 4
+    assert entry.data["responses"] == {}
     assert entry.options["rules"] == {
         "appliance_on": {"points": {"vacant": 20, "guest": 0, "service": 0, "family": 0}},
         "gate_opened": {"points": {"vacant": 25, "guest": 5, "service": 5, "family": 0}},
@@ -124,21 +114,25 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     assert coordinator.store.weights == {"appliance_on": 0.9, "light_physical": 0.81}
 
 
-async def test_migration_from_1_2_drops_notify_and_panel_settings(hass, freezer):
+async def test_migration_drops_notify_panel_deterrence_and_trust_settings(hass, freezer):
     set_house_states(hass)
     data = {
-        "rooms": {},
-        "house": {},
-        "responses": {"notify_services": ["notify.mattermost"], "alarm_panel": "alarm_control_panel.house", "auto_arm": True, "auto_alarm": True, "dry_run": False},
+        "rooms": {"kitchen": {"name": "Kitchen", "deter_lights": ["light.kitchen"], "deter_players": ["media_player.kitchen"], "deter_script": "script.kitchen", "power_threshold": 30}},
+        "house": {"trusted_user_ids": ["abc"], "deter_volume": 0.7, "restore_seconds": 30, "house_deter": ["script.deter"], "house_alarm": ["switch.siren"], "night_start": "22:00:00"},
+        "responses": {"notify_services": ["notify.mattermost"], "alarm_panel": "alarm_control_panel.house", "auto_arm": True, "auto_alarm": True, "dry_run": False, "digest_times": ["08:00"]},
         "entities": {},
     }
-    entry = MockConfigEntry(domain=DOMAIN, title="SIEM", data=data, version=1, minor_version=2)
+    options = {"rules": {"untrusted_user": {"points": {"vacant": 70, "guest": 50, "service": 50, "family": 30}}}}
+    entry = MockConfigEntry(domain=DOMAIN, title="SIEM", data=data, options=options, version=1, minor_version=3)
     entry.add_to_hass(hass)
     registry = er.async_get(hass)
-    orphan = registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_auto_arm", config_entry=entry)
+    orphans = [registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry) for key in ("dry_run", "auto_arm", "auto_alarm")]
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 3
-    assert entry.data["responses"] == {"auto_alarm": True, "dry_run": False}
-    assert registry.async_get(orphan.entity_id) is None
-    assert hass.states.get("switch.siem_dry_run") is not None
+    assert entry.minor_version == 4
+    assert entry.data["rooms"] == {"kitchen": {"name": "Kitchen", "power_threshold": 30}}
+    assert entry.data["house"] == {"night_start": "22:00:00"}
+    assert entry.data["responses"] == {"digest_times": ["08:00"]}
+    assert "rules" not in entry.options
+    assert all(registry.async_get(orphan.entity_id) is None for orphan in orphans)
+    assert not hass.states.async_entity_ids("switch")

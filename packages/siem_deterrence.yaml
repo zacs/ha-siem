@@ -1,0 +1,60 @@
+# =============================================================================
+# SIEM for Home Assistant: deterrence (sample package)
+# =============================================================================
+#
+# Turns on every light in the incident's room when it reaches the deter tier,
+# and every light in the house at the alarm tier. The room is the Home
+# Assistant area SIEM reports with each alert, so the lights are whatever you
+# have assigned to that area.
+#
+# A starting point: add a sound on the room's speakers, a siren or your own
+# scripts to the actions below. SIEM ignores the lights this turns on, the same
+# as anything else an automation does.
+#
+# INSTALL
+#   1. Copy this file to <config>/packages/siem_deterrence.yaml and enable
+#      packages in configuration.yaml if you have not already:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   2. Restart Home Assistant, or reload automations.
+#   Watching SIEM's alerts for a week or two before adding this is a good idea.
+#   Turn the automation off from Settings > Automations to pause it.
+# =============================================================================
+
+automation:
+  - id: siem_deterrence
+    alias: SIEM deterrence
+    description: Turns on the incident room's lights at the deter tier, and every light at the alarm tier.
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: siem_notification
+        event_data:
+          category: deter
+      - trigger: event
+        event_type: siem_notification
+        event_data:
+          category: alarm
+    variables:
+      area: "{{ trigger.event.data.incident.area_id if trigger.event.data.incident else none }}"
+      room_lights: "{{ area_entities(area) | select('match', 'light[.]') | list if area else [] }}"
+    actions:
+      - if:
+          - condition: template
+            value_template: "{{ room_lights | count > 0 }}"
+        then:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ room_lights }}"
+            data:
+              brightness_pct: 100
+      - if:
+          - condition: template
+            value_template: "{{ trigger.event.data.category == 'alarm' }}"
+        then:
+          - action: light.turn_on
+            target:
+              entity_id: all
+            data:
+              brightness_pct: 100

@@ -92,24 +92,32 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate older 1.x entries: guest instead of sitter, appliance_on instead of tv_power, no notify or panel settings."""
+    """Migrate older 1.x entries to 1.4: renamed modes and rules, and the settings 0.2 removed."""
     if entry.version > 1:
         return False
-    if entry.minor_version < 3:
+    if entry.minor_version < 4:
         data, options = copy.deepcopy(dict(entry.data)), copy.deepcopy(dict(entry.options))
-        responses = data.setdefault(c.CONF_RESPONSES, {})
-        for key in c.REMOVED_RESPONSES:
-            responses.pop(key, None)
-        rules = {c.RENAMED_RULES.get(rule_id, rule_id): value for rule_id, value in (options.get(c.OPT_RULES) or {}).items()}
+        for section in (c.CONF_HOUSE, c.CONF_RESPONSES):
+            for key in c.REMOVED_SETTINGS[section]:
+                data.setdefault(section, {}).pop(key, None)
+        for room in data.get(c.CONF_ROOMS, {}).values():
+            for key in c.REMOVED_SETTINGS[c.CONF_ROOMS]:
+                room.pop(key, None)
+        rules = {
+            c.RENAMED_RULES.get(rule_id, rule_id): value for rule_id, value in (options.get(c.OPT_RULES) or {}).items() if rule_id not in c.REMOVED_RULES
+        }
         for value in rules.values():
             points = value.get("points") if isinstance(value, dict) else None
             if isinstance(points, dict):
                 value["points"] = {c.RENAMED_MODES.get(mode, mode): pts for mode, pts in points.items()}
         if rules:
             options[c.OPT_RULES] = rules
+        else:
+            options.pop(c.OPT_RULES, None)
         registry = er.async_get(hass)
-        if entity_id := registry.async_get_entity_id("switch", c.DOMAIN, f"{entry.entry_id}_auto_arm"):
-            registry.async_remove(entity_id)
-        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=3)
-        _LOGGER.info("Migrated SIEM config entry to 1.3")
+        for key in c.REMOVED_SWITCHES:
+            if entity_id := registry.async_get_entity_id("switch", c.DOMAIN, f"{entry.entry_id}_{key}"):
+                registry.async_remove(entity_id)
+        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=4)
+        _LOGGER.info("Migrated SIEM config entry to 1.4")
     return True

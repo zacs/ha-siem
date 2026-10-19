@@ -1,12 +1,10 @@
 """Origin classification for every origin."""
 
-from custom_components.siem.core.origin import ContextLRU, Origin, UserInfo, classify_origin, default_trusted_user_ids
-
-TRUSTED = ["user-alice", "user-presence"]
+from custom_components.siem.core.origin import ContextLRU, Origin, classify_origin
 
 
 def classify(**kwargs):
-    defaults = {"parent_id": None, "user_id": None, "context_id": "ctx", "trusted_user_ids": TRUSTED, "homekit_contexts": ContextLRU(), "now": 100.0}
+    defaults = {"parent_id": None, "user_id": None, "context_id": "ctx", "homekit_contexts": ContextLRU(), "now": 100.0}
     return classify_origin(**{**defaults, **kwargs})
 
 
@@ -14,17 +12,16 @@ def test_automation_wins_over_everything():
     assert classify(parent_id="auto", user_id="user-alice") is Origin.AUTOMATION
 
 
-def test_trusted_and_untrusted_users():
-    assert classify(user_id="user-alice") is Origin.USER_TRUSTED
-    assert classify(user_id="user-presence") is Origin.USER_TRUSTED
-    assert classify(user_id="user-mallory") is Origin.USER_UNTRUSTED
+def test_any_user_is_a_user():
+    assert classify(user_id="user-alice") is Origin.USER
+    assert classify(user_id="presence-simulation-system-user") is Origin.USER
 
 
 def test_automation_contexts_are_automation_but_users_still_count():
     runs = ContextLRU()
     runs.add("ctx", now=100.0)
     assert classify(automation_contexts=runs) is Origin.AUTOMATION
-    assert classify(automation_contexts=runs, user_id="user-mallory") is Origin.USER_UNTRUSTED
+    assert classify(automation_contexts=runs, user_id="user-alice") is Origin.USER
     assert classify(automation_contexts=runs, context_id="other") is Origin.PHYSICAL
 
 
@@ -45,11 +42,3 @@ def test_lru_bounds_size_and_ttl():
     assert lru.seen("c", 3)
     assert not lru.seen("c", 63)
     assert not lru.seen(None, 3)
-
-
-def test_presence_simulation_user_is_trusted_by_default():
-    users = [UserInfo("u1", "Alice"), UserInfo("u9", "presence simulation", system_generated=True)]
-    trusted = default_trusted_user_ids(["u1", None], users)
-    assert trusted == ["u1", "u9"]
-    lru = ContextLRU()
-    assert classify_origin(parent_id=None, user_id="u9", context_id="c", trusted_user_ids=trusted, homekit_contexts=lru, now=0) is Origin.USER_TRUSTED

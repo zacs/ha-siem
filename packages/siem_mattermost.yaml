@@ -4,8 +4,8 @@
 #
 # Posts every SIEM alert, break-glass message and digest to a Mattermost
 # channel as a coloured attachment with the score, the room, the house mode,
-# the top contributors, the timeline and the actions, plus the camera snapshot
-# when the room has a camera.
+# the top contributors and the timeline, plus the camera snapshot when the room
+# has a camera.
 #
 # Needs the Mattermost notification component
 # (https://github.com/cerebrate/ha-mattermost), which provides
@@ -40,11 +40,6 @@ automation:
         {%- for e in incident.get('timeline', []) %}
         - {{ (e.at | as_datetime | as_local).strftime('%H:%M:%S') }}: **{{ e.rule }}** {{ '%+g' | format(e.points) }} {{ e.name or '' }} {{ e.detail or '' }}
         {%- endfor %}
-      actions_text: |-
-        {%- if n.actions %}{{ 'Would have run:' if n.dry_run else 'Running:' }}
-        {%- for a in n.actions %}
-        - `{{ a }}`
-        {%- endfor %}{% endif %}
       fields: >-
         {%- if incident %}{{ [
           {'short': true, 'title': 'Room', 'value': incident.room or '-'},
@@ -53,7 +48,7 @@ automation:
           {'short': true, 'title': 'Top contributors', 'value': (incident.top_contributors | map(attribute='rule') | join(', ')) or '-'}
         ] }}{% else %}[]{% endif %}
       attachment: >-
-        {{ {'color': color, 'fields': fields, 'text': ((timeline ~ '\n\n' ~ actions_text) if incident else n.message) | trim} }}
+        {{ {'color': color, 'fields': fields, 'text': (timeline if incident else n.message) | trim} }}
       payload: >-
         {%- set d = {'attachments': [attachment]} %}
         {%- if n.snapshot %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}

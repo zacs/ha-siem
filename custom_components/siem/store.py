@@ -1,4 +1,4 @@
-"""HA Store persistence: weights, incidents, digest timestamp, toggles, house mode override."""
+"""HA Store persistence: weights, incidents, digest timestamp, house mode override."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ STORAGE_VERSION = 1
 SAVE_DELAY = 5
 MAX_INCIDENTS = 200
 MAX_WEIGHT_CHANGES = 200
-KEYS = ("weights", "incidents", "weight_changes", "last_digest", "toggles", "override")
+KEYS = ("weights", "incidents", "weight_changes", "last_digest", "override")
 
 
 class SiemStore:
@@ -28,7 +28,6 @@ class SiemStore:
         self.incidents: list[dict[str, Any]] = []
         self.weight_changes: list[dict[str, Any]] = []
         self.last_digest: str | None = None
-        self.toggles: dict[str, bool] = {}
         self.override: str | None = None
 
     async def async_load(self) -> None:
@@ -38,7 +37,6 @@ class SiemStore:
         self.incidents = list(data.get("incidents") or [])[-MAX_INCIDENTS:]
         self.weight_changes = list(data.get("weight_changes") or [])[-MAX_WEIGHT_CHANGES:]
         self.last_digest = data.get("last_digest")
-        self.toggles = dict(data.get("toggles") or {})
         self.override = RENAMED_MODES.get(data.get("override"), data.get("override"))
 
     def _data(self) -> dict[str, Any]:

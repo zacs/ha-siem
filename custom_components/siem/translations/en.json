@@ -24,16 +24,12 @@
           "power": "Appliance power sensors",
           "power_additional": "More power sensors (any entity)",
           "power_threshold": "Appliance on above",
-          "camera": "Camera for snapshots",
-          "deter_lights": "Deter lights",
-          "deter_lights_additional": "More deter lights or switches (any entity)",
-          "deter_players": "Deter speakers",
-          "deter_script": "Deter script"
+          "camera": "Camera for snapshots"
         }
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers and user are read from their person entity, and re-read when it changes.",
+        "description": "Each resident's device trackers are read from their person entity, and re-read when it changes. Exterior rules score 1.5 times as much inside the night window.",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -47,38 +43,22 @@
           "load_sustain_minutes": "Step must last (minutes)",
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
-          "calendar": "Calendar with 'Guest:' and 'Service:' events"
+          "calendar": "Calendar with 'Guest:' and 'Service:' events",
+          "night_start": "Night starts",
+          "night_end": "Night ends"
         }
       },
       "csi_map": {
         "title": "Wi-Fi motion sensors and doors",
         "description": "For each Wi-Fi motion sensor, pick the contact on the same door. Motion there with no door opening within 60 seconds scores door_csi_motion."
       },
-      "house_deter": {
-        "title": "Trust, night and deterrence",
-        "description": "Changes made by trusted users or by automations never score. Residents and a user named Presence Simulation are pre-selected. Voice assistants through Home Assistant Cloud act as the Home Assistant Cloud user.",
-        "data": {
-          "trusted_user_ids": "Trusted users",
-          "night_start": "Night starts",
-          "night_end": "Night ends",
-          "deter_sound": "Deter sound (media URL or media-source id)",
-          "deter_tts_entity": "Deter text-to-speech entity (used instead of the sound)",
-          "deter_tts_message": "Deter message",
-          "deter_volume": "Deter volume",
-          "restore_seconds": "Restore speakers after (seconds)",
-          "house_deter": "Whole-house deter scripts or switches",
-          "house_alarm": "Whole-house alarm scripts or switches"
-        }
-      },
       "responses": {
-        "title": "Responses",
-        "description": "SIEM never sends notifications or changes your alarm panel. Every alert fires a siem_notification event, and your own automations decide what to do with it (see the sample packages). Dry run stays on until you turn it off: deterrence is only described, and every alert is marked [DRY RUN] with the actions that would have run.",
+        "title": "Digest",
+        "description": "SIEM never acts on its own: it keeps its state in entities and fires a siem_notification event for every alert, and your automations decide what happens (see the sample packages). The digest summarises each day's incidents, written by an AI task entity when you pick one.",
         "data": {
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
-          "digest_post_when_empty": "Send the digest when nothing happened",
-          "dry_run": "Dry run (describe actions instead of running them)",
-          "auto_alarm": "Auto alarm (pulse the alarm trigger sensor at the alarm tier)"
+          "digest_post_when_empty": "Send the digest when nothing happened"
         }
       }
     },
@@ -101,7 +81,7 @@
           "rooms": "Add or remove rooms (re-runs every room step)",
           "room_pick": "Re-run one room step",
           "house": "Re-run the whole-house steps",
-          "responses": "Re-run the responses step",
+          "responses": "Re-run the digest step",
           "strength_pick": "Change an occupancy source's strength"
         }
       },
@@ -164,11 +144,7 @@
           "power": "Appliance power sensors",
           "power_additional": "More power sensors (any entity)",
           "power_threshold": "Appliance on above",
-          "camera": "Camera for snapshots",
-          "deter_lights": "Deter lights",
-          "deter_lights_additional": "More deter lights or switches (any entity)",
-          "deter_players": "Deter speakers",
-          "deter_script": "Deter script"
+          "camera": "Camera for snapshots"
         }
       },
       "room_pick": {
@@ -179,7 +155,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers and user are read from their person entity, and re-read when it changes.",
+        "description": "Each resident's device trackers are read from their person entity, and re-read when it changes. Exterior rules score 1.5 times as much inside the night window.",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -193,38 +169,22 @@
           "load_sustain_minutes": "Step must last (minutes)",
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
-          "calendar": "Calendar with 'Guest:' and 'Service:' events"
+          "calendar": "Calendar with 'Guest:' and 'Service:' events",
+          "night_start": "Night starts",
+          "night_end": "Night ends"
         }
       },
       "csi_map": {
         "title": "Wi-Fi motion sensors and doors",
         "description": "For each Wi-Fi motion sensor, pick the contact on the same door. Motion there with no door opening within 60 seconds scores door_csi_motion."
       },
-      "house_deter": {
-        "title": "Trust, night and deterrence",
-        "description": "Changes made by trusted users or by automations never score. Residents and a user named Presence Simulation are pre-selected. Voice assistants through Home Assistant Cloud act as the Home Assistant Cloud user.",
-        "data": {
-          "trusted_user_ids": "Trusted users",
-          "night_start": "Night starts",
-          "night_end": "Night ends",
-          "deter_sound": "Deter sound (media URL or media-source id)",
-          "deter_tts_entity": "Deter text-to-speech entity (used instead of the sound)",
-          "deter_tts_message": "Deter message",
-          "deter_volume": "Deter volume",
-          "restore_seconds": "Restore speakers after (seconds)",
-          "house_deter": "Whole-house deter scripts or switches",
-          "house_alarm": "Whole-house alarm scripts or switches"
-        }
-      },
       "responses": {
-        "title": "Responses",
-        "description": "SIEM never sends notifications or changes your alarm panel. Every alert fires a siem_notification event, and your own automations decide what to do with it (see the sample packages). Dry run stays on until you turn it off: deterrence is only described, and every alert is marked [DRY RUN] with the actions that would have run.",
+        "title": "Digest",
+        "description": "SIEM never acts on its own: it keeps its state in entities and fires a siem_notification event for every alert, and your automations decide what happens (see the sample packages). The digest summarises each day's incidents, written by an AI task entity when you pick one.",
         "data": {
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
-          "digest_post_when_empty": "Send the digest when nothing happened",
-          "dry_run": "Dry run (describe actions instead of running them)",
-          "auto_alarm": "Auto alarm (pulse the alarm trigger sensor at the alarm tier)"
+          "digest_post_when_empty": "Send the digest when nothing happened"
         }
       },
       "strength_pick": {
@@ -292,14 +252,6 @@
       },
       "alarm_trigger": {
         "name": "Alarm trigger"
-      }
-    },
-    "switch": {
-      "dry_run": {
-        "name": "Dry run"
-      },
-      "auto_alarm": {
-        "name": "Auto alarm"
       }
     },
     "select": {

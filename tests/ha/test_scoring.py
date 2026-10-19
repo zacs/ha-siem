@@ -6,7 +6,7 @@ from homeassistant.core import Context
 from homeassistant.exceptions import ServiceValidationError
 import pytest
 
-from .conftest import TRUSTED, UNTRUSTED, notifications, scored, setup_siem, tick
+from .conftest import GUEST_USER, RESIDENT, notifications, scored, setup_siem, tick
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +27,7 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert incident_events[1]["tier"] == "verify" and incident_events[1]["room"] == "Kitchen"
     assert incident_events[1]["timeline"][0]["name"] == "Back Door"
     # The fields the README documents, no more and no fewer.
-    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "mode", "house_mode", "person", "started", "closed", "labels", "top_contributors", "timeline"}
+    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "house_mode", "person", "started", "closed", "labels", "top_contributors", "timeline"}
     assert set(incident_events[1]) == incident_fields | {"kind", "previous_tier"}
     assert set(incident_events[1]["timeline"][0]) == {"at", "rule", "points", "entity_id", "name", "room", "description", "detail"}
     assert incident_events[1]["timeline"][0]["room"] == "Kitchen"
@@ -36,13 +36,12 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert {"event_type", "incident_id", "tier", "previous_tier", "score", "room", "mode"} <= set(event_entity)
     alert = notifications(siem_events, "verify")[0]
     assert alert["title"] == "SIEM verify: Kitchen"
-    assert alert["dry_run"] is True
-    assert alert["message"].startswith("[DRY RUN] Score 40, house vacant.")
+    assert alert["message"].startswith("Score 40, house vacant.")
     assert alert["message"].endswith("12:00 Back Door: An exterior door or window opened (+40)")
     assert alert["incident"]["incident_id"] == entry.runtime_data.incident_id
     # Every field is present on every alert, and SIEM itself calls no notify service.
-    assert set(alert) == {"category", "title", "message", "dry_run", "incident", "actions", "snapshot", "again", "summary"}
-    assert alert["actions"] == [] and alert["snapshot"] is None and alert["summary"] is None
+    assert set(alert) == {"category", "title", "message", "incident", "snapshot", "again", "summary"}
+    assert alert["snapshot"] is None and alert["summary"] is None and alert["again"] is False
     assert not [call for call in service_calls if call[0] in ("notify", "alarm_control_panel")]
 
 
@@ -54,15 +53,14 @@ async def test_automations_users_and_homekit(hass, freezer, siem_events):
     hass.states.async_set("light.kitchen", "on", {"friendly_name": "Kitchen Light"}, context=run)
     # A state-triggered automation carries a parent id.
     hass.states.async_set("binary_sensor.fridge_door", "on", {"device_class": "door"}, context=Context(parent_id="trigger"))
-    # A trusted user from the UI.
-    hass.states.async_set("light.kitchen_2", "on", {"friendly_name": "Kitchen Light 2"}, context=Context(user_id=TRUSTED))
-    await hass.async_block_till_done()
+    # Any Home Assistant user: a resident, another account, or a system user such as Presence Simulation's or Home Assistant Cloud's.
+    presence = await hass.auth.async_create_system_user("Presence Simulation")
+    for user_id in (RESIDENT, GUEST_USER, presence.id):
+        hass.states.async_set("light.kitchen_2", "off", {}, context=Context(parent_id="x"))
+        await hass.async_block_till_done()
+        hass.states.async_set("light.kitchen_2", "on", {"friendly_name": "Kitchen Light 2"}, context=Context(user_id=user_id))
+        await hass.async_block_till_done()
     assert scored(entry) == []
-    # An untrusted user scores the account rule, named in the detail.
-    hass.states.async_set("light.kitchen_2", "off", {"friendly_name": "Kitchen Light 2"}, context=Context(user_id=UNTRUSTED))
-    await hass.async_block_till_done()
-    assert scored(entry) == [("untrusted_user", 70.0, "light.kitchen_2")]
-    assert entry.runtime_data.engine.current.contributions[0].detail == "set to off by Mallory"
     # A light switched from Apple Home scores the HomeKit rule.
     homekit = Context()
     hass.bus.async_fire("homekit_state_change", {"entity_id": "light.kitchen"}, context=homekit)
@@ -70,7 +68,7 @@ async def test_automations_users_and_homekit(hass, freezer, siem_events):
     await hass.async_block_till_done()
     hass.states.async_set("light.kitchen", "on", {}, context=homekit)
     await hass.async_block_till_done()
-    assert scored(entry)[-1] == ("light_homekit", 5.0, "light.kitchen")
+    assert scored(entry) == [("light_homekit", 5.0, "light.kitchen")]
 
 
 async def test_startup_and_reconnects_are_not_events(hass, freezer):
@@ -169,7 +167,7 @@ async def test_lock_events_only_for_configured_locks(hass, freezer, siem_events)
     await hass.async_block_till_done()
     assert [r for r, _, _ in scored(entry)] == ["pin_not_allowed", "manual_unlock"]
     glass = notifications(siem_events, "break_glass")
-    assert len(glass) == 1 and glass[0]["message"].startswith("[DRY RUN] Front Door Lock: a lock was unlocked by hand")
+    assert len(glass) == 1 and glass[0]["message"].startswith("Front Door Lock: a lock was unlocked by hand")
 
 
 async def test_override_survives_a_reload(hass, freezer):

@@ -18,7 +18,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from . import const as c
-from .actions import Responder
+from .alerts import Alerts
 from .core import entities as ent
 from .core.arm import recommend_arm_mode
 from .core.house_mode import HouseModeMachine
@@ -31,7 +31,6 @@ from .core.rules import MODE_VACANT, SUPPRESSOR_ALLOWED_PIN, SUPPRESSOR_FAMILY_A
 from .core.scoring import TIER_NONE, TIER_VERIFY
 from .core.weights import reset_weights
 from .digest import DigestRunner
-from .notifier import Notifier
 from .store import SiemStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,16 +107,12 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.residual = LoadResidualDetector(step, sustain) if self.house.get(c.CONF_LOAD) else None
         self.lcm_slots: dict[int, LcmSlot] = {}
         self.residents = ent.ResidentSet()
-        self.trusted: set[str] = set(self.house.get(c.CONF_TRUSTED_USERS) or [])
-        self.user_names: dict[str, str] = {}
-        self.toggles: dict[str, bool] = {key: bool(store.toggles.get(key, self.responses.get(key, key == c.CONF_DRY_RUN))) for key in c.TOGGLES}
         self.score = 0.0
         self.tier = TIER_NONE
         self.top: list[dict[str, Any]] = []
         self.house_mode = MODE_VACANT
         self.night = False
         self.recommended_arm: str | None = None
-        self.alarm_trigger_on = False
         self.last_label: str | None = None
         self._offline_since: dict[str, float] = {}
         self._offline_scored: set[str] = set()
@@ -129,8 +124,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._lock_seen: dict[tuple[str | None, str, int | None], float] = {}
         self._unsubs: list[Callable[[], None]] = []
         self._state_unsub: Callable[[], None] | None = None
-        self.notifier = Notifier(hass, self)
-        self.responder = Responder(hass, self)
+        self.alerts = Alerts(hass, self)
         self.digest = DigestRunner(hass, self)
 
     @staticmethod
@@ -164,7 +158,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return list(self.house.get(field) or []) + list(self.house.get(field + c.ADDITIONAL) or [])
 
     def create_task(self, target: Coroutine[Any, Any, Any], name: str) -> None:
-        """Run a response as an entry task: unload waits for it instead of cutting it off."""
+        """Run alert work as an entry task: unload waits for it instead of cutting it off."""
         self.entry.async_create_task(self.hass, target, name)
 
     async def async_start(self) -> None:
@@ -173,7 +167,6 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for lock in self.house.get(c.CONF_LOCKS) or []:
             if (entry := registry.async_get(lock)) and entry.device_id:
                 self._lock_devices[entry.device_id] = lock
-        self.user_names = {user.id: user.name for user in await self.hass.auth.async_get_users() if user.name}
         self._refresh_residents()
         self._refresh_lcm_slots()
         self._subscribe()
@@ -211,7 +204,6 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _refresh_residents(self) -> None:
         attrs = {p: state.attributes for p in self.house.get(c.CONF_RESIDENTS) or [] if (state := self.hass.states.get(p))}
         self.residents = ent.expand_residents(attrs)
-        self.trusted = set(self.house.get(c.CONF_TRUSTED_USERS) or []) | set(self.residents.user_ids)
 
     def _refresh_lcm_slots(self) -> None:
         attrs = {e: state.attributes for e in self.house_list(c.CONF_LCM_EVENTS) if (state := self.hass.states.get(e))}
@@ -250,7 +242,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data({"score": score, "tier": tier, "mode": self.house_mode, "night": self.night, "incident_id": self.incident_id})
 
     def _process(self, now: float) -> None:
-        """Advance the engine, publish, announce transitions and hand them to the responder."""
+        """Advance the engine, publish, and announce transitions and alerts as events."""
         previous = (self.house_mode, self.night)
         self._refresh_mode(now)
         events = self.engine.evaluate(now)
@@ -258,8 +250,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for event in events:
             if event.kind == EVENT_CLOSED:
                 self.store.add_incident(event.incident.as_dict())
-            payload = {**self.notifier.incident_payload(event.incident), "kind": event.kind, "tier": event.tier, "previous_tier": event.previous_tier}
-            self.hass.bus.async_fire(c.EVENT_INCIDENT, payload, context=self.responder.context())
+            payload = {**self.alerts.incident_payload(event.incident), "kind": event.kind, "tier": event.tier, "previous_tier": event.previous_tier}
+            self.hass.bus.async_fire(c.EVENT_INCIDENT, payload, context=self.alerts.context())
             light = {key: payload[key] for key in (c.ATTR_INCIDENT_ID, "tier", "previous_tier", "score", "room", "mode")}
             async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, light)
         changed = previous != (self.house_mode, self.night)
@@ -270,7 +262,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
         if events or renotify:
-            self.create_task(self.responder.async_handle(events, incident if renotify else None), "siem response")
+            self.create_task(self.alerts.async_handle(events, incident if renotify else None), "siem alerts")
 
     def _score(self, rule_id: str, now: float, entity_id: str | None, room: str | None, detail: str, points: float | None = None, allow_open: bool = True) -> None:
         self._refresh_mode(now)
@@ -280,7 +272,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("%s scored %.1f for %s (%s)", rule_id, contribution.points, entity_id, detail)
         if (rule_id == "manual_unlock" and self.house_mode == MODE_VACANT) or rule_id == "keypad_lockout":
             message = f"{self.entity_name(entity_id)}: {self.rules[rule_id].description.lower()} ({detail})"
-            self.create_task(self.responder.async_break_glass(message), "siem break glass")
+            self.alerts.break_glass(message)
         self._process(now)
 
     def _cooldown_ok(self, rule_id: str, key: str, now: float) -> bool:
@@ -340,13 +332,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         ctx = event.context
         origin = classify_origin(
-            parent_id=ctx.parent_id, user_id=ctx.user_id, context_id=ctx.id, trusted_user_ids=self.trusted, homekit_contexts=self.homekit_contexts, now=now, automation_contexts=self.automation_contexts
+            parent_id=ctx.parent_id, user_id=ctx.user_id, context_id=ctx.id, homekit_contexts=self.homekit_contexts, now=now, automation_contexts=self.automation_contexts
         )
-        if origin is Origin.USER_UNTRUSTED:
-            if self._cooldown_ok("untrusted_user", entity_id, now):
-                self._score("untrusted_user", now, entity_id, room, f"set to {new.state} by {self.user_names.get(ctx.user_id or '', ctx.user_id)}")
-            return
-        if origin in (Origin.AUTOMATION, Origin.USER_TRUSTED):
+        # Anything a Home Assistant user or an automation did is not evidence: the app, voice assistants through
+        # Home Assistant Cloud, Presence Simulation and other integrations acting as their own users all land here.
+        if origin in (Origin.AUTOMATION, Origin.USER):
             return
         self._refresh_mode(now)
         if role == ent.ROLE_OCCUPANCY and _turned_on(old, new):
@@ -482,7 +472,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if stale:
             self._break_glass_sent.update(stale)
             names = ", ".join(self.entity_name(e) for e in stale)
-            self.create_task(self.responder.async_break_glass(f"{names} unavailable for over an hour while the house is vacant"), "siem break glass")
+            self.alerts.break_glass(f"{names} unavailable for over an hour while the house is vacant")
 
     async def _tick(self, _now: datetime) -> None:
         try:
@@ -518,12 +508,5 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_reset_weights(self) -> None:
         """Return every rule weight to 1.0."""
         reset_weights(self.store.weights)
-        await self.store.async_save()
-        self.publish(self.now(), force=True)
-
-    async def async_set_toggle(self, key: str, value: bool) -> None:
-        """Persist a runtime toggle."""
-        self.toggles[key] = value
-        self.store.toggles = dict(self.toggles)
         await self.store.async_save()
         self.publish(self.now(), force=True)

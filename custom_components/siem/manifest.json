@@ -3,19 +3,16 @@
   "name": "SIEM for Home Assistant",
   "after_dependencies": [
     "ai_task",
-    "alarm_control_panel",
     "calendar",
     "camera",
     "homekit",
     "lock_code_manager",
-    "media_player",
-    "notify",
     "person",
-    "scene",
-    "tts",
     "zwave_js"
   ],
-  "codeowners": ["@zacs"],
+  "codeowners": [
+    "@zacs"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/zacs/ha-siem",

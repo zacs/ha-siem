@@ -8,7 +8,7 @@ from typing import Any
 
 MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY = "vacant", "guest", "service", "family"
 MODES: tuple[str, ...] = (MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY)
-TAG_EXTERIOR, TAG_INTERIOR, TAG_ACCOUNT, TAG_PERIMETER, TAG_TAMPER = "exterior", "interior", "account", "perimeter", "tamper"
+TAG_EXTERIOR, TAG_INTERIOR, TAG_PERIMETER, TAG_TAMPER = "exterior", "interior", "perimeter", "tamper"
 
 NIGHT_MULTIPLIER = 1.5
 
@@ -44,7 +44,6 @@ DEFAULT_RULES: dict[str, Rule] = {
         _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 5, 0), "A fridge, cabinet, drawer or closet opened"),
         _rule("light_physical", TAG_INTERIOR, (45, 0, 0, 0), "A light was turned on at the switch"),
         _rule("light_homekit", TAG_INTERIOR, (5, 0, 0, 0), "A light was turned on from Apple Home"),
-        _rule("untrusted_user", TAG_ACCOUNT, (70, 50, 50, 30), "Something was changed by a user you do not trust"),
         _rule("appliance_on", TAG_INTERIOR, (35, 0, 0, 0), "An appliance turned on"),
         _rule("water_flow", TAG_INTERIOR, (30, 0, 10, 0), "Water is running"),
         _rule("load_residual", TAG_INTERIOR, (10, 0, 0, 0), "The house is drawing power nothing explains"),

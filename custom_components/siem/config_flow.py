@@ -18,7 +18,6 @@ from . import const as c
 from .core import entities as ent
 from .core.digest import parse_times
 from .core.occupancy import STRENGTHS
-from .core.origin import UserInfo, default_trusted_user_ids
 from .core.rules import DEFAULT_CHAINS, DEFAULT_RULES, MODES, RuleConfigError, validate_rule_config, validate_settings
 
 STRENGTH_AUTO = "auto"
@@ -94,10 +93,6 @@ ROOM_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_POWER + c.ADDITIONAL): _entity(),
         vol.Optional(c.CONF_POWER_THRESHOLD, default=c.DEFAULT_POWER_THRESHOLD): _number(0, 5000, 1, "W"),
         vol.Optional(c.CONF_CAMERA): _entity("camera", multiple=False),
-        vol.Optional(c.CONF_DETER_LIGHTS): _entity("light"),
-        vol.Optional(c.CONF_DETER_LIGHTS + c.ADDITIONAL): _entity(),
-        vol.Optional(c.CONF_DETER_PLAYERS): _entity("media_player"),
-        vol.Optional(c.CONF_DETER_SCRIPT): _entity("script", multiple=False),
     }
 )
 HOUSE_SCHEMA = vol.Schema(
@@ -115,41 +110,17 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_LOCKS): _entity("lock"),
         vol.Optional(c.CONF_LCM_EVENTS): _entity("event"),
         vol.Optional(c.CONF_CALENDAR): _entity("calendar", multiple=False),
+        vol.Optional(c.CONF_NIGHT_START, default=c.DEFAULT_NIGHT_START): sel.TimeSelector(),
+        vol.Optional(c.CONF_NIGHT_END, default=c.DEFAULT_NIGHT_END): sel.TimeSelector(),
     }
 )
-HOUSE_DETER_FIELDS = {
-    vol.Optional(c.CONF_NIGHT_START, default=c.DEFAULT_NIGHT_START): sel.TimeSelector(),
-    vol.Optional(c.CONF_NIGHT_END, default=c.DEFAULT_NIGHT_END): sel.TimeSelector(),
-    vol.Optional(c.CONF_DETER_SOUND): _text(),
-    vol.Optional(c.CONF_DETER_TTS): _entity("tts", multiple=False),
-    vol.Optional(c.CONF_DETER_TTS_MESSAGE): _text(),
-    vol.Optional(c.CONF_DETER_VOLUME, default=c.DEFAULT_DETER_VOLUME): _number(0, 1, 0.05, mode="slider"),
-    vol.Optional(c.CONF_RESTORE_SECONDS, default=c.DEFAULT_RESTORE_SECONDS): _number(5, 900, 5, "s"),
-    vol.Optional(c.CONF_HOUSE_DETER): _entity(["script", "switch"]),
-    vol.Optional(c.CONF_HOUSE_ALARM): _entity(["script", "switch"]),
-}
-
-
-def _house_deter_schema(users: list[dict[str, str]]) -> vol.Schema:
-    return vol.Schema({vol.Optional(c.CONF_TRUSTED_USERS): _select(users, multiple=True, custom_value=True), **HOUSE_DETER_FIELDS})
-
-
 RESPONSES_SCHEMA = vol.Schema(
     {
         vol.Optional(c.CONF_AI_TASK): _entity("ai_task", multiple=False),
         vol.Optional(c.CONF_DIGEST_TIMES, default=c.DEFAULT_DIGEST_TIMES): _text(multiple=True),
         vol.Optional(c.CONF_DIGEST_EMPTY, default=True): sel.BooleanSelector(),
-        vol.Optional(c.CONF_DRY_RUN, default=True): sel.BooleanSelector(),
-        vol.Optional(c.CONF_AUTO_ALARM, default=False): sel.BooleanSelector(),
     }
 )
-
-
-async def _user_options(hass: HomeAssistant) -> tuple[list[dict[str, str]], list[UserInfo]]:
-    """Return the active users as select options, system users marked, plus their info for defaults."""
-    users = [u for u in await hass.auth.async_get_users() if u.is_active]
-    options = [{"value": u.id, "label": f"{u.name or u.id}{' (system)' if u.system_generated else ''}"} for u in users]
-    return sorted(options, key=lambda o: o["label"].casefold()), [UserInfo(u.id, u.name, u.system_generated) for u in users]
 
 
 ROOM_ROLES = ((c.CONF_OCCUPANCY, ent.ROLE_OCCUPANCY), (c.CONF_PERIMETER, ent.ROLE_PERIMETER), (c.CONF_INTERIOR_DOORS, ent.ROLE_INTERIOR_DOOR), (c.CONF_LIGHTS, ent.ROLE_LIGHT), (c.CONF_POWER, ent.ROLE_POWER))
@@ -261,7 +232,7 @@ class SiemStepsMixin:
             if house.get(c.CONF_CSI):
                 return await self.async_step_csi_map()
             house[c.CONF_CSI_MAP] = {}
-            return await self.async_step_house_deter()
+            return await self._async_after_house()
         return self.async_show_form(step_id="house", data_schema=self.add_suggested_values_to_schema(HOUSE_SCHEMA, house))
 
     async def async_step_csi_map(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -269,27 +240,12 @@ class SiemStepsMixin:
         house = self._data[c.CONF_HOUSE]
         if user_input is not None:
             house[c.CONF_CSI_MAP] = {k: v for k, v in user_input.items() if v}
-            return await self.async_step_house_deter()
+            return await self._async_after_house()
         schema = vol.Schema({vol.Optional(csi): _entity("binary_sensor", ent.OPENING_CLASSES, multiple=False) for csi in house.get(c.CONF_CSI, [])})
         return self.async_show_form(step_id="csi_map", data_schema=self.add_suggested_values_to_schema(schema, house.get(c.CONF_CSI_MAP, {})))
 
-    async def async_step_house_deter(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Trusted users, night window and whole-house deterrence."""
-        house = self._data[c.CONF_HOUSE]
-        options, users = await _user_options(self.hass)
-        schema = _house_deter_schema(options)
-        if user_input is not None:
-            _merge(house, schema, user_input)
-            house[c.CONF_TRUSTED_USERS] = [u.strip() for u in user_input.get(c.CONF_TRUSTED_USERS) or [] if u.strip()]
-            return await self._async_after_house()
-        defaults = dict(house)
-        if c.CONF_TRUSTED_USERS not in defaults:
-            persons = {p: state.attributes for p in house.get(c.CONF_RESIDENTS) or [] if (state := self.hass.states.get(p))}
-            defaults[c.CONF_TRUSTED_USERS] = default_trusted_user_ids(ent.expand_residents(persons).user_ids, users)
-        return self.async_show_form(step_id="house_deter", data_schema=self.add_suggested_values_to_schema(schema, defaults))
-
     async def async_step_responses(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """AI task, digest and the safety switches."""
+        """The AI task and the digest."""
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
@@ -307,7 +263,7 @@ class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN)
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 3
+    MINOR_VERSION = 4
 
     def __init__(self) -> None:
         """Start with empty sections."""

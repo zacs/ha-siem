@@ -3,19 +3,14 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Iterable
-from dataclasses import dataclass
 from enum import StrEnum
-
-PRESENCE_SIMULATION_USER = "Presence Simulation"
 
 
 class Origin(StrEnum):
     """Where a state change came from, in the order the classifier checks."""
 
     AUTOMATION = "automation"
-    USER_TRUSTED = "user_trusted"
-    USER_UNTRUSTED = "user_untrusted"
+    USER = "user"
     HOMEKIT = "homekit"
     PHYSICAL = "physical"
 
@@ -50,50 +45,27 @@ class ContextLRU:
 
 
 def classify_origin(
-    *,
-    parent_id: str | None,
-    user_id: str | None,
-    context_id: str | None,
-    trusted_user_ids: Iterable[str],
-    homekit_contexts: ContextLRU,
-    now: float,
-    automation_contexts: ContextLRU | None = None,
+    *, parent_id: str | None, user_id: str | None, context_id: str | None, homekit_contexts: ContextLRU, now: float, automation_contexts: ContextLRU | None = None
 ) -> Origin:
     """Classify one state change from its context.
 
     A change with a ``parent_id`` was caused by something else (an automation
-    reacting to a state change) and never scores, nor does a trusted user. An
-    untrusted user scores the account rule. Automations started by a time,
-    sun or calendar trigger have neither id, so their context ids are
-    collected from ``automation_triggered`` and ``script_started`` events and
-    matched here. What is left is HomeKit when its context was announced by
-    ``homekit_state_change``, otherwise physical: a switch, a contact, a
-    person in the room.
+    reacting to a state change). A change with a ``user_id`` came from a Home
+    Assistant user: someone in the app, a voice assistant through Home
+    Assistant Cloud, or an integration acting as its own user, such as
+    Presence Simulation. Automations started by a time, sun or calendar
+    trigger have neither id, so their context ids are collected from
+    ``automation_triggered`` and ``script_started`` events and matched here.
+    None of those ever score. What is left is HomeKit when its context was
+    announced by ``homekit_state_change``, otherwise physical: a switch, a
+    contact, a person in the room.
     """
     if parent_id:
         return Origin.AUTOMATION
     if user_id:
-        return Origin.USER_TRUSTED if user_id in set(trusted_user_ids) else Origin.USER_UNTRUSTED
+        return Origin.USER
     if automation_contexts is not None and automation_contexts.seen(context_id, now):
         return Origin.AUTOMATION
     if homekit_contexts.seen(context_id, now):
         return Origin.HOMEKIT
     return Origin.PHYSICAL
-
-
-@dataclass(frozen=True)
-class UserInfo:
-    """The subset of a Home Assistant user the engine cares about."""
-
-    id: str
-    name: str | None = None
-    system_generated: bool = False
-
-
-def default_trusted_user_ids(resident_user_ids: Iterable[str | None], users: Iterable[UserInfo]) -> list[str]:
-    """Return the residents' user ids plus any user named Presence Simulation."""
-    trusted = [uid for uid in resident_user_ids if uid]
-    for user in users:
-        if (user.name or "").strip().casefold() == PRESENCE_SIMULATION_USER.casefold() and user.id not in trusted:
-            trusted.append(user.id)
-    return trusted

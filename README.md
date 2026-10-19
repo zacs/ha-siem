@@ -19,19 +19,20 @@ minutes, is worth turning on every light and the siren.
 
 It knows who's home, whether a change came from a person, an automation or a
 wall switch, and whether it's 2 pm or 2 am. When it gets something wrong, you
-tell it so, and it gets less jumpy about the sensors that misfired. Everything
-starts in dry run, so you can watch what it would have done for a week before
-you let it touch anything.
+tell it so, and it gets less jumpy about the sensors that misfired.
 
-- **Three tiers.** Verify raises an alert. Deter also turns on the room's
-  lights, plays a sound and runs your scripts. Alarm adds your siren scripts
-  and a trigger sensor your alarm panel can watch.
+SIEM is a state machine: sensors go in, state and events come out. It never
+turns on a light, sends a notification or touches your alarm panel. What
+happens at each tier is up to your own automations, so you can watch its
+alerts for a week before you let anything act on them.
+
+- **Three tiers.** Verify, deter and alarm, each one an event your automations
+  can act on.
 - **Four house modes.** Family, guest, service and vacant, worked out from
-  presence, a calendar and PIN codes. The same open door means something
+  presence, a calendar and lock codes. The same open door means something
   different in each.
-- **Plain Home Assistant events.** SIEM never sends a notification or touches
-  your alarm panel. Its state lives in entities and every alert is an event, so
-  you decide what happens with ordinary automations.
+- **Plain Home Assistant state and events.** Sensors for the score, tier,
+  incident and house mode, and an event for every alert.
 
 ## Requirements
 
@@ -40,8 +41,8 @@ you let it touch anything.
 - Door, window or motion sensors, assigned to areas.
 - People (person entities) with device trackers, so SIEM knows when someone is
   home.
-- An automation that does something with SIEM's alerts. The sample packages
-  are a starting point.
+- Automations that do something with SIEM's alerts. The sample packages are a
+  starting point.
 
 That's it. Everything below is optional.
 
@@ -51,16 +52,11 @@ Each of these adds something. None of them is required.
 
 | Add | What you get |
 | --- | --- |
-| An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | A trigger sensor your panel can watch at the alarm tier, and a recommended alarm mode you can automate. SIEM never arms or disarms anything itself. |
-| [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM) | Guest mode when someone uses their PIN, and alerts for hand unlocks and unknown codes on any lock LCM supports. Z-Wave JS locks get the lock alerts without it. |
-| [Mattermost](https://github.com/cerebrate/ha-mattermost) | Coloured alerts with the timeline, the actions and a camera snapshot, through `packages/siem_mattermost.yaml`. |
-| The [companion app](https://companion.home-assistant.io/) | Push alerts with *False alarm*, *That's me*, *Real* and *Guest* buttons, through `packages/siem_mobile_app.yaml`. |
+| An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | Add `binary_sensor.siem_alarm_trigger` to it and SIEM's alarm tier sets off your alarm. |
+| [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM) | Guest mode when someone opens the door with a code, and alerts for hand unlocks and unknown codes on any lock LCM supports. Z-Wave JS locks get the lock alerts without it. |
 | A calendar, such as [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/) | `Guest:` and `Service:` events set the house mode. |
 | An [AI task](https://www.home-assistant.io/integrations/ai_task/) entity | A daily digest written in plain English instead of raw counts. OpenAI, Anthropic, Google and Ollama all provide one. |
 | Cameras | A snapshot from the room's camera with each alert. |
-| Lights, speakers, sirens, scripts | Deterrence: lights to full, a sound or a spoken warning, your own scripts. |
-| [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/) | Lights switched from Apple Home score far lower than lights switched at the wall. |
-| [Presence Simulation](https://github.com/slashback100/presence_simulation) | Its lights never count against you: its user is trusted from the start. |
 | Wi-Fi motion sensors | Someone at a door that never opened. These are CSI (channel state information) sensors: an ESP32 running [ESP-CSI](https://github.com/espressif/esp-csi) or [ESPectre](https://github.com/francescopace/espectre) senses motion from changes in the Wi-Fi signal. |
 
 ## Install
@@ -79,40 +75,27 @@ The setup flow walks through:
 - **Each room.** Pre-filled from your entities' and devices' areas. Check it
   and add anything it missed.
 - **Whole house.** Residents, extra trackers, water and power sensors, locks,
-  Lock Code Manager users, the calendar, and Wi-Fi motion sensors with the door
-  each one watches.
-- **Trust, night and deterrence.** Trusted users, the night window, the deter
-  sound or message, and whole-house deter and alarm scripts.
-- **Responses.** The AI task, digest times, and the dry run and auto alarm
-  switches. Dry run is on until you turn it off.
+  Lock Code Manager event entities, the calendar, the night window, and Wi-Fi
+  motion sensors with the door each one watches.
+- **Digest.** The AI task and the digest times.
 
 You can change any of it later from the integration's **Configure** menu.
 
-A few things live outside the flow:
+Two things live outside the flow:
 
 - **Guest and service events.** On the calendar you picked, an event whose
   title starts with `Guest:` puts the house in guest mode, and `Service:` in
   service mode. Guest mode ends two hours after the event, or later if the
   house hasn't been quiet for an hour by then. Service mode ends with the
   event.
-- **Lock Code Manager users.** Give each guest an LCM user; a calendar
-  condition on that user limits when the PIN works. When a PIN opens the door,
-  SIEM switches to guest mode and notes who it was. A code LCM doesn't know
-  scores `pin_not_allowed`.
-- **The alarm trigger.** For SIEM to set off your alarm, add
+- **The alarm trigger.** To have SIEM set off your alarm, add
   `binary_sensor.siem_alarm_trigger` to your panel as an always-on sensor (in
-  Alarmo, type *other*). With auto alarm on and dry run off, an alarm-tier
-  incident turns it on for 60 seconds.
-- **Trusted users.** Changes made by trusted users never count. Residents and
-  a user named Presence Simulation are picked for you. Alexa and Google
-  Assistant act through Home Assistant Cloud as the *Home Assistant Cloud*
-  user, so trust that user if you use them.
+  Alarmo, type *other*). It is on while an incident is at the alarm tier.
 
 ## Alerts and events
 
-SIEM keeps its state in entities and announces everything else as events. It
-never sends a notification or changes your alarm panel itself; what happens
-next is up to your own automations.
+SIEM keeps its state in entities and announces everything else as events.
+Everything that happens next is an automation of your own.
 
 ```yaml
 automation:
@@ -129,13 +112,19 @@ automation:
           message: "{{ trigger.event.data.message }}"
 ```
 
-Two ready-made packages live in [`packages/`](packages). Copy one into
-`<config>/packages/`, edit the channel or phone at the top, and restart:
+Three ready-made packages live in [`packages/`](packages). Copy one into
+`<config>/packages/`, edit anything marked at the top, and restart:
 
+- [`siem_deterrence.yaml`](packages/siem_deterrence.yaml) turns on every light
+  in the incident's room at the deter tier, and every light in the house at
+  the alarm tier. Add speakers, sirens or scripts to taste.
 - [`siem_mattermost.yaml`](packages/siem_mattermost.yaml) posts every alert to
   a Mattermost channel with colours, fields, the timeline and the snapshot.
 - [`siem_mobile_app.yaml`](packages/siem_mobile_app.yaml) pushes alerts to a
   phone with label buttons. SIEM listens for the button presses itself.
+
+Lights, speakers or anything else your automations change in response never
+count against you: SIEM sees they came from an automation.
 
 ### `siem_notification`
 
@@ -146,10 +135,8 @@ guards.
 | --- | --- | --- |
 | `category` | string | `verify`, `deter`, `alarm`, `break_glass` or `digest` |
 | `title` | string | A short title, such as `SIEM verify: Kitchen` |
-| `message` | string | The alert as plain text: score, house mode, the latest events and the actions |
-| `dry_run` | boolean | True while dry run is on; the message then starts with `[DRY RUN]` |
+| `message` | string | The alert as plain text: score, house mode and the latest events |
 | `incident` | object or null | The incident, described below. Set for verify, deter and alarm, and for break glass while an incident is open |
-| `actions` | list of strings | For deter and alarm, each action that ran, or would have in dry run, such as `light.turn_on light.kitchen brightness_pct=100`. Empty otherwise |
 | `snapshot` | string or null | The path of the room camera's snapshot, when the room has a camera |
 | `again` | boolean | True for a second verify alert, sent because the score doubled |
 | `summary` | object or null | Digest only: `since`, `until`, `incident_count`, `labels`, `weight_changes` (a count) and `counts` (one line of totals) |
@@ -188,9 +175,10 @@ UI. Its attributes are `event_type` (the `kind`), `incident_id`, `tier`,
 | `score` | number | The live score; 0 once closed |
 | `peak_score` | number | The highest score it reached |
 | `room` | string or null | The room it started in |
+| `area_id` | string or null | That room's Home Assistant area id, for `area_entities()` and area targets |
 | `mode` | string | The house mode when it opened |
 | `house_mode` | string | The house mode now |
-| `person` | string or null | The Lock Code Manager user, when an allowed PIN was used |
+| `person` | string or null | The Lock Code Manager slot name, when an accepted code was used |
 | `started` | string | When it opened, as local ISO 8601 time |
 | `closed` | string or null | When it closed, as local ISO 8601 time |
 | `labels` | list of strings | The labels given so far |
@@ -222,16 +210,19 @@ defaults don't suit your house: each rule's points per house mode, the tier
 thresholds, the half-life and the chain factors. Anything more means editing
 `core/rules.py` (see [Adding a rule](#adding-a-rule)).
 
-**Where a change came from.** Every state change is classified first.
-Anything an automation or script caused never counts, including ones started
-by a time, sun or calendar trigger. A trusted user never counts, and any other
-user scores `untrusted_user`. A light switched from Apple Home scores
-`light_homekit`. Everything else is physical: a hand on a switch, a door, a
-person in a room.
+**Where a change came from.** Every state change is classified first, and only
+physical ones count: a hand on a switch, a door, a person in a room. Anything
+an automation or script did never counts, including automations started by a
+time, sun or calendar trigger. Anything a Home Assistant user did never counts
+either: you in the app, Alexa or Google Assistant through Home Assistant Cloud,
+or an integration acting as its own user, such as
+[Presence Simulation](https://github.com/slashback100/presence_simulation). A
+light switched from Apple Home through HomeKit Bridge scores the small
+`light_homekit` rule instead of `light_physical`.
 
-**What never counts.** SIEM's own actions. An entity coming back after a
-restart or a reconnect, even if it comes back on; only a real off-to-on change
-counts. A sensor that is unavailable for less than two minutes.
+**What never counts.** An entity coming back after a restart or a reconnect,
+even if it comes back on; only a real off-to-on change counts. A sensor that
+is unavailable for less than two minutes.
 
 **The score.** Each event adds `points × weight`, halving every 15 minutes.
 The score is the sum, capped at 100. Verify starts at 20, deter at 50 and
@@ -253,14 +244,13 @@ Rules marked *exterior* score 1.5 times as much inside the night window.
 | `interior_door_opened` | 40, 0, 5, 0 | A fridge, freezer, pantry, cabinet, cupboard, drawer or closet contact opens |
 | `light_physical` | 45, 0, 0, 0 | A light is turned on at the switch |
 | `light_homekit` | 5, 0, 0, 0 | A light is turned on from Apple Home |
-| `untrusted_user` | 70, 50, 50, 30 | A watched entity is changed by a user you don't trust |
 | `appliance_on` | 35, 0, 0, 0 | A room's power sensor rises above its threshold (default 30 W) |
 | `water_flow` | 30, 0, 10, 0 | Water flow rises above its threshold |
 | `load_residual` | 10, 0, 0, 0 | House power, minus loads that run on their own, steps up and stays up |
 | `person_interior_camera` | 40, 5, 5, 0 | An occupancy sensor with *person* in its name turns on inside |
 | `person_exterior_camera` | 10, 5, 5, 2 | The same in an area named like a yard, driveway, porch, patio, garden, deck or balcony (exterior) |
 | `manual_unlock` | 60, 40, 40, 0 | A lock is unlocked by hand |
-| `pin_not_allowed` | 30, 30, 30, 20 | A lock is unlocked with a code Lock Code Manager doesn't know, or marks inactive |
+| `pin_not_allowed` | 30, 30, 30, 20 | A lock is unlocked with a code Lock Code Manager doesn't know, or has switched off |
 | `keypad_lockout` | 40, 40, 40, 30 | A Z-Wave lock reports a keypad lockout after bad codes; few locks send this |
 | `sensor_offline` | 20, 5, 5, 0 | A door, window, motion or Wi-Fi motion sensor, or a lock, stays unavailable for two minutes; several at once count once |
 
@@ -282,8 +272,9 @@ same incident: an entry (`exterior_door_opened` or `door_csi_motion`) then
 `interior_door_opened` 1.5 times; and anything after `manual_unlock` twice.
 
 **Suppressors.** A resident or tracker arriving home takes 60 points off the
-open incident and switches the house to family. A PIN that Lock Code Manager
-allows takes 40 off, switches the house to guest and names the person.
+open incident and switches the house to family. A code Lock Code Manager
+accepts takes 40 off, switches the house to guest and records the slot's name
+as the incident's person.
 
 **Labels.** Label an incident from `select.siem_label_last_incident`, the
 `siem.label_incident` action, or the phone buttons. *False alarm* lowers the
@@ -293,7 +284,7 @@ and leave the weights alone: the sensors were right and presence detection was
 late, and lowering the weights would only blunt the next real break-in.
 
 **House mode.** Family while any resident or tracker is home and for 30
-minutes after. Guest during a `Guest:` event or after an allowed PIN.
+minutes after. Guest during a `Guest:` event or after an accepted code.
 Service during a `Service:` event. Vacant otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
 restarts.
@@ -301,16 +292,13 @@ restarts.
 **Recommended alarm mode.** Armed away while vacant, armed night at night when
 someone is home, and disarmed by day and during service visits. SIEM only
 publishes it, as `sensor.siem_recommended_alarm_mode`; it never arms or
-disarms anything. If you want your panel to follow it, write that automation
-yourself.
+disarms anything. If you want your panel to follow it, that's an automation
+of your own.
 
-**Responses.** Verify raises an alert once, and again if the score doubles.
-Deter raises an alert and runs the room's deterrence (lights to full, speakers to the deter
-volume, the sound or spoken message, the room script, speakers restored
-afterwards) and the whole-house deter scripts. Alarm adds the whole-house alarm
-scripts and switches and, with auto alarm on, turns on the alarm trigger for
-60 seconds. Break glass raises an alert whatever the score. In dry run nothing
-runs, and every alert starts with `[DRY RUN]` and lists what would have.
+**Alerts.** Verify raises an alert once, and again if the score doubles.
+Deter and alarm raise one each as the incident climbs. Break glass raises one
+whatever the score: a hand unlock while vacant, a keypad lockout, or a sensor
+unavailable for over an hour while vacant.
 
 ## Entities and actions
 
@@ -323,8 +311,7 @@ runs, and every alert starts with `[DRY RUN]` and lists what would have.
 | `select.siem_house_mode_override` | Force a mode, or `auto` |
 | `sensor.siem_recommended_alarm_mode` | `armed_away`, `armed_night`, `armed_home` or `disarmed` |
 | `binary_sensor.siem_night` | On inside the night window |
-| `binary_sensor.siem_alarm_trigger` | On for 60 seconds at the alarm tier, with auto alarm on |
-| `switch.siem_dry_run`, `switch.siem_auto_alarm` | The safety switches; they survive restarts |
+| `binary_sensor.siem_alarm_trigger` | On while an incident is at the alarm tier |
 | `select.siem_label_last_incident` | Label the open or most recent incident |
 | `event.siem_incident` | `opened`, `tier_changed` and `closed`, for automations built in the UI |
 
@@ -335,16 +322,16 @@ Actions: `siem.label_incident`, `siem.run_digest`, `siem.reset_weights` and
 
 [`dev/siem_test_entities.yaml`](dev/siem_test_entities.yaml) is a package that
 builds a fake house of `Test ...` entities: three rooms of sensors, lights and
-power, a speaker, a lock, a Lock Code Manager style event entity, two people,
-and scripts that send Z-Wave lock notifications. It also has an automation that
-shows every alert as a persistent notification. Copy it to `<config>/packages/`,
-restart, create the three areas it names, and follow the setup answers at the
-top of the file.
+power, a lock, a Lock Code Manager style event entity, two people, and scripts
+that send Z-Wave lock notifications. It also has an automation that shows every
+alert as a persistent notification. Copy it to `<config>/packages/`, restart,
+create the three areas it names, and follow the setup answers at the top of
+the file.
 
 A simulated household then runs the house. Every two seconds each sensor rolls
 dice, with odds that follow the time of day: quiet at night, a busy kitchen in
 the morning, an empty house on weekdays with deliveries and a guest who lets
-themselves in with a PIN, and a full house in the evening. Three helpers
+themselves in with a code, and a full house in the evening. Three helpers
 control it: *Test Simulation* turns it off, *Test Sim Scene Override* forces a
 time of day, and *Test Simulation Rate* speeds it up. Every sensor also has a
 `(helper)` switch to force it on, and two scripts play a break-in and a

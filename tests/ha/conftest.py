@@ -13,8 +13,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 from custom_components.siem.config_flow import build_entity_meta
 from custom_components.siem.const import DOMAIN
 
-TRUSTED = "trusted-user"
-UNTRUSTED = "untrusted-user"
+RESIDENT = "resident-user"
+GUEST_USER = "guest-user"
 
 # Entity id -> (state, attributes) before SIEM loads.
 HOUSE_STATES: dict[str, tuple[str, dict[str, Any]]] = {
@@ -33,7 +33,7 @@ HOUSE_STATES: dict[str, tuple[str, dict[str, Any]]] = {
     "lock.front_door": ("locked", {"friendly_name": "Front Door Lock"}),
     "event.lcm_pat": ("unknown", {"code_slot": 3, "name": "Pat", "active": True, "friendly_name": "Pat credential used"}),
     "device_tracker.alice_phone": ("not_home", {"friendly_name": "Alice Phone"}),
-    "person.alice": ("not_home", {"device_trackers": ["device_tracker.alice_phone"], "user_id": TRUSTED, "friendly_name": "Alice"}),
+    "person.alice": ("not_home", {"device_trackers": ["device_tracker.alice_phone"], "user_id": RESIDENT, "friendly_name": "Alice"}),
     "calendar.house": ("off", {"friendly_name": "House"}),
     "alarm_control_panel.house": ("disarmed", {"friendly_name": "House Alarm"}),
 }
@@ -47,7 +47,6 @@ ROOMS = {
         "lights": ["light.kitchen", "light.kitchen_2"],
         "power": ["sensor.coffee_power"],
         "power_threshold": 30,
-        "deter_lights": ["light.kitchen"],
     },
     "hall": {"name": "Hall", "perimeter": ["binary_sensor.front_door"], "power_threshold": 30},
     "yard": {"name": "Yard", "perimeter": ["binary_sensor.yard_gate"], "power_threshold": 30},
@@ -61,15 +60,10 @@ HOUSE = {
     "locks": ["lock.front_door"],
     "lcm_events": ["event.lcm_pat"],
     "calendar": "calendar.house",
-    "trusted_user_ids": [TRUSTED],
     "night_start": "22:00:00",
     "night_end": "06:00:00",
-    "deter_volume": 0.7,
-    "restore_seconds": 30,
-    "house_deter": ["script.house_deter"],
-    "house_alarm": ["switch.siren"],
 }
-RESPONSES = {"digest_times": ["08:00"], "dry_run": True, "auto_alarm": False}
+RESPONSES = {"digest_times": ["08:00"]}
 
 
 @pytest.fixture(autouse=True)
@@ -81,7 +75,7 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 @pytest.fixture(autouse=True)
 async def users(hass):
     """Register the two users the contexts refer to."""
-    for user_id, name in ((TRUSTED, "Alice"), (UNTRUSTED, "Mallory")):
+    for user_id, name in ((RESIDENT, "Alice"), (GUEST_USER, "Guest account")):
         hass.auth._store._users[user_id] = models.User(name=name, is_owner=False, is_active=True, groups=[], id=user_id, perm_lookup=hass.auth._store._perm_lookup)
 
 

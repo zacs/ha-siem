@@ -8,7 +8,7 @@ DOMAIN = "siem"
 NAME = "SIEM"
 MANUFACTURER = "@zacs"
 VERSION = "0.2.0"
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR]
 
 # Config entry data sections.
 CONF_ROOMS = "rooms"
@@ -25,11 +25,7 @@ CONF_LIGHTS = "lights"
 CONF_POWER = "power"
 CONF_POWER_THRESHOLD = "power_threshold"
 CONF_CAMERA = "camera"
-CONF_DETER_LIGHTS = "deter_lights"
-CONF_DETER_PLAYERS = "deter_players"
-CONF_DETER_SCRIPT = "deter_script"
 ADDITIONAL = "_additional"
-ROOM_LIST_FIELDS = (CONF_OCCUPANCY, CONF_PERIMETER, CONF_INTERIOR_DOORS, CONF_LIGHTS, CONF_POWER, CONF_DETER_LIGHTS)
 
 # Whole-house fields.
 CONF_RESIDENTS = "residents"
@@ -45,26 +41,23 @@ CONF_LOAD_SUSTAIN = "load_sustain_minutes"
 CONF_LOCKS = "locks"
 CONF_LCM_EVENTS = "lcm_events"
 CONF_CALENDAR = "calendar"
-CONF_TRUSTED_USERS = "trusted_user_ids"
 CONF_NIGHT_START = "night_start"
 CONF_NIGHT_END = "night_end"
-CONF_DETER_SOUND = "deter_sound"
-CONF_DETER_TTS = "deter_tts_entity"
-CONF_DETER_TTS_MESSAGE = "deter_tts_message"
-CONF_DETER_VOLUME = "deter_volume"
-CONF_RESTORE_SECONDS = "restore_seconds"
-CONF_HOUSE_DETER = "house_deter"
-CONF_HOUSE_ALARM = "house_alarm"
 
 # Responses fields.
 CONF_AI_TASK = "ai_task_entity"
 CONF_DIGEST_TIMES = "digest_times"
 CONF_DIGEST_EMPTY = "digest_post_when_empty"
-CONF_DRY_RUN = "dry_run"
-CONF_AUTO_ALARM = "auto_alarm"
-TOGGLES = (CONF_DRY_RUN, CONF_AUTO_ALARM)
-# Settings removed in 0.2: SIEM no longer sends notifications or touches the alarm panel.
-REMOVED_RESPONSES = ("notify_service", "notify_service_2", "target", "mobile_notify_service", "notify_services", "alarm_panel", "auto_arm")
+
+# Settings removed in 0.2, when SIEM became state and events only: no notifications, no alarm panel, no deterrence
+# actions, no trusted-user list (every Home Assistant user is trusted) and no dry run or auto alarm switches.
+REMOVED_SETTINGS = {
+    "rooms": ("deter_lights", "deter_lights_additional", "deter_players", "deter_script"),
+    "house": ("trusted_user_ids", "deter_sound", "deter_tts_entity", "deter_tts_message", "deter_volume", "restore_seconds", "house_deter", "house_deter_additional", "house_alarm", "house_alarm_additional"),
+    "responses": ("notify_service", "notify_service_2", "target", "mobile_notify_service", "notify_services", "alarm_panel", "auto_arm", "dry_run", "auto_alarm"),
+}
+REMOVED_RULES = ("untrusted_user",)
+REMOVED_SWITCHES = ("dry_run", "auto_arm", "auto_alarm")
 
 # Options sections.
 OPT_RULES = "rules"
@@ -79,8 +72,6 @@ DEFAULT_LOAD_STEP = 100
 DEFAULT_LOAD_SUSTAIN = 5
 DEFAULT_NIGHT_START = "22:00:00"
 DEFAULT_NIGHT_END = "06:00:00"
-DEFAULT_DETER_VOLUME = 0.7
-DEFAULT_RESTORE_SECONDS = 60
 DEFAULT_DIGEST_TIMES = ["08:00"]
 
 # Events SIEM fires for automations to build on.
@@ -118,8 +109,6 @@ OFFLINE_GRACE_S = 120
 OFFLINE_BREAK_GLASS_S = 3600
 # The same entity (a light: the same room) scores the same rule at most once per cooldown.
 COOLDOWN_S = 60
-ALARM_TRIGGER_SECONDS = 60
 CSI_CONTACT_WINDOW_S = 60
 AI_TASK_TIMEOUT_S = 20
 SNAPSHOT_TIMEOUT_S = 10
-ACTION_TIMEOUT_S = 15

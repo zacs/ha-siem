@@ -17,9 +17,10 @@ from custom_components.siem.core.rules import (
 
 def test_default_points_follow_the_design_table():
     assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "guest": 5, "service": 5, "family": 0}
-    assert DEFAULT_RULES["untrusted_user"].points == {"vacant": 70, "guest": 50, "service": 50, "family": 30}
+    assert DEFAULT_RULES["pin_not_allowed"].points == {"vacant": 30, "guest": 30, "service": 30, "family": 20}
+    assert "untrusted_user" not in DEFAULT_RULES
     assert DEFAULT_RULES["person_exterior_camera"].points["family"] == 2
-    assert len(DEFAULT_RULES) == 17
+    assert len(DEFAULT_RULES) == 16
 
 
 @pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 5), ("service", 5), ("family", 0)])
