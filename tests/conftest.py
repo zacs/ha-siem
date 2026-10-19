@@ -1,8 +1,10 @@
-"""Import the core package without executing the Home Assistant adapter.
+"""Shared test setup.
 
-``custom_components/siem/__init__.py`` imports Home Assistant. The core is
-tested without it, so the package objects above ``core`` are registered as
-bare namespace modules pointing at the right directories.
+The core tests need nothing but pytest. When Home Assistant's test plugin is
+installed, the tests under ``ha/`` run too, against a real Home Assistant
+core. Without it, ``custom_components/siem/__init__.py`` cannot be imported, so
+the package objects above ``core`` are registered as bare namespace modules and
+``ha/`` is skipped.
 """
 
 from __future__ import annotations
@@ -13,12 +15,16 @@ import types
 
 ROOT = Path(__file__).resolve().parents[1]
 
+try:
+    import pytest_homeassistant_custom_component  # noqa: F401
+except ImportError:
+    HAS_HA = False
+    for name, path in (("custom_components", ROOT / "custom_components"), ("custom_components.siem", ROOT / "custom_components" / "siem")):
+        module = types.ModuleType(name)
+        module.__path__ = [str(path)]  # type: ignore[attr-defined]
+        sys.modules.setdefault(name, module)
+else:
+    HAS_HA = True
 
-def _namespace(name: str, path: Path) -> None:
-    module = types.ModuleType(name)
-    module.__path__ = [str(path)]  # type: ignore[attr-defined]
-    sys.modules.setdefault(name, module)
-
-
-_namespace("custom_components", ROOT / "custom_components")
-_namespace("custom_components.siem", ROOT / "custom_components" / "siem")
+pytest_plugins = ["pytest_homeassistant_custom_component"] if HAS_HA else []
+collect_ignore = [] if HAS_HA else ["ha"]

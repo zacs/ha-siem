@@ -2,12 +2,12 @@
 
 from custom_components.siem.core.dryrun import (
     Action,
-    dry_run_message,
     render_plan,
     restore_actions,
     room_deter_actions,
     whole_house_actions,
 )
+from custom_components.siem.core.messages import alert_message, alert_title, timeline_line
 
 ROOM = {
     "deter_lights": ["light.kitchen"],
@@ -37,10 +37,17 @@ def test_tts_replaces_media_url():
     assert not any("play_media" in line for line in lines)
 
 
-def test_whole_house_plan_and_message():
+def test_whole_house_plan():
     actions = whole_house_actions(["script.flood_lights", "switch.siren"])
     assert render_plan(actions) == ["script.turn_on script.flood_lights", "switch.turn_on switch.siren"]
-    message = dry_run_message("deter in kitchen", actions)
-    assert message.startswith("[DRY RUN] deter in kitchen\nWould have run:\n- script.turn_on script.flood_lights")
-    assert dry_run_message("nothing", []) == "[DRY RUN] nothing"
     assert Action("light", "turn_on").render() == "light.turn_on"
+
+
+def test_alert_message_keeps_the_latest_lines_and_marks_dry_run():
+    assert alert_title("verify", None) == "SIEM verify: the house"
+    assert timeline_line("14:02", "Back Door", "An exterior door or window opened", 40) == "14:02 Back Door: An exterior door or window opened (+40)"
+    lines = [f"line {i}" for i in range(8)]
+    text = alert_message(41.6, "vacant", lines, actions=["light.turn_on light.kitchen"], dry_run=True)
+    assert text.splitlines() == ["[DRY RUN] Score 42, house vacant.", "line 3", "line 4", "line 5", "line 6", "line 7", "Would have run:", "- light.turn_on light.kitchen"]
+    assert alert_message(20, "guest", [], again=True) == "Score 20, house guest, score doubled since the last alert."
+    assert alert_message(90, "vacant", ["x"], actions=["switch.turn_on switch.siren"]).endswith("Running:\n- switch.turn_on switch.siren")

@@ -1,4 +1,4 @@
-"""Digest: summarise the window through ai_task and post it."""
+"""Digest: summarise the window through ai_task and send it as a notification."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import AI_TASK_TIMEOUT_S, CONF_AI_TASK, CONF_DIGEST_EMPTY, CONF_DIGEST_TIMES, DEFAULT_DIGEST_TIMES, TIER_COLORS
+from .const import AI_TASK_TIMEOUT_S, CATEGORY_DIGEST, CONF_AI_TASK, CONF_DIGEST_EMPTY, CONF_DIGEST_TIMES, DEFAULT_DIGEST_TIMES
 from .core.digest import fallback_text, is_due, summarize_window
 
 if TYPE_CHECKING:
@@ -68,18 +68,12 @@ class DigestRunner:
         summary = summarize_window(incidents, c.store.weight_changes, since, now)
         c.store.last_digest = now.isoformat()
         c.store.async_schedule_save()
-        attachment: dict[str, Any] = {"color": TIER_COLORS["digest"], "title": "SIEM digest", "fields": [], "text": ""}
-        if summary["incident_count"] == 0 and not summary["weight_changes"]:
-            if not c.responses.get(CONF_DIGEST_EMPTY, True) and not manual:
-                return
-            await c.notifier.async_send(f"quiet since {since.strftime('%Y-%m-%d %H:%M') if since else 'the beginning'}", attachment=attachment)
+        quiet = summary["incident_count"] == 0 and not summary["weight_changes"]
+        if quiet and not manual and not c.responses.get(CONF_DIGEST_EMPTY, True):
             return
-        attachment["text"] = await self._async_generate(summary)
-        attachment["fields"] = [
-            {"short": True, "title": "Incidents", "value": str(summary["incident_count"])},
-            {"short": True, "title": "Weight changes", "value": str(len(summary["weight_changes"]))},
-        ]
-        await c.notifier.async_send(f"SIEM digest: {fallback_text(summary)}", attachment=attachment)
+        text = f"Quiet since {since.strftime('%Y-%m-%d %H:%M') if since else 'setup'}." if quiet else await self._async_generate(summary)
+        counts = {key: summary[key] for key in ("since", "until", "incident_count", "labels")}
+        await c.notifier.async_notify(CATEGORY_DIGEST, "SIEM digest", text, summary={**counts, "weight_changes": len(summary["weight_changes"]), "counts": fallback_text(summary)})
 
     async def _async_generate(self, summary: dict[str, Any]) -> str:
         entity = self.coordinator.responses.get(CONF_AI_TASK)

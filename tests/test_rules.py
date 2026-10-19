@@ -16,13 +16,13 @@ from custom_components.siem.core.rules import (
 
 
 def test_default_points_follow_the_design_table():
-    assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "sitter": 5, "service": 5, "family": 0}
-    assert DEFAULT_RULES["untrusted_user"].points == {"vacant": 70, "sitter": 50, "service": 50, "family": 30}
+    assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "guest": 5, "service": 5, "family": 0}
+    assert DEFAULT_RULES["untrusted_user"].points == {"vacant": 70, "guest": 50, "service": 50, "family": 30}
     assert DEFAULT_RULES["person_exterior_camera"].points["family"] == 2
     assert len(DEFAULT_RULES) == 17
 
 
-@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("sitter", 5), ("service", 5), ("family", 0)])
+@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 5), ("service", 5), ("family", 0)])
 def test_per_mode_point_selection(mode, expected):
     assert DEFAULT_RULES["exterior_door_opened"].points_for(mode) == expected
 
@@ -39,7 +39,7 @@ def test_night_multiplies_exterior_only():
 
 
 def test_validation_merges_overrides():
-    rules = validate_rule_config({"gate_opened": {"points": {"vacant": 10, "sitter": 1, "service": 1, "family": 0}}})
+    rules = validate_rule_config({"gate_opened": {"points": {"vacant": 10, "guest": 1, "service": 1, "family": 0}}})
     assert rules["gate_opened"].points_for("vacant") == 10
     assert rules["gate_opened"].tag == DEFAULT_RULES["gate_opened"].tag
     assert rules["exterior_door_opened"] is DEFAULT_RULES["exterior_door_opened"]

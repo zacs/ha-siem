@@ -17,9 +17,16 @@ def test_floor_and_cap():
 
 def test_each_label_moves_every_rule_once():
     weights = {}
-    changes = apply_label(weights, ["a", "b", "a"], "thats_me")
+    changes = apply_label(weights, ["a", "b", "a"], "false_alarm")
     assert changes == {"a": (1.0, 0.9), "b": (1.0, 0.9)}
-    assert apply_label(weights, ["a"], "sitter") == {"a": (0.9, 0.81)}
+    assert apply_label(weights, ["a"], "false_alarm") == {"a": (0.9, 0.81)}
+
+
+def test_people_labels_never_lower_weights():
+    weights = {"a": 0.9}
+    assert apply_label(weights, ["a", "b"], "thats_me") == {}
+    assert apply_label(weights, ["a", "b"], "guest") == {}
+    assert weights == {"a": 0.9}
     assert weight_for(weights, "zzz") == 1.0
     reset_weights(weights)
     assert weights == {}

@@ -2,7 +2,7 @@
 
 import pytest
 
-from custom_components.siem.core.house_mode import FAMILY_LINGER_S, SITTER_AFTER_END_S, SITTER_QUIET_S, HouseModeMachine
+from custom_components.siem.core.house_mode import FAMILY_LINGER_S, GUEST_AFTER_END_S, GUEST_QUIET_S, HouseModeMachine
 
 
 def test_family_lingers_thirty_minutes():
@@ -15,23 +15,23 @@ def test_family_lingers_thirty_minutes():
     assert machine.mode(100 + FAMILY_LINGER_S) == "vacant"
 
 
-def test_sitter_from_calendar_leaves_after_end_plus_two_hours_and_quiet():
+def test_guest_from_calendar_leaves_after_end_plus_two_hours_and_quiet():
     machine = HouseModeMachine(0)
-    assert machine.set_calendar_event("Sitter: Sam", 100, 1000) == "sitter"
-    assert machine.mode(500) == "sitter"
+    assert machine.set_calendar_event("Guest: Pat", 100, 1000) == "guest"
+    assert machine.mode(500) == "guest"
     machine.clear_calendar_event()
     machine.note_activity(1000)
-    assert machine.mode(1000 + SITTER_AFTER_END_S - 1) == "sitter"
-    machine.note_activity(1000 + SITTER_AFTER_END_S)
-    assert machine.mode(1000 + SITTER_AFTER_END_S + SITTER_QUIET_S - 1) == "sitter"
-    assert machine.mode(1000 + SITTER_AFTER_END_S + SITTER_QUIET_S) == "vacant"
+    assert machine.mode(1000 + GUEST_AFTER_END_S - 1) == "guest"
+    machine.note_activity(1000 + GUEST_AFTER_END_S)
+    assert machine.mode(1000 + GUEST_AFTER_END_S + GUEST_QUIET_S - 1) == "guest"
+    assert machine.mode(1000 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
 
 
-def test_allowed_pin_flips_to_sitter():
+def test_allowed_pin_flips_to_guest():
     machine = HouseModeMachine(0)
     machine.allowed_pin(50)
-    assert machine.mode(51) == "sitter"
-    assert machine.mode(50 + SITTER_AFTER_END_S + SITTER_QUIET_S) == "vacant"
+    assert machine.mode(51) == "guest"
+    assert machine.mode(50 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
 
 
 def test_service_only_during_event_and_precedence():
@@ -46,8 +46,8 @@ def test_service_only_during_event_and_precedence():
 
 def test_override():
     machine = HouseModeMachine(0)
-    machine.set_override("sitter")
-    assert machine.mode(0) == "sitter"
+    machine.set_override("guest")
+    assert machine.mode(0) == "guest"
     machine.set_override("auto")
     assert machine.mode(0) == "vacant"
     with pytest.raises(ValueError):

@@ -68,12 +68,3 @@ def whole_house_actions(entity_ids: Iterable[str]) -> list[Action]:
 def render_plan(actions: Iterable[Action]) -> list[str]:
     """Render every action, one line each."""
     return [a.render() for a in actions]
-
-
-def dry_run_message(message: str, actions: Iterable[Action]) -> str:
-    """Prefix ``message`` and append the concrete list of skipped actions."""
-    lines = render_plan(actions)
-    text = f"{DRY_RUN_PREFIX} {message}"
-    if lines:
-        text += "\nWould have run:\n" + "\n".join(f"- {line}" for line in lines)
-    return text

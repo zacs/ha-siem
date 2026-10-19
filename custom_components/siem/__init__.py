@@ -2,24 +2,16 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 
-from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
-from .const import (
-    ATTR_INCIDENT_ID,
-    ATTR_LABEL,
-    ATTR_MODE,
-    DOMAIN,
-    PLATFORMS,
-    SERVICE_LABEL_INCIDENT,
-    SERVICE_RESET_WEIGHTS,
-    SERVICE_RUN_DIGEST,
-    SERVICE_SET_HOUSE_MODE,
-)
+from . import const as c
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core.house_mode import MODE_AUTO
 from .core.rules import MODES, RuleConfigError
@@ -27,10 +19,43 @@ from .core.weights import LABELS
 from .store import SiemStore
 
 _LOGGER = logging.getLogger(__name__)
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(c.DOMAIN)
 
-LABEL_SCHEMA = vol.Schema({vol.Required(ATTR_LABEL): vol.In(LABELS), vol.Optional(ATTR_INCIDENT_ID): cv.string})
-MODE_SCHEMA = vol.Schema({vol.Required(ATTR_MODE): vol.In([MODE_AUTO, *MODES])})
+LABEL_SCHEMA = vol.Schema({vol.Required(c.ATTR_LABEL): vol.In(LABELS), vol.Optional(c.ATTR_INCIDENT_ID): cv.string})
+MODE_SCHEMA = vol.Schema({vol.Required(c.ATTR_MODE): vol.In([MODE_AUTO, *MODES])})
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the services once; they act on the loaded entry."""
+
+    def coordinator() -> SiemCoordinator:
+        for entry in hass.config_entries.async_loaded_entries(c.DOMAIN):
+            return entry.runtime_data
+        raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="not_loaded")
+
+    async def label_incident(call: ServiceCall) -> None:
+        try:
+            coordinator().label(call.data[c.ATTR_LABEL], call.data.get(c.ATTR_INCIDENT_ID))
+        except LookupError as err:
+            raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="no_incident") from err
+
+    async def run_digest(call: ServiceCall) -> None:
+        await coordinator().digest.async_run(manual=True)
+
+    async def reset_weights(call: ServiceCall) -> None:
+        await coordinator().async_reset_weights()
+
+    async def set_house_mode(call: ServiceCall) -> None:
+        coordinator().set_house_mode(call.data[c.ATTR_MODE])
+
+    for name, handler, schema in (
+        (c.SERVICE_LABEL_INCIDENT, label_incident, LABEL_SCHEMA),
+        (c.SERVICE_RUN_DIGEST, run_digest, None),
+        (c.SERVICE_RESET_WEIGHTS, reset_weights, None),
+        (c.SERVICE_SET_HOUSE_MODE, set_house_mode, MODE_SCHEMA),
+    ):
+        hass.services.async_register(c.DOMAIN, name, handler, schema=schema)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
@@ -43,15 +68,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool
         raise HomeAssistantError(f"Invalid SIEM options: {err}") from err
     entry.runtime_data = coordinator
     await coordinator.async_start()
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, c.PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-    _register_services(hass)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, c.PLATFORMS)
     if unload_ok:
         await entry.runtime_data.async_stop()
     return unload_ok
@@ -66,32 +90,25 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _coordinator(hass: HomeAssistant) -> SiemCoordinator:
-    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-        return entry.runtime_data
-    raise HomeAssistantError("SIEM is not loaded")
-
-
-@callback
-def _register_services(hass: HomeAssistant) -> None:
-    if hass.services.has_service(DOMAIN, SERVICE_LABEL_INCIDENT):
-        return
-
-    async def label_incident(call: ServiceCall) -> None:
-        try:
-            _coordinator(hass).label(call.data[ATTR_LABEL], call.data.get(ATTR_INCIDENT_ID))
-        except (ValueError, LookupError) as err:
-            raise HomeAssistantError(str(err)) from err
-
-    async def run_digest(call: ServiceCall) -> None:
-        await _coordinator(hass).digest.async_run(manual=True)
-
-    async def reset_weights(call: ServiceCall) -> None:
-        await _coordinator(hass).async_reset_weights()
-
-    async def set_house_mode(call: ServiceCall) -> None:
-        _coordinator(hass).set_house_mode(call.data[ATTR_MODE])
-
-    services = ((SERVICE_LABEL_INCIDENT, label_incident, LABEL_SCHEMA), (SERVICE_RUN_DIGEST, run_digest, None), (SERVICE_RESET_WEIGHTS, reset_weights, None))
-    for name, handler, schema in (*services, (SERVICE_SET_HOUSE_MODE, set_house_mode, MODE_SCHEMA)):
-        hass.services.async_register(DOMAIN, name, handler, schema=schema)
+async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
+    """Migrate 1.1 entries: guest instead of sitter, appliance_on instead of tv_power, plain notify services."""
+    if entry.version > 1:
+        return False
+    if entry.minor_version < 2:
+        data, options = copy.deepcopy(dict(entry.data)), copy.deepcopy(dict(entry.options))
+        responses = data.setdefault(c.CONF_RESPONSES, {})
+        # The Mattermost-specific fields are gone; keep alerting through the same services as plain messages.
+        services = [responses.pop(key, None) for key in ("notify_service", "notify_service_2")]
+        for key in ("target", "mobile_notify_service"):
+            responses.pop(key, None)
+        responses[c.CONF_NOTIFY] = list(dict.fromkeys([*responses.get(c.CONF_NOTIFY, []), *filter(None, services)]))
+        rules = {c.RENAMED_RULES.get(rule_id, rule_id): value for rule_id, value in (options.get(c.OPT_RULES) or {}).items()}
+        for value in rules.values():
+            points = value.get("points") if isinstance(value, dict) else None
+            if isinstance(points, dict):
+                value["points"] = {c.RENAMED_MODES.get(mode, mode): pts for mode, pts in points.items()}
+        if rules:
+            options[c.OPT_RULES] = rules
+        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=2)
+        _LOGGER.info("Migrated SIEM config entry to 1.2")
+    return True

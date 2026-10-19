@@ -30,13 +30,13 @@ def test_classification():
 def test_lcm_slots_and_allowance():
     slots = lcm_slots_from_attributes(
         {
-            "event.sam": {"code_slot": 3, "name": "Sam", "active": True},
+            "event.pat": {"code_slot": 3, "name": "Pat", "active": True},
             "event.old": {"code_slot": 4, "name": "Old", "active": False},
             "event.nameless": {"code_slot": 5},
             "event.broken": {"code_slot": "7"},
         }
     )
-    assert slots[3].name == "Sam" and pin_allowed(3, slots)
+    assert slots[3].name == "Pat" and pin_allowed(3, slots)
     assert not pin_allowed(4, slots)
     assert slots[5].name == "slot 5" and pin_allowed(5, slots)
     assert not pin_allowed(7, slots) and not pin_allowed(None, slots)

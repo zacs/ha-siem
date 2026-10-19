@@ -1,4 +1,4 @@
-"""HA Store persistence: weights, incidents, digest timestamp, toggles."""
+"""HA Store persistence: weights, incidents, digest timestamp, toggles, house mode override."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN
+from .const import DOMAIN, RENAMED_MODES, RENAMED_RULES
 
 STORAGE_KEY = f"{DOMAIN}.storage"
 STORAGE_VERSION = 1
 SAVE_DELAY = 5
 MAX_INCIDENTS = 200
 MAX_WEIGHT_CHANGES = 200
-KEYS = ("weights", "incidents", "weight_changes", "last_digest", "toggles")
+KEYS = ("weights", "incidents", "weight_changes", "last_digest", "toggles", "override")
 
 
 class SiemStore:
@@ -29,15 +29,17 @@ class SiemStore:
         self.weight_changes: list[dict[str, Any]] = []
         self.last_digest: str | None = None
         self.toggles: dict[str, bool] = {}
+        self.override: str | None = None
 
     async def async_load(self) -> None:
         """Load the file, tolerating a missing or partial one."""
         data = await self._store.async_load() or {}
-        self.weights = {k: float(v) for k, v in (data.get("weights") or {}).items()}
+        self.weights = {RENAMED_RULES.get(k, k): float(v) for k, v in (data.get("weights") or {}).items()}
         self.incidents = list(data.get("incidents") or [])[-MAX_INCIDENTS:]
         self.weight_changes = list(data.get("weight_changes") or [])[-MAX_WEIGHT_CHANGES:]
         self.last_digest = data.get("last_digest")
         self.toggles = dict(data.get("toggles") or {})
+        self.override = RENAMED_MODES.get(data.get("override"), data.get("override"))
 
     def _data(self) -> dict[str, Any]:
         return {key: getattr(self, key) for key in KEYS}

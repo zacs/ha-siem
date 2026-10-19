@@ -1,2 +1,4 @@
-pytest>=8.3
+# The core tests need only pytest. The plugin below pins Home Assistant itself
+# and runs the tests under tests/ha against a real core.
+pytest-homeassistant-custom-component==0.13.373
 ruff>=0.9

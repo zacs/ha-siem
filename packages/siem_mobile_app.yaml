@@ -1,0 +1,60 @@
+# =============================================================================
+# SIEM for Home Assistant: alerts to the companion app (sample package)
+# =============================================================================
+#
+# Pushes SIEM alerts and break-glass messages to a phone running the Home
+# Assistant companion app (https://companion.home-assistant.io/), with buttons
+# that label the incident: False alarm, That's me, Real and Guest. SIEM listens
+# for the button presses itself; nothing else is needed for the labels to land.
+# Android shows the first three buttons only.
+#
+# Alarm and break-glass alerts are time sensitive, so they break through Focus
+# on iOS, and high priority on Android.
+#
+# INSTALL
+#   1. Copy this file to <config>/packages/siem_mobile_app.yaml and enable
+#      packages in configuration.yaml if you have not already:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   2. Replace notify.mobile_app_your_phone with your phone's notify service.
+#   3. Restart Home Assistant, or reload automations.
+#   4. Leave the phone out of SIEM's plain-text notify list, or every alert
+#      arrives twice.
+# =============================================================================
+
+automation:
+  - id: siem_mobile_app
+    alias: SIEM to the companion app
+    description: Pushes SIEM alerts and break-glass messages with label buttons.
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: event
+        event_type: siem_notification
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.category in ['verify', 'deter', 'alarm', 'break_glass'] }}"
+    variables:
+      n: "{{ trigger.event.data }}"
+      incident_id: "{{ (n.get('incident') or {}).get('incident_id', '') }}"
+      urgent: "{{ n.category in ['alarm', 'break_glass'] }}"
+      buttons: >-
+        {%- if incident_id %}{{ [
+          {'action': 'SIEM_LABEL_FALSE_ALARM|' ~ incident_id, 'title': 'False alarm'},
+          {'action': 'SIEM_LABEL_THATS_ME|' ~ incident_id, 'title': "That's me"},
+          {'action': 'SIEM_LABEL_REAL|' ~ incident_id, 'title': 'Real'},
+          {'action': 'SIEM_LABEL_GUEST|' ~ incident_id, 'title': 'Guest'}
+        ] }}{% else %}[]{% endif %}
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "{{ n.title }}"
+          message: "{{ n.message }}"
+          data:
+            tag: "siem-{{ incident_id or n.category }}"
+            group: siem
+            actions: "{{ buttons }}"
+            ttl: 0
+            priority: high
+            push:
+              interruption-level: "{{ 'time-sensitive' if urgent else 'active' }}"

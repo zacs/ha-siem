@@ -20,6 +20,14 @@ def test_trusted_and_untrusted_users():
     assert classify(user_id="user-mallory") is Origin.USER_UNTRUSTED
 
 
+def test_automation_contexts_are_automation_but_users_still_count():
+    runs = ContextLRU()
+    runs.add("ctx", now=100.0)
+    assert classify(automation_contexts=runs) is Origin.AUTOMATION
+    assert classify(automation_contexts=runs, user_id="user-mallory") is Origin.USER_UNTRUSTED
+    assert classify(automation_contexts=runs, context_id="other") is Origin.PHYSICAL
+
+
 def test_homekit_lru_match_and_physical_fallback():
     lru = ContextLRU()
     lru.add("ctx", now=100.0)

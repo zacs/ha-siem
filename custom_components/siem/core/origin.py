@@ -21,7 +21,7 @@ class Origin(StrEnum):
 
 
 class ContextLRU:
-    """Bounded, time-limited set of context ids seen on HomeKit change events."""
+    """Bounded, time-limited set of context ids announced by an event (HomeKit changes, automation runs)."""
 
     def __init__(self, size: int = 200, ttl_s: float = 60.0) -> None:
         """Keep at most ``size`` ids, each for ``ttl_s`` seconds."""
@@ -57,18 +57,25 @@ def classify_origin(
     trusted_user_ids: Iterable[str],
     homekit_contexts: ContextLRU,
     now: float,
+    automation_contexts: ContextLRU | None = None,
 ) -> Origin:
     """Classify one state change from its context.
 
-    An automation (``parent_id``) never scores, nor does a trusted user. An
-    untrusted user scores the account rule. Without either id the change is
-    HomeKit when its context was announced by ``homekit_state_change``,
-    otherwise it is physical: a switch, a contact, a person in the room.
+    A change with a ``parent_id`` was caused by something else (an automation
+    reacting to a state change) and never scores, nor does a trusted user. An
+    untrusted user scores the account rule. Automations started by a time,
+    sun or calendar trigger have neither id, so their context ids are
+    collected from ``automation_triggered`` and ``script_started`` events and
+    matched here. What is left is HomeKit when its context was announced by
+    ``homekit_state_change``, otherwise physical: a switch, a contact, a
+    person in the room.
     """
     if parent_id:
         return Origin.AUTOMATION
     if user_id:
         return Origin.USER_TRUSTED if user_id in set(trusted_user_ids) else Origin.USER_UNTRUSTED
+    if automation_contexts is not None and automation_contexts.seen(context_id, now):
+        return Origin.AUTOMATION
     if homekit_contexts.seen(context_id, now):
         return Origin.HOMEKIT
     return Origin.PHYSICAL

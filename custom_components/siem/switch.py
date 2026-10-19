@@ -7,16 +7,16 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import TOGGLES
 from .coordinator import SiemConfigEntry
 from .entity import SiemEntity
 
-ICONS = {"dry_run": "mdi:test-tube", "auto_arm": "mdi:shield-lock", "auto_alarm": "mdi:alarm-light"}
+PARALLEL_UPDATES = 0
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     """Set up the switches."""
     async_add_entities(SiemSwitch(entry.runtime_data, key) for key in TOGGLES)
 
@@ -25,11 +25,6 @@ class SiemSwitch(SiemEntity, SwitchEntity):
     """A toggle persisted in the SIEM store so a restart keeps it."""
 
     _attr_entity_category = EntityCategory.CONFIG
-
-    @property
-    def icon(self) -> str:
-        """Return the icon for this toggle."""
-        return ICONS[self.key]
 
     @property
     def is_on(self) -> bool:

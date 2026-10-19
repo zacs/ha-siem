@@ -1,0 +1,39 @@
+{
+  "entity": {
+    "sensor": {
+      "risk_score": { "default": "mdi:shield-search" },
+      "tier": {
+        "default": "mdi:shield-check",
+        "state": { "verify": "mdi:shield-search", "deter": "mdi:shield-alert", "alarm": "mdi:alarm-light" }
+      },
+      "incident": { "default": "mdi:file-alert" },
+      "house_mode": {
+        "default": "mdi:home-account",
+        "state": { "vacant": "mdi:home-outline", "guest": "mdi:account-key", "service": "mdi:tools", "family": "mdi:home-heart" }
+      },
+      "recommended_alarm_mode": { "default": "mdi:shield-home" }
+    },
+    "binary_sensor": {
+      "night": { "default": "mdi:weather-night" },
+      "alarm_trigger": { "default": "mdi:bell-ring" }
+    },
+    "switch": {
+      "dry_run": { "default": "mdi:test-tube" },
+      "auto_arm": { "default": "mdi:shield-lock" },
+      "auto_alarm": { "default": "mdi:alarm-light" }
+    },
+    "select": {
+      "house_mode_override": { "default": "mdi:home-switch" },
+      "label_last_incident": { "default": "mdi:tag" }
+    },
+    "event": {
+      "incident": { "default": "mdi:shield-sync" }
+    }
+  },
+  "services": {
+    "label_incident": { "service": "mdi:tag" },
+    "run_digest": { "service": "mdi:text-box-outline" },
+    "reset_weights": { "service": "mdi:restore" },
+    "set_house_mode": { "service": "mdi:home-switch" }
+  }
+}

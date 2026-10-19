@@ -8,9 +8,11 @@ DEFAULT_WEIGHT = 1.0
 WEIGHT_FLOOR = 0.3
 WEIGHT_CAP = 1.5
 
-LABEL_FALSE_ALARM, LABEL_THATS_ME, LABEL_SITTER, LABEL_REAL = "false_alarm", "thats_me", "sitter", "real"
-LABELS: tuple[str, ...] = (LABEL_FALSE_ALARM, LABEL_THATS_ME, LABEL_SITTER, LABEL_REAL)
-LABEL_FACTORS = {LABEL_FALSE_ALARM: 0.9, LABEL_THATS_ME: 0.9, LABEL_SITTER: 0.9, LABEL_REAL: 1.1}
+LABEL_FALSE_ALARM, LABEL_THATS_ME, LABEL_GUEST, LABEL_REAL = "false_alarm", "thats_me", "guest", "real"
+LABELS: tuple[str, ...] = (LABEL_FALSE_ALARM, LABEL_THATS_ME, LABEL_GUEST, LABEL_REAL)
+# Only labels about the sensors move weights. "That's me" and "guest" say the sensors were right and
+# presence detection missed someone; lowering the weights for that would blunt the next real intrusion.
+LABEL_FACTORS = {LABEL_FALSE_ALARM: 0.9, LABEL_REAL: 1.1}
 
 
 def weight_for(weights: MutableMapping[str, float] | None, rule_id: str) -> float:
@@ -24,11 +26,11 @@ def apply_label(
     """Multiply every rule in ``rule_ids`` by the label's factor, clamped.
 
     Returns ``{rule_id: (old, new)}`` for the rules that actually moved so the
-    digest can report weight changes.
+    digest can report weight changes. Labels without a factor move nothing.
     """
-    if label not in LABEL_FACTORS:
+    if label not in LABELS:
         raise ValueError(f"unknown label {label!r}")
-    factor = LABEL_FACTORS[label]
+    factor = LABEL_FACTORS.get(label, 1.0)
     changes: dict[str, tuple[float, float]] = {}
     for rule_id in dict.fromkeys(rule_ids):
         old = weight_for(weights, rule_id)

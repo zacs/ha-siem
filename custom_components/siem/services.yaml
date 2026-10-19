@@ -9,7 +9,7 @@ label_incident:
           options:
             - false_alarm
             - thats_me
-            - sitter
+            - guest
             - real
     incident_id:
       required: false
@@ -29,6 +29,6 @@ set_house_mode:
           options:
             - auto
             - vacant
-            - sitter
+            - guest
             - service
             - family

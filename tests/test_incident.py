@@ -74,7 +74,7 @@ def test_chain_multipliers(engine):
     light = engine.add("light_physical", mode="vacant", now=40)
     assert light.points == 45 * 1.5
     engine.add("manual_unlock", mode="vacant", now=50)
-    tv = engine.add("tv_power", mode="vacant", now=60)
+    tv = engine.add("appliance_on", mode="vacant", now=60)
     assert tv.points == 70
 
 
@@ -87,9 +87,9 @@ def test_chain_only_inside_window(engine):
 def test_suppressors_and_person(engine):
     assert engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=0) is None
     engine.add("exterior_door_opened", mode="vacant", now=0)
-    engine.suppress("allowed_pin", SUPPRESSOR_ALLOWED_PIN, now=1, detail="PIN by Sam", person="Sam")
+    engine.suppress("allowed_pin", SUPPRESSOR_ALLOWED_PIN, now=1, detail="PIN by Pat", person="Pat")
     assert engine.score(1) == 0
-    assert engine.current.person == "Sam"
+    assert engine.current.person == "Pat"
     assert engine.current.timeline[-1]["points"] == -40
     assert engine.current.last_event == 0
 

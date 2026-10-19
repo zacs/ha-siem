@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 DOMAIN = "siem"
 NAME = "SIEM"
 MANUFACTURER = "@zacs"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR, Platform.SWITCH]
 
 # Config entry data sections.
@@ -57,8 +57,7 @@ CONF_HOUSE_DETER = "house_deter"
 CONF_HOUSE_ALARM = "house_alarm"
 
 # Responses fields.
-CONF_NOTIFY = "notify_service"
-CONF_TARGET = "target"
+CONF_NOTIFY = "notify_services"
 CONF_ALARM_PANEL = "alarm_panel"
 CONF_AI_TASK = "ai_task_entity"
 CONF_DIGEST_TIMES = "digest_times"
@@ -66,13 +65,14 @@ CONF_DIGEST_EMPTY = "digest_post_when_empty"
 CONF_DRY_RUN = "dry_run"
 CONF_AUTO_ARM = "auto_arm"
 CONF_AUTO_ALARM = "auto_alarm"
-CONF_NOTIFY_2 = "notify_service_2"
-CONF_MOBILE_NOTIFY = "mobile_notify_service"
 TOGGLES = (CONF_DRY_RUN, CONF_AUTO_ARM, CONF_AUTO_ALARM)
 
 # Options sections.
 OPT_RULES = "rules"
 OPT_ENGINE = "engine"
+# Renamed in 0.2; stored options and weights are migrated to the new names.
+RENAMED_RULES = {"tv_power": "appliance_on"}
+RENAMED_MODES = {"sitter": "guest"}
 
 DEFAULT_POWER_THRESHOLD = 30
 DEFAULT_WATER_THRESHOLD = 1.0
@@ -82,16 +82,22 @@ DEFAULT_NIGHT_START = "22:00:00"
 DEFAULT_NIGHT_END = "06:00:00"
 DEFAULT_DETER_VOLUME = 0.7
 DEFAULT_RESTORE_SECONDS = 60
-DEFAULT_NOTIFY = "notify.mattermost"
-DEFAULT_TARGET = "home_security"
 DEFAULT_DIGEST_TIMES = ["08:00"]
 
+# Events SIEM fires for automations to build on.
+EVENT_INCIDENT = "siem_incident"
+EVENT_NOTIFICATION = "siem_notification"
+CATEGORY_BREAK_GLASS, CATEGORY_DIGEST, CATEGORY_ARM = "break_glass", "digest", "arm"
+
+# Events SIEM listens to.
 EVENT_ZWAVE_NOTIFICATION = "zwave_js_notification"
 # Lock Code Manager normalises every provider's lock activity into this event.
 EVENT_LCM_LOCK = "lock_code_manager_lock_state_changed"
 LOCK_EVENT_DEDUPE_S = 5
 # Core fires ``homekit_state_change``; the documented name is also watched.
 EVENTS_HOMEKIT = ("homekit_state_change", "homekit_state_changed")
+# Fired with the context an automation or script runs under, so its state changes are not mistaken for physical ones.
+EVENTS_AUTOMATION = ("automation_triggered", "script_started")
 EVENT_MOBILE_ACTION = "mobile_app_notification_action"
 MOBILE_ACTION_PREFIX = "SIEM_LABEL_"
 
@@ -105,10 +111,17 @@ ATTR_MODE = "mode"
 
 SIGNAL_INCIDENT_EVENT = f"{DOMAIN}_incident_event"
 
-TIER_COLORS = {"verify": "#F5B700", "deter": "#F57C00", "alarm": "#D32F2F", "digest": "#1976D2"}
-SNAPSHOT_SUBDIR = ("www", "siem")
+SNAPSHOT_DIR = "siem"
+SNAPSHOT_KEEP = 200
 TICK_SECONDS = 30
+# A sensor must stay unavailable this long before it scores, so an integration reload or restart does not.
+OFFLINE_GRACE_S = 120
 OFFLINE_BREAK_GLASS_S = 3600
+# The same entity (a light: the same room) scores the same rule at most once per cooldown.
+COOLDOWN_S = 60
 ALARM_TRIGGER_SECONDS = 60
 CSI_CONTACT_WINDOW_S = 60
 AI_TASK_TIMEOUT_S = 20
+NOTIFY_TIMEOUT_S = 30
+SNAPSHOT_TIMEOUT_S = 10
+ACTION_TIMEOUT_S = 15

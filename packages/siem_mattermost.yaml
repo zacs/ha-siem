@@ -1,0 +1,69 @@
+# =============================================================================
+# SIEM for Home Assistant: alerts to Mattermost (sample package)
+# =============================================================================
+#
+# Posts every SIEM alert, break-glass message, alarm-mode message and digest
+# to a Mattermost channel as a coloured attachment with the score, the room,
+# the house mode, the top contributors, the timeline and the actions, plus the
+# camera snapshot when the room has a camera.
+#
+# Needs the Mattermost notification component
+# (https://github.com/cerebrate/ha-mattermost), which provides
+# notify.mattermost and passes data.attachments and data.file.path through.
+#
+# INSTALL
+#   1. Copy this file to <config>/packages/siem_mattermost.yaml and enable
+#      packages in configuration.yaml if you have not already:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   2. Change "channel" below to your channel, and notify.mattermost if your
+#      service has another name.
+#   3. Restart Home Assistant, or reload automations.
+#   4. If notify.mattermost is also in SIEM's plain-text notify list, remove it
+#      there, or every alert arrives twice.
+# =============================================================================
+
+automation:
+  - id: siem_mattermost
+    alias: SIEM to Mattermost
+    description: Posts SIEM alerts, break-glass messages, alarm-mode messages and the digest to Mattermost.
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: event
+        event_type: siem_notification
+    variables:
+      channel: home_security
+      n: "{{ trigger.event.data }}"
+      incident: "{{ n.get('incident') or {} }}"
+      color: >-
+        {{ {'verify': '#F5B700', 'deter': '#F57C00', 'alarm': '#D32F2F', 'break_glass': '#D32F2F', 'digest': '#1976D2'}.get(n.category, '#607D8B') }}
+      timeline: |-
+        {%- for e in incident.get('timeline', []) %}
+        - {{ (e.at | as_datetime | as_local).strftime('%H:%M:%S') }}: **{{ e.rule }}** {{ '%+g' | format(e.points) }} {{ e.name or '' }} {{ e.detail or '' }}
+        {%- endfor %}
+      actions_text: |-
+        {%- if n.get('actions') %}{{ 'Would have run:' if n.dry_run else 'Running:' }}
+        {%- for a in n.actions %}
+        - `{{ a }}`
+        {%- endfor %}{% endif %}
+      fields: >-
+        {%- if incident %}{{ [
+          {'short': true, 'title': 'Room', 'value': incident.room or '-'},
+          {'short': true, 'title': 'House mode', 'value': incident.house_mode},
+          {'short': true, 'title': 'Score', 'value': incident.score | round(0) | int | string},
+          {'short': true, 'title': 'Top contributors', 'value': (incident.top_contributors | map(attribute='rule') | join(', ')) or '-'}
+        ] }}{% else %}[]{% endif %}
+      attachment: >-
+        {{ {'color': color, 'fields': fields, 'text': ((timeline ~ '\n\n' ~ actions_text) if incident else n.message) | trim} }}
+      payload: >-
+        {%- set d = {'attachments': [attachment]} %}
+        {%- if n.get('snapshot') %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
+        {{ d }}
+    actions:
+      - action: notify.mattermost
+        data:
+          target: "{{ [channel] }}"
+          message: >-
+            **{{ n.title }}**{{ (' ' ~ n.message.splitlines()[0]) if incident else '' }}
+          data: "{{ payload }}"

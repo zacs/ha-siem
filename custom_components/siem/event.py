@@ -7,15 +7,17 @@ from typing import Any
 from homeassistant.components.event import EventEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import SIGNAL_INCIDENT_EVENT
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core.incident import INCIDENT_EVENT_TYPES
 from .entity import SiemEntity
 
+PARALLEL_UPDATES = 0
 
-async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+
+async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     """Set up the incident event entity."""
     async_add_entities([SiemIncidentEvent(entry.runtime_data)])
 
@@ -24,7 +26,6 @@ class SiemIncidentEvent(SiemEntity, EventEntity):
     """Fires ``opened``, ``tier_changed`` and ``closed`` with the incident summary."""
 
     _attr_event_types = list(INCIDENT_EVENT_TYPES)
-    _attr_icon = "mdi:shield-sync"
 
     def __init__(self, coordinator: SiemCoordinator) -> None:
         """Create the event entity."""

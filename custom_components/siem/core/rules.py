@@ -6,8 +6,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-MODE_VACANT, MODE_SITTER, MODE_SERVICE, MODE_FAMILY = "vacant", "sitter", "service", "family"
-MODES: tuple[str, ...] = (MODE_VACANT, MODE_SITTER, MODE_SERVICE, MODE_FAMILY)
+MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY = "vacant", "guest", "service", "family"
+MODES: tuple[str, ...] = (MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY)
 TAG_EXTERIOR, TAG_INTERIOR, TAG_ACCOUNT, TAG_PERIMETER, TAG_TAMPER = "exterior", "interior", "account", "perimeter", "tamper"
 
 NIGHT_MULTIPLIER = 1.5
@@ -37,28 +37,35 @@ def _rule(rule_id: str, tag: str, pts: tuple[float, ...], description: str) -> R
 DEFAULT_RULES: dict[str, Rule] = {
     r.id: r
     for r in (
-        _rule("exterior_door_opened", TAG_EXTERIOR, (40, 5, 5, 0), "Perimeter contact opened"),
-        _rule("gate_opened", TAG_EXTERIOR, (30, 5, 5, 0), "Gate contact opened"),
-        _rule("door_csi_motion", TAG_EXTERIOR, (15, 2, 2, 0), "CSI motion at a door with no contact opening within 60 s"),
-        _rule("interior_occupied", TAG_INTERIOR, (50, 5, 5, 0), "Room occupancy, strongest source in a 5 min window"),
-        _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 5, 0), "Fridge, cabinet or closet contact opened"),
-        _rule("light_physical", TAG_INTERIOR, (45, 0, 0, 0), "Light turned on at the switch"),
-        _rule("light_homekit", TAG_INTERIOR, (5, 0, 0, 0), "Light turned on through HomeKit"),
-        _rule("untrusted_user", TAG_ACCOUNT, (70, 50, 50, 30), "A watched entity changed by a user outside the trusted list"),
-        _rule("tv_power", TAG_INTERIOR, (35, 0, 0, 0), "Power sensor rose above its threshold"),
-        _rule("water_flow", TAG_INTERIOR, (30, 0, 10, 0), "Water flow above threshold"),
-        _rule("load_residual", TAG_INTERIOR, (10, 0, 0, 0), "Sustained step in the unexplained house load"),
-        _rule("person_interior_camera", TAG_INTERIOR, (40, 5, 5, 0), "Camera person detection inside"),
-        _rule("person_exterior_camera", TAG_EXTERIOR, (10, 5, 5, 2), "Camera person detection outside"),
-        _rule("manual_unlock", TAG_PERIMETER, (60, 40, 40, 0), "Lock reported a manual unlock"),
-        _rule("pin_not_allowed", TAG_PERIMETER, (30, 30, 30, 20), "Keypad unlock with a slot that is unknown or not allowed"),
-        _rule("keypad_lockout", TAG_PERIMETER, (40, 40, 40, 30), "Lock reported repeated bad codes or a disabled keypad"),
-        _rule("sensor_offline", TAG_TAMPER, (20, 5, 5, 0), "A watched entity became unavailable"),
+        _rule("exterior_door_opened", TAG_EXTERIOR, (40, 5, 5, 0), "An exterior door or window opened"),
+        _rule("gate_opened", TAG_EXTERIOR, (30, 5, 5, 0), "A gate opened"),
+        _rule("door_csi_motion", TAG_EXTERIOR, (15, 2, 2, 0), "Wi-Fi motion at a door that did not open"),
+        _rule("interior_occupied", TAG_INTERIOR, (50, 5, 5, 0), "Someone is in a room"),
+        _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 5, 0), "A fridge, cabinet, drawer or closet opened"),
+        _rule("light_physical", TAG_INTERIOR, (45, 0, 0, 0), "A light was turned on at the switch"),
+        _rule("light_homekit", TAG_INTERIOR, (5, 0, 0, 0), "A light was turned on from Apple Home"),
+        _rule("untrusted_user", TAG_ACCOUNT, (70, 50, 50, 30), "Something was changed by a user you do not trust"),
+        _rule("appliance_on", TAG_INTERIOR, (35, 0, 0, 0), "An appliance turned on"),
+        _rule("water_flow", TAG_INTERIOR, (30, 0, 10, 0), "Water is running"),
+        _rule("load_residual", TAG_INTERIOR, (10, 0, 0, 0), "The house is drawing power nothing explains"),
+        _rule("person_interior_camera", TAG_INTERIOR, (40, 5, 5, 0), "A camera saw a person inside"),
+        _rule("person_exterior_camera", TAG_EXTERIOR, (10, 5, 5, 2), "A camera saw a person outside"),
+        _rule("manual_unlock", TAG_PERIMETER, (60, 40, 40, 0), "A lock was unlocked by hand"),
+        _rule("pin_not_allowed", TAG_PERIMETER, (30, 30, 30, 20), "A lock was unlocked with a code that is not allowed"),
+        _rule("keypad_lockout", TAG_PERIMETER, (40, 40, 40, 30), "A keypad locked out after bad codes"),
+        _rule("sensor_offline", TAG_TAMPER, (20, 5, 5, 0), "A sensor went offline"),
     )
 }
 
 SUPPRESSOR_FAMILY_ARRIVAL = -60.0
 SUPPRESSOR_ALLOWED_PIN = -40.0
+SUPPRESSOR_DESCRIPTIONS = {"family_arrival": "A resident arrived home", "allowed_pin": "An allowed PIN was used"}
+
+
+def describe(rules: Mapping[str, Rule], rule_id: str) -> str:
+    """Return the plain description of a rule or suppressor."""
+    rule = rules.get(rule_id)
+    return rule.description if rule else SUPPRESSOR_DESCRIPTIONS.get(rule_id, rule_id)
 
 
 @dataclass(frozen=True)
@@ -80,7 +87,7 @@ class Chain:
 DEFAULT_CHAINS: tuple[Chain, ...] = (
     Chain("entry_then_occupied", frozenset({"exterior_door_opened", "door_csi_motion"}), frozenset({"interior_occupied"}), 1.5),
     Chain("gate_then_entry", frozenset({"gate_opened"}), frozenset({"exterior_door_opened", "door_csi_motion"}), 1.5),
-    Chain("occupied_then_activity", frozenset({"interior_occupied"}), frozenset({"light_physical", "tv_power", "interior_door_opened"}), 1.5),
+    Chain("occupied_then_activity", frozenset({"interior_occupied"}), frozenset({"light_physical", "appliance_on", "interior_door_opened"}), 1.5),
     Chain("manual_unlock_then_any", frozenset({"manual_unlock"}), None, 2.0),
 )
 
@@ -93,7 +100,7 @@ def chain_factor(chains: Iterable[Chain], previous: Iterable[str], rule_id: str)
 
 @dataclass
 class EngineSettings:
-    """Tunables of the scoring engine, all editable from the options flow."""
+    """Tunables of the scoring engine. Half-life, thresholds and chain factors can be changed in the options flow."""
 
     half_life_min: float = 15.0
     thresholds: dict[str, float] = field(default_factory=lambda: {"verify": 20.0, "deter": 50.0, "alarm": 80.0})

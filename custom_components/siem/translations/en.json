@@ -11,86 +11,83 @@
       },
       "room": {
         "title": "Room: {room}",
-        "description": "Pre-filled from the entity registry by area. Occupancy strength is derived from device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors always strong) and can be overridden in the options. Sources named with 'person' are treated as camera person detection. {remaining} room(s) to go.",
+        "description": "Pre-filled from the areas of your entities and devices; check it. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name counts as camera person detection. {remaining} room(s) to go.",
         "data": {
           "occupancy": "Occupancy sources (occupancy, presence, motion, sound)",
-          "occupancy_additional": "Additional occupancy sources (unfiltered)",
-          "perimeter": "Perimeter openings (doors, windows, garage)",
-          "perimeter_additional": "Additional perimeter openings (unfiltered)",
-          "interior_doors": "Interior doors (fridge, cabinet, closet)",
-          "interior_doors_additional": "Additional interior doors (unfiltered)",
+          "occupancy_additional": "More occupancy sources (any entity)",
+          "perimeter": "Exterior doors, windows and gates",
+          "perimeter_additional": "More exterior openings (any entity)",
+          "interior_doors": "Fridge, cabinet, drawer and closet contacts",
+          "interior_doors_additional": "More interior contacts (any entity)",
           "lights": "Lights",
-          "lights_additional": "Additional lights (unfiltered)",
-          "power": "Power sensors",
-          "power_additional": "Additional power sensors (unfiltered)",
-          "power_threshold": "Power threshold",
+          "lights_additional": "More lights (any entity)",
+          "power": "Appliance power sensors",
+          "power_additional": "More power sensors (any entity)",
+          "power_threshold": "Appliance on above",
           "camera": "Camera for snapshots",
           "deter_lights": "Deter lights",
-          "deter_lights_additional": "Additional deter lights or switches (unfiltered)",
-          "deter_players": "Deter media players",
+          "deter_lights_additional": "More deter lights or switches (any entity)",
+          "deter_players": "Deter speakers",
           "deter_script": "Deter script"
         }
       },
       "house": {
         "title": "Whole house",
-        "description": "Residents' device trackers and user ids are read from the person entities at runtime and re-read when they change.",
+        "description": "Each resident's device trackers and user are read from their person entity, and re-read when it changes.",
         "data": {
-          "residents": "Residents (person entities)",
-          "extra_trackers": "Additional device trackers",
-          "csi_sensors": "CSI motion sensors at doors",
+          "residents": "Residents (people)",
+          "extra_trackers": "More device trackers that mean someone is home",
+          "csi_sensors": "Wi-Fi (CSI) motion sensors at doors",
           "water_flow": "Water flow sensors",
-          "water_flow_additional": "Additional water flow sensors (unfiltered)",
-          "water_threshold": "Water flow threshold",
-          "load_sensor": "Whole-house load sensor (optional)",
-          "automated_loads": "Automated load sensors to subtract",
-          "load_step_watts": "Load step (W)",
-          "load_sustain_minutes": "Load step sustain (minutes)",
+          "water_flow_additional": "More water flow sensors (any entity)",
+          "water_threshold": "Water running above",
+          "load_sensor": "Whole-house power sensor (optional)",
+          "automated_loads": "Power sensors of loads that run on their own (EV charger, heat pump)",
+          "load_step_watts": "Unexplained power step (W)",
+          "load_sustain_minutes": "Step must last (minutes)",
           "locks": "Locks",
-          "lcm_events": "Lock Code Manager event entities",
-          "calendar": "Calendar for Sitter: and Service: events"
+          "lcm_events": "Lock Code Manager 'credential used' event entities",
+          "calendar": "Calendar with 'Guest:' and 'Service:' events"
         }
       },
       "csi_map": {
-        "title": "CSI sensor to door mapping",
-        "description": "For each CSI sensor pick the perimeter contact on the same door. CSI motion with no contact opening within 60 seconds scores the door_csi_motion rule."
+        "title": "Wi-Fi motion sensors and doors",
+        "description": "For each Wi-Fi motion sensor, pick the contact on the same door. Motion there with no door opening within 60 seconds scores door_csi_motion."
       },
       "house_deter": {
         "title": "Trust, night and deterrence",
-        "description": "Trusted user ids are pre-filled from the residents' user ids plus any user named Presence Simulation. Changes by trusted users and by automations never score.",
+        "description": "Changes made by trusted users or by automations never score. Residents and a user named Presence Simulation are pre-selected. Voice assistants through Home Assistant Cloud act as the Home Assistant Cloud user.",
         "data": {
-          "trusted_user_ids": "Trusted user ids",
-          "night_start": "Night window start",
-          "night_end": "Night window end",
+          "trusted_user_ids": "Trusted users",
+          "night_start": "Night starts",
+          "night_end": "Night ends",
           "deter_sound": "Deter sound (media URL or media-source id)",
-          "deter_tts_entity": "Deter TTS entity (used instead of the sound)",
-          "deter_tts_message": "Deter TTS message",
+          "deter_tts_entity": "Deter text-to-speech entity (used instead of the sound)",
+          "deter_tts_message": "Deter message",
           "deter_volume": "Deter volume",
-          "restore_seconds": "Restore players after (seconds)",
+          "restore_seconds": "Restore speakers after (seconds)",
           "house_deter": "Whole-house deter scripts or switches",
           "house_alarm": "Whole-house alarm scripts or switches"
         }
       },
       "responses": {
         "title": "Responses",
-        "description": "Dry run stays on until you turn it off; every message is prefixed with [DRY RUN] and lists the actions that would have run.",
+        "description": "Every alert fires a siem_notification event for your own automations (see the sample packages). Notify services listed here also get the same alert as plain text. Dry run stays on until you turn it off: alerts are marked [DRY RUN] and list the actions that would have run.",
         "data": {
-          "notify_service": "Notify service",
-          "target": "Notify target (channel)",
+          "notify_services": "Notify services for plain-text alerts (optional)",
           "alarm_panel": "Alarm control panel",
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
-          "digest_post_when_empty": "Post the digest when nothing happened",
+          "digest_post_when_empty": "Send the digest when nothing happened",
           "dry_run": "Dry run (describe actions instead of running them)",
-          "auto_arm": "Auto arm the alarm panel",
-          "auto_alarm": "Auto alarm (pulse the alarm trigger sensor)",
-          "notify_service_2": "Second notify service for break-glass fan-out",
-          "mobile_notify_service": "Mobile notify service for actionable labels"
+          "auto_arm": "Auto arm (arm and disarm the panel with the house mode)",
+          "auto_alarm": "Auto alarm (pulse the alarm trigger sensor at the alarm tier)"
         }
       }
     },
     "error": {
       "no_rooms": "Pick at least one area.",
-      "invalid_notify": "Notify services look like notify.mattermost.",
+      "invalid_notify": "Notify services look like notify.mobile_app_phone.",
       "invalid_time": "Digest times must be HH:MM."
     },
     "abort": {
@@ -102,14 +99,14 @@
       "init": {
         "title": "SIEM options",
         "menu_options": {
-          "rules": "Rule points per mode",
+          "rules": "Rule points per house mode",
           "engine": "Half-life, thresholds and chain factors",
           "weights": "View or reset learned weights",
           "rooms": "Add or remove rooms (re-runs every room step)",
           "room_pick": "Re-run one room step",
           "house": "Re-run the whole-house steps",
           "responses": "Re-run the responses step",
-          "strength_pick": "Override an occupancy source strength"
+          "strength_pick": "Change an occupancy source's strength"
         }
       },
       "rules": {
@@ -123,23 +120,23 @@
         "description": "{description}. Points per house mode.",
         "data": {
           "vacant": "Vacant",
-          "sitter": "Sitter",
+          "guest": "Guest",
           "service": "Service",
           "family": "Family"
         }
       },
       "engine": {
         "title": "Engine",
-        "description": "Score = min(100, sum(points × weight × 0.5^(age/half-life))).",
+        "description": "Score = min(100, sum(points × weight × 0.5^(age / half-life))).",
         "data": {
           "half_life_min": "Half-life (minutes)",
           "verify": "Verify threshold",
           "deter": "Deter threshold",
           "alarm": "Alarm threshold",
-          "entry_then_occupied": "Chain: entry then interior occupied",
-          "gate_then_entry": "Chain: gate then entry",
-          "occupied_then_activity": "Chain: occupied then light, TV or interior door",
-          "manual_unlock_then_any": "Chain: manual unlock then anything"
+          "entry_then_occupied": "Chain: entry, then someone in a room",
+          "gate_then_entry": "Chain: gate, then entry",
+          "occupied_then_activity": "Chain: someone in a room, then a light, appliance or interior door",
+          "manual_unlock_then_any": "Chain: hand unlock, then anything"
         }
       },
       "weights": {
@@ -158,23 +155,23 @@
       },
       "room": {
         "title": "Room: {room}",
-        "description": "Pre-filled from the entity registry by area. Occupancy strength is derived from device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors always strong) and can be overridden in the options. Sources named with 'person' are treated as camera person detection. {remaining} room(s) to go.",
+        "description": "Pre-filled from the areas of your entities and devices; check it. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name counts as camera person detection. {remaining} room(s) to go.",
         "data": {
           "occupancy": "Occupancy sources (occupancy, presence, motion, sound)",
-          "occupancy_additional": "Additional occupancy sources (unfiltered)",
-          "perimeter": "Perimeter openings (doors, windows, garage)",
-          "perimeter_additional": "Additional perimeter openings (unfiltered)",
-          "interior_doors": "Interior doors (fridge, cabinet, closet)",
-          "interior_doors_additional": "Additional interior doors (unfiltered)",
+          "occupancy_additional": "More occupancy sources (any entity)",
+          "perimeter": "Exterior doors, windows and gates",
+          "perimeter_additional": "More exterior openings (any entity)",
+          "interior_doors": "Fridge, cabinet, drawer and closet contacts",
+          "interior_doors_additional": "More interior contacts (any entity)",
           "lights": "Lights",
-          "lights_additional": "Additional lights (unfiltered)",
-          "power": "Power sensors",
-          "power_additional": "Additional power sensors (unfiltered)",
-          "power_threshold": "Power threshold",
+          "lights_additional": "More lights (any entity)",
+          "power": "Appliance power sensors",
+          "power_additional": "More power sensors (any entity)",
+          "power_threshold": "Appliance on above",
           "camera": "Camera for snapshots",
           "deter_lights": "Deter lights",
-          "deter_lights_additional": "Additional deter lights or switches (unfiltered)",
-          "deter_players": "Deter media players",
+          "deter_lights_additional": "More deter lights or switches (any entity)",
+          "deter_players": "Deter speakers",
           "deter_script": "Deter script"
         }
       },
@@ -186,58 +183,55 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Residents' device trackers and user ids are read from the person entities at runtime and re-read when they change.",
+        "description": "Each resident's device trackers and user are read from their person entity, and re-read when it changes.",
         "data": {
-          "residents": "Residents (person entities)",
-          "extra_trackers": "Additional device trackers",
-          "csi_sensors": "CSI motion sensors at doors",
+          "residents": "Residents (people)",
+          "extra_trackers": "More device trackers that mean someone is home",
+          "csi_sensors": "Wi-Fi (CSI) motion sensors at doors",
           "water_flow": "Water flow sensors",
-          "water_flow_additional": "Additional water flow sensors (unfiltered)",
-          "water_threshold": "Water flow threshold",
-          "load_sensor": "Whole-house load sensor (optional)",
-          "automated_loads": "Automated load sensors to subtract",
-          "load_step_watts": "Load step (W)",
-          "load_sustain_minutes": "Load step sustain (minutes)",
+          "water_flow_additional": "More water flow sensors (any entity)",
+          "water_threshold": "Water running above",
+          "load_sensor": "Whole-house power sensor (optional)",
+          "automated_loads": "Power sensors of loads that run on their own (EV charger, heat pump)",
+          "load_step_watts": "Unexplained power step (W)",
+          "load_sustain_minutes": "Step must last (minutes)",
           "locks": "Locks",
-          "lcm_events": "Lock Code Manager event entities",
-          "calendar": "Calendar for Sitter: and Service: events"
+          "lcm_events": "Lock Code Manager 'credential used' event entities",
+          "calendar": "Calendar with 'Guest:' and 'Service:' events"
         }
       },
       "csi_map": {
-        "title": "CSI sensor to door mapping",
-        "description": "For each CSI sensor pick the perimeter contact on the same door. CSI motion with no contact opening within 60 seconds scores the door_csi_motion rule."
+        "title": "Wi-Fi motion sensors and doors",
+        "description": "For each Wi-Fi motion sensor, pick the contact on the same door. Motion there with no door opening within 60 seconds scores door_csi_motion."
       },
       "house_deter": {
         "title": "Trust, night and deterrence",
-        "description": "Trusted user ids are pre-filled from the residents' user ids plus any user named Presence Simulation. Changes by trusted users and by automations never score.",
+        "description": "Changes made by trusted users or by automations never score. Residents and a user named Presence Simulation are pre-selected. Voice assistants through Home Assistant Cloud act as the Home Assistant Cloud user.",
         "data": {
-          "trusted_user_ids": "Trusted user ids",
-          "night_start": "Night window start",
-          "night_end": "Night window end",
+          "trusted_user_ids": "Trusted users",
+          "night_start": "Night starts",
+          "night_end": "Night ends",
           "deter_sound": "Deter sound (media URL or media-source id)",
-          "deter_tts_entity": "Deter TTS entity (used instead of the sound)",
-          "deter_tts_message": "Deter TTS message",
+          "deter_tts_entity": "Deter text-to-speech entity (used instead of the sound)",
+          "deter_tts_message": "Deter message",
           "deter_volume": "Deter volume",
-          "restore_seconds": "Restore players after (seconds)",
+          "restore_seconds": "Restore speakers after (seconds)",
           "house_deter": "Whole-house deter scripts or switches",
           "house_alarm": "Whole-house alarm scripts or switches"
         }
       },
       "responses": {
         "title": "Responses",
-        "description": "Dry run stays on until you turn it off; every message is prefixed with [DRY RUN] and lists the actions that would have run.",
+        "description": "Every alert fires a siem_notification event for your own automations (see the sample packages). Notify services listed here also get the same alert as plain text. Dry run stays on until you turn it off: alerts are marked [DRY RUN] and list the actions that would have run.",
         "data": {
-          "notify_service": "Notify service",
-          "target": "Notify target (channel)",
+          "notify_services": "Notify services for plain-text alerts (optional)",
           "alarm_panel": "Alarm control panel",
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
-          "digest_post_when_empty": "Post the digest when nothing happened",
+          "digest_post_when_empty": "Send the digest when nothing happened",
           "dry_run": "Dry run (describe actions instead of running them)",
-          "auto_arm": "Auto arm the alarm panel",
-          "auto_alarm": "Auto alarm (pulse the alarm trigger sensor)",
-          "notify_service_2": "Second notify service for break-glass fan-out",
-          "mobile_notify_service": "Mobile notify service for actionable labels"
+          "auto_arm": "Auto arm (arm and disarm the panel with the house mode)",
+          "auto_alarm": "Auto alarm (pulse the alarm trigger sensor at the alarm tier)"
         }
       },
       "strength_pick": {
@@ -256,7 +250,7 @@
     },
     "error": {
       "no_rooms": "Pick at least one area.",
-      "invalid_notify": "Notify services look like notify.mattermost.",
+      "invalid_notify": "Notify services look like notify.mobile_app_phone.",
       "invalid_time": "Digest times must be HH:MM.",
       "invalid_thresholds": "Thresholds must increase from verify to alarm."
     },
@@ -285,7 +279,7 @@
         "name": "House mode",
         "state": {
           "vacant": "Vacant",
-          "sitter": "Sitter",
+          "guest": "Guest",
           "service": "Service",
           "family": "Family"
         }
@@ -325,7 +319,7 @@
         "state": {
           "auto": "Auto",
           "vacant": "Vacant",
-          "sitter": "Sitter",
+          "guest": "Guest",
           "service": "Service",
           "family": "Family"
         }
@@ -336,7 +330,7 @@
           "none": "None",
           "false_alarm": "False alarm",
           "thats_me": "That's me",
-          "sitter": "Sitter",
+          "guest": "Guest",
           "real": "Real"
         }
       }
@@ -356,14 +350,22 @@
       }
     }
   },
+  "exceptions": {
+    "not_loaded": {
+      "message": "SIEM is not loaded."
+    },
+    "no_incident": {
+      "message": "There is no incident with that id."
+    }
+  },
   "services": {
     "label_incident": {
       "name": "Label incident",
-      "description": "Label an incident and adjust the weights of its rules.",
+      "description": "Label an incident. False alarm lowers the weights of its rules by 10% (to no less than 0.3) and real raises them by 10% (to no more than 1.5); that's me and guest are recorded and leave the weights alone.",
       "fields": {
         "label": {
           "name": "Label",
-          "description": "false_alarm, thats_me and sitter multiply the rules by 0.9 (floor 0.3); real multiplies by 1.1 (cap 1.5)."
+          "description": "False alarm, that's me, guest or real."
         },
         "incident_id": {
           "name": "Incident id",
@@ -373,7 +375,7 @@
     },
     "run_digest": {
       "name": "Run digest",
-      "description": "Post the digest for everything since the previous one."
+      "description": "Send the digest for everything since the previous one."
     },
     "reset_weights": {
       "name": "Reset weights",
@@ -381,11 +383,11 @@
     },
     "set_house_mode": {
       "name": "Set house mode",
-      "description": "Force a house mode, or auto to derive it again.",
+      "description": "Force a house mode, or auto to derive it again. A forced mode survives restarts.",
       "fields": {
         "mode": {
           "name": "Mode",
-          "description": "auto, vacant, sitter, service or family."
+          "description": "Auto, vacant, guest, service or family."
         }
       }
     }
@@ -395,7 +397,7 @@
       "options": {
         "false_alarm": "False alarm",
         "thats_me": "That's me",
-        "sitter": "Sitter",
+        "guest": "Guest",
         "real": "Real"
       }
     },
@@ -403,7 +405,7 @@
       "options": {
         "auto": "Auto",
         "vacant": "Vacant",
-        "sitter": "Sitter",
+        "guest": "Guest",
         "service": "Service",
         "family": "Family"
       }

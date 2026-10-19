@@ -7,7 +7,7 @@
 # touching a real device. A simulated household drives the sensors on its own;
 # helpers named "(helper)" let you force anything by hand.
 #
-# INSTALL
+# INSTALL (Home Assistant 2025.9 or newer, for template event entities)
 #   1. Copy this file to <config>/packages/siem_test_entities.yaml
 #   2. Enable packages in configuration.yaml if you have not already:
 #        homeassistant:
@@ -20,7 +20,7 @@
 #      EV charger, front door lock, LCM event, persons, house switches, alarm
 #      panel, kitchen speaker helpers, everything named "Test Sim ...") without
 #      an area.
-#   5. Add the SIEM integration. Suggested answers are at the end of this file.
+#   5. Add the SIEM integration. Suggested answers are further down this header.
 #
 # HOW THE SIMULATION WORKS
 #   Every entity the SIEM watches is a template mirror driven by two things: a
@@ -37,8 +37,8 @@
 #     morning   06:00-09:00           kitchen busy, coffee, showers, doors as
 #                                     people leave
 #     away      09:00-17:00 weekdays  house empty: rare motion, deliveries at the
-#                                     gate and front door, Sam the dog walker most
-#                                     afternoons (LCM PIN, sitter mode), now and
+#                                     gate and front door, a guest with a PIN most
+#                                     afternoons (LCM PIN, guest mode), now and
 #                                     then an unexplained 900 W load
 #     day       09:00-17:00 weekends  people home and moving about
 #     evening   17:00-23:00           everyone home, TV on, dinner, EV charging
@@ -67,7 +67,7 @@
 #     water flow                 0.3      5     0.05    2      4       3 min
 #     unexplained 900 W load     0.05     0.1   0.3     0.2    0.2    10 min
 #     EV charging                0.3      0     0       0      0.5     2 h
-#   Sam's visit lifts kitchen and living room motion for thirty minutes.
+#   The guest's visit lifts kitchen and living room motion for thirty minutes.
 #   Two scripted scenarios play fixed sequences through the helpers:
 #   script.test_sim_break_in (gate, camera, back door, motion, light, fridge)
 #   and script.test_sim_delivery (gate, then motion at the front door only).
@@ -88,25 +88,26 @@
 #
 # THINGS THIS FILE CANNOT CREATE (set up by hand, most are optional)
 #   - Areas: create the three areas above and move the entities into them.
-#   - Notify service: use notify.persistent_notification. Messages land in the
-#     notification drawer; the Mattermost attachment is dropped there but the
-#     [DRY RUN] action list is part of the message. Or point the SIEM at your
-#     real notify.mattermost with a test channel.
+#   - Notifications: pick notify.persistent_notification as a plain-text notify
+#     service and alerts land in the notification drawer, [DRY RUN] action list
+#     included. Or load one of the sample packages in packages/ with a test
+#     channel or phone.
 #   - Calendar: add a Local Calendar (Settings > Devices & services > Add
 #     integration) named "Test House Calendar" and create events titled
-#     "Sitter: Sam" or "Service: Plumber". Or set calendar state by hand in
+#     "Guest: Test Guest" or "Service: Plumber". Or set calendar state by hand in
 #     Developer tools > States with attributes message, start_time, end_time.
 #   - Camera: not templatable. Add a Generic Camera pointing at any still image
 #     URL, or leave the room camera empty (snapshots are then skipped).
 #   - AI task entity: comes from an LLM integration (OpenAI, Anthropic, Google,
 #     Ollama). Leave it empty to see the digest fall back to raw counts.
-#   - Mobile notify service: needs the companion app (notify.mobile_app_*).
+#   - Label buttons on a phone: packages/siem_mobile_app.yaml needs the
+#     companion app (notify.mobile_app_*).
 #   - TTS entity: needs a TTS integration; the deter sound URL is used instead.
 #   - HomeKit origin: the homekit_state_change event and the light change must
-#     share one context; YAML cannot fake that, the unit tests cover it.
-#   - Lock Code Manager: event.test_lcm_sam_credential_used below imitates an
+#     share one context; YAML cannot fake that, the tests cover it.
+#   - Lock Code Manager: event.test_lcm_guest_credential_used below imitates an
 #     LCM per-user "credential used" event entity (code_slot, name, operation).
-#     It fires from Sam's buttons and from the simulated afternoon visit.
+#     It fires from the guest's buttons and from the simulated afternoon visit.
 #   - Z-Wave lock notifications: run the script.test_front_door_* scripts; they
 #     fire zwave_js_notification events the SIEM listens to.
 #   - Device trackers: the automation at the bottom keeps three legacy
@@ -122,29 +123,26 @@
 #     script.test_kitchen_deter_script.
 #   Test Backyard: deter lights light.test_backyard_floodlight.
 #   Whole house: residents person.test_alice and person.test_bob; additional
-#     tracker device_tracker.test_guest_car; CSI binary_sensor.test_front_door_csi
+#     tracker device_tracker.test_second_car; CSI binary_sensor.test_front_door_csi
 #     mapped to binary_sensor.test_front_door; water sensor.test_water_flow with
 #     threshold 1; load sensor.test_house_load with automated load
 #     sensor.test_ev_charger_power, step 100 W, sustain 5 minutes; locks
-#     lock.test_front_door_lock; LCM events event.test_lcm_sam_credential_used;
+#     lock.test_front_door_lock; LCM events event.test_lcm_guest_credential_used;
 #     calendar your test calendar.
-#   Trust and deterrence: add your own user id to the trusted list
-#     (Developer tools > Template: {{ states.person | selectattr('attributes.user_id')
-#     | map(attribute='attributes.user_id') | list }}); night window covering
+#   Trust and deterrence: pick your own user as trusted; night window covering
 #     "now" if you want to see the 1.5x exterior multiplier; deter sound
-#     media-source://media_source/local/test_dog.mp3 (any text, the test speaker
+#     media-source://media_source/local/test_deter.mp3 (any text, the test speaker
 #     only records it); deter volume 0.7; restore 15 s; whole-house deter
 #     switch.test_house_deter_switch and script.test_house_deter_script;
 #     whole-house alarm switch.test_house_siren and script.test_house_alarm_script.
-#   Responses: notify.persistent_notification, any target,
-#     alarm_control_panel.test_alarm_panel, dry run on, a digest time a few
-#     minutes ahead, second notify service notify.persistent_notification again
-#     if you want to see the break-glass fan-out twice.
+#   Responses: notify.persistent_notification as the plain-text notify
+#     service, alarm_control_panel.test_alarm_panel, dry run on, and a digest
+#     time a few minutes ahead.
 #
 # WATCHING THE SIMULATION
 #   Leave it running. Force the scene to "away" to see a vacant house: an
 #   incident every couple of hours from a stray motion or a delivery, most of
-#   them verify tier, and Sam's visit flipping the house to sitter. Turn the
+#   them verify tier, and the guest's visit flipping the house to guest. Turn the
 #   rate up to 5 to compress that into minutes. Force "evening" to see a full
 #   house score nothing.
 #
@@ -161,17 +159,18 @@
 #   4. Turn it off again, wait 30 minutes (or force vacant with
 #      select.siem_house_mode_override), then run
 #      script.test_front_door_manual_unlock: 60 points and a break-glass
-#      notification on both notify services.
-#   5. Press "Test Sam Uses PIN (helper)": -40, house mode sitter, incident
-#      person Sam. Run script.test_front_door_keypad_unlock_unknown: 30
-#      (pin_not_allowed); script.test_front_door_keypad_unlock_sam: nothing.
-#      Press Sam's button once before the keypad scripts after a restart: the
-#      rig's event entity only publishes Sam's slot after its first press,
+#      alert.
+#   5. Press "Test Guest Uses PIN (helper)": -40, house mode guest, incident
+#      person Test Guest. Run script.test_front_door_keypad_unlock_unknown: 30
+#      (pin_not_allowed); script.test_front_door_keypad_unlock_guest: nothing.
+#      Press the guest's button once before the keypad scripts after a restart:
+#      the rig's event entity only publishes the guest's slot after a press,
 #      while a real Lock Code Manager entity carries it from startup.
-#   6. Turn off "Test Kitchen Motion Online (helper)": sensor_offline 20; after
-#      60 minutes vacant the break-glass fan-out fires again.
-#   7. Label the incident with select.siem_label_last_incident; watch the
-#      weights in the options flow. Run siem.run_digest to post the digest.
+#   6. Turn off "Test Kitchen Motion Online (helper)": after two minutes,
+#      sensor_offline 20; after 60 minutes vacant, a break-glass alert.
+#   7. Label the incident with select.siem_label_last_incident. False alarm
+#      and real move the weights (see them in the options flow); that's me and
+#      guest are only recorded. Run siem.run_digest to send the digest.
 #   8. Turn dry run off (switch.siem_dry_run) and repeat 1 and 2: the kitchen
 #      deter light goes to 100%, the speaker plays the deter sound at 0.7 and is
 #      restored after 15 s, the house deter switch and scripts run, and at alarm
@@ -263,8 +262,8 @@ input_boolean:
   test_bob_phone_home:
     name: Test Bob Phone Home (helper)
     icon: mdi:cellphone
-  test_guest_car_home:
-    name: Test Guest Car Home (helper)
+  test_second_car_home:
+    name: Test Second Car Home (helper)
     icon: mdi:car
 
 input_number:
@@ -362,11 +361,11 @@ input_text:
     icon: mdi:music
 
 input_button:
-  test_sam_uses_pin:
-    name: Test Sam Uses PIN (helper)
+  test_guest_uses_pin:
+    name: Test Guest Uses PIN (helper)
     icon: mdi:dialpad
-  test_sam_locks_up:
-    name: Test Sam Locks Up (helper)
+  test_guest_locks_up:
+    name: Test Guest Locks Up (helper)
     icon: mdi:lock-check
 
 template:
@@ -377,7 +376,7 @@ template:
   # Each mirror is "helper on" OR a two-state Markov chain: an off sensor turns
   # on with probability per_hour * rate * tick / 3600, an on sensor stays on
   # with probability 1 - tick / hold_seconds. The block variables below are
-  # shared by every template in the block; scene and sam_here lag one tick.
+  # shared by every template in the block; scene and guest_here lag one tick.
   # ---------------------------------------------------------------------------
   - triggers:
       - trigger: time_pattern
@@ -387,7 +386,7 @@ template:
       sim: "{{ is_state('input_boolean.test_simulation', 'on') }}"
       rate: "{{ states('input_number.test_simulation_rate') | float(1) }}"
       scene: "{{ states('sensor.test_sim_scene') }}"
-      sam_here: "{{ is_state('binary_sensor.test_sim_sam_here', 'on') }}"
+      guest_here: "{{ is_state('binary_sensor.test_sim_guest_here', 'on') }}"
     sensor:
       - name: Test Sim Scene
         unique_id: siem_test_sim_scene
@@ -477,17 +476,17 @@ template:
               + states('sensor.test_living_room_tv_power') | float(0)
               + states('sensor.test_ev_charger_power') | float(0)) | round(0) }}
     binary_sensor:
-      # Sam the dog walker: a one-tick pulse that fires the LCM event entity,
+      # A guest with a PIN: a one-tick pulse that fires the LCM event entity,
       # then thirty minutes of being around the house.
-      - name: Test Sim Sam Visit
-        unique_id: siem_test_sim_sam_visit
-        icon: mdi:dog-side
+      - name: Test Sim Guest Visit
+        unique_id: siem_test_sim_guest_visit
+        icon: mdi:account-key
         state: "{{ sim and scene == 'away' and 13 <= now().hour < 16 and (range(100000) | random) < 100000 * 0.7 * rate * tick / 3600 }}"
-      - name: Test Sim Sam Here
-        unique_id: siem_test_sim_sam_here
-        icon: mdi:dog-side
+      - name: Test Sim Guest Here
+        unique_id: siem_test_sim_guest_here
+        icon: mdi:account-key
         state: >-
-          {{ sim and (is_state('binary_sensor.test_sim_sam_visit', 'on')
+          {{ sim and (is_state('binary_sensor.test_sim_guest_visit', 'on')
                       or (is_state(this.entity_id, 'on') and (range(10000) | random) >= 10000 * tick / 1800)) }}
       # Test Kitchen
       - name: Test Kitchen Motion
@@ -499,7 +498,7 @@ template:
              and not (sim and ((down and (range(10000) | random) >= 10000 * tick / 120)
                                or (not down and (range(100000) | random) < 100000 * 0.05 * rate * tick / 3600))) }}
         state: >-
-          {% set per_hour = {'asleep': 0.3, 'morning': 15, 'away': 0.15, 'day': 6, 'evening': 10}.get(scene, 0) + (20 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.3, 'morning': 15, 'away': 0.15, 'day': 6, 'evening': 10}.get(scene, 0) + (20 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_kitchen_motion', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 45)
@@ -508,7 +507,7 @@ template:
         unique_id: siem_test_kitchen_presence
         device_class: presence
         state: >-
-          {% set per_hour = {'asleep': 0.2, 'morning': 8, 'away': 0.05, 'day': 4, 'evening': 6}.get(scene, 0) + (10 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.2, 'morning': 8, 'away': 0.05, 'day': 4, 'evening': 6}.get(scene, 0) + (10 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_kitchen_presence', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 180)
@@ -517,7 +516,7 @@ template:
         unique_id: siem_test_kitchen_sound
         device_class: sound
         state: >-
-          {% set per_hour = {'asleep': 0.5, 'morning': 10, 'away': 0.5, 'day': 5, 'evening': 8}.get(scene, 0) + (10 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.5, 'morning': 10, 'away': 0.5, 'day': 5, 'evening': 8}.get(scene, 0) + (10 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_kitchen_sound', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 20)
@@ -525,7 +524,7 @@ template:
       - name: Test Kitchen Bayesian Evidence
         unique_id: siem_test_kitchen_bayesian_evidence
         state: >-
-          {% set per_hour = {'asleep': 0.1, 'morning': 6, 'away': 0.05, 'day': 3, 'evening': 5}.get(scene, 0) + (8 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.1, 'morning': 6, 'away': 0.05, 'day': 3, 'evening': 5}.get(scene, 0) + (8 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_kitchen_bayesian_evidence', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 60)
@@ -552,7 +551,7 @@ template:
         unique_id: siem_test_kitchen_fridge_door
         device_class: door
         state: >-
-          {% set per_hour = {'asleep': 0.2, 'morning': 8, 'away': 0.02, 'day': 4, 'evening': 6}.get(scene, 0) + (3 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.2, 'morning': 8, 'away': 0.02, 'day': 4, 'evening': 6}.get(scene, 0) + (3 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_kitchen_fridge_door', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 15)
@@ -562,7 +561,7 @@ template:
         unique_id: siem_test_living_room_motion
         device_class: motion
         state: >-
-          {% set per_hour = {'asleep': 0.2, 'morning': 4, 'away': 0.1, 'day': 5, 'evening': 12}.get(scene, 0) + (20 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.2, 'morning': 4, 'away': 0.1, 'day': 5, 'evening': 12}.get(scene, 0) + (20 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_living_room_motion', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 45)
@@ -571,7 +570,7 @@ template:
         unique_id: siem_test_living_room_camera_person
         device_class: occupancy
         state: >-
-          {% set per_hour = {'asleep': 0.1, 'morning': 2, 'away': 0.05, 'day': 3, 'evening': 6}.get(scene, 0) + (10 if sam_here else 0) %}
+          {% set per_hour = {'asleep': 0.1, 'morning': 2, 'away': 0.05, 'day': 3, 'evening': 6}.get(scene, 0) + (10 if guest_here else 0) %}
           {% set on = is_state(this.entity_id, 'on') %}
           {{ is_state('input_boolean.test_living_room_camera_person', 'on')
              or (sim and ((on and (range(10000) | random) >= 10000 * tick / 30)
@@ -671,32 +670,32 @@ template:
 
   # ---------------------------------------------------------------------------
   # Imitation of a Lock Code Manager "credential used" event entity for the
-  # user Sam in code slot 3. Fires from Sam's helper buttons and from the
-  # simulated afternoon visit (unlock on arrival, lock when Sam leaves).
+  # user Test Guest in code slot 3. Fires from the guest's helper buttons and
+  # from the simulated afternoon visit (unlock on arrival, lock on leaving).
   # ---------------------------------------------------------------------------
   - triggers:
       - trigger: state
         entity_id:
-          - input_button.test_sam_uses_pin
-          - input_button.test_sam_locks_up
+          - input_button.test_guest_uses_pin
+          - input_button.test_guest_locks_up
       - trigger: state
-        entity_id: binary_sensor.test_sim_sam_visit
+        entity_id: binary_sensor.test_sim_guest_visit
         to: "on"
       - trigger: state
-        entity_id: binary_sensor.test_sim_sam_here
+        entity_id: binary_sensor.test_sim_guest_here
         from: "on"
         to: "off"
     event:
-      - name: Test LCM Sam Credential Used
-        unique_id: siem_test_lcm_sam_credential_used
+      - name: Test LCM Guest Credential Used
+        unique_id: siem_test_lcm_guest_credential_used
         event_type: pin
         event_types: "{{ ['pin', 'fingerprint'] }}"
         attributes:
           code_slot: 3
           slot_field: credential_used
-          name: Sam
+          name: Test Guest
           active: true
-          operation: "{{ 'lock' if trigger.entity_id in ['input_button.test_sam_locks_up', 'binary_sensor.test_sim_sam_here'] else 'unlock' }}"
+          operation: "{{ 'lock' if trigger.entity_id in ['input_button.test_guest_locks_up', 'binary_sensor.test_sim_guest_here'] else 'unlock' }}"
           credential_type: pin
           source: lock.test_front_door_lock
           target: lock.test_front_door_lock
@@ -913,7 +912,7 @@ script:
     fields:
       media_content_id:
         description: What the speaker was asked to play
-        example: media-source://media_source/local/test_dog.mp3
+        example: media-source://media_source/local/test_deter.mp3
     sequence:
       - action: input_text.set_value
         target:
@@ -1002,8 +1001,8 @@ script:
           event: 2
           event_label: Manual unlock operation
           parameters: {}
-  test_front_door_keypad_unlock_sam:
-    alias: Test Front Door Keypad Unlock Sam, slot 3 (Z-Wave event)
+  test_front_door_keypad_unlock_guest:
+    alias: Test Front Door Keypad Unlock Guest, slot 3 (Z-Wave event)
     icon: mdi:dialpad
     sequence:
       - event: zwave_js_notification
@@ -1049,7 +1048,7 @@ script:
 
 # Keeps three legacy device trackers in step with the "... home" helpers and
 # the simulated scene: Alice and Bob are home in every scene except away, the
-# guest car only when its helper is on. device_tracker.see creates the
+# second car only when its helper is on. device_tracker.see creates the
 # trackers on first use (known_devices.yaml).
 automation:
   - id: siem_test_trackers
@@ -1061,7 +1060,7 @@ automation:
         entity_id:
           - input_boolean.test_alice_phone_home
           - input_boolean.test_bob_phone_home
-          - input_boolean.test_guest_car_home
+          - input_boolean.test_second_car_home
           - input_boolean.test_simulation
         to:
           - "on"
@@ -1075,13 +1074,13 @@ automation:
           for_each:
             - test_alice_phone
             - test_bob_phone
-            - test_guest_car
+            - test_second_car
           sequence:
             - action: device_tracker.see
               data:
                 dev_id: "{{ repeat.item }}"
                 location_name: >-
                   {{ 'home' if is_state('input_boolean.' ~ repeat.item ~ '_home', 'on')
-                     or (repeat.item != 'test_guest_car' and is_state('input_boolean.test_simulation', 'on')
+                     or (repeat.item != 'test_second_car' and is_state('input_boolean.test_simulation', 'on')
                          and states('sensor.test_sim_scene') in ['asleep', 'morning', 'day', 'evening'])
                      else 'not_home' }}

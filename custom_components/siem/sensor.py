@@ -6,9 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core.arm import ARM_MODES
@@ -35,18 +35,21 @@ def _incident_attrs(coordinator: SiemCoordinator) -> dict[str, Any]:
 
 DESCRIPTIONS: tuple[SiemSensorDescription, ...] = (
     SiemSensorDescription(
-        key="risk_score", icon="mdi:shield-search", native_unit_of_measurement="points", value_fn=lambda c: round(c.score, 1), attrs_fn=lambda c: {"top_contributors": c.top, "incident_id": c.incident_id}
+        key="risk_score", native_unit_of_measurement="points", state_class=SensorStateClass.MEASUREMENT, value_fn=lambda c: round(c.score, 1), attrs_fn=lambda c: {"top_contributors": c.top, "incident_id": c.incident_id}
     ),
-    SiemSensorDescription(key="tier", icon="mdi:shield-alert", device_class=SensorDeviceClass.ENUM, options=list(TIERS), value_fn=lambda c: c.tier),
-    SiemSensorDescription(key="incident", icon="mdi:file-alert", value_fn=lambda c: c.incident_id or "none", attrs_fn=_incident_attrs),
-    SiemSensorDescription(key="house_mode", icon="mdi:home-account", device_class=SensorDeviceClass.ENUM, options=list(MODES), value_fn=lambda c: c.house_mode),
+    SiemSensorDescription(key="tier", device_class=SensorDeviceClass.ENUM, options=list(TIERS), value_fn=lambda c: c.tier),
+    SiemSensorDescription(key="incident", value_fn=lambda c: c.incident_id or "none", attrs_fn=_incident_attrs),
+    SiemSensorDescription(key="house_mode", device_class=SensorDeviceClass.ENUM, options=list(MODES), value_fn=lambda c: c.house_mode),
     SiemSensorDescription(
-        key="recommended_alarm_mode", icon="mdi:shield-home", device_class=SensorDeviceClass.ENUM, options=list(ARM_MODES), value_fn=lambda c: c.recommended_arm
+        key="recommended_alarm_mode", device_class=SensorDeviceClass.ENUM, options=list(ARM_MODES), value_fn=lambda c: c.recommended_arm
     ),
 )
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+PARALLEL_UPDATES = 0
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     """Set up the sensors."""
     async_add_entities(SiemSensor(entry.runtime_data, description) for description in DESCRIPTIONS)
 

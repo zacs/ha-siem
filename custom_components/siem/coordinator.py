@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime, timedelta
+from collections.abc import Callable, Coroutine
+from datetime import datetime, time, timedelta
 import functools
 import logging
 from typing import Any
@@ -31,7 +31,7 @@ from .core.rules import MODE_VACANT, SUPPRESSOR_ALLOWED_PIN, SUPPRESSOR_FAMILY_A
 from .core.scoring import TIER_NONE, TIER_VERIFY
 from .core.weights import reset_weights
 from .digest import DigestRunner
-from .notify import Notifier
+from .notifier import Notifier
 from .store import SiemStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,8 +39,15 @@ _LOGGER = logging.getLogger(__name__)
 type SiemConfigEntry = ConfigEntry[SiemCoordinator]
 
 
+def _known(state: State | None) -> bool:
+    """Return True for a state that reflects the device rather than startup or an outage."""
+    return state is not None and state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+
+
 def _turned_on(old: State | None, new: State) -> bool:
-    return new.state == STATE_ON and (old is None or old.state != STATE_ON)
+    # Only a real off-to-on transition counts. A missing or unavailable state before means HA started or the
+    # integration reconnected, and the entity is reporting where it already was.
+    return new.state == STATE_ON and _known(old) and old.state != STATE_ON
 
 
 def _number(state: State | None) -> float | None:
@@ -54,10 +61,10 @@ def _number(state: State | None) -> float | None:
 
 def _crossed_up(old: State | None, new: State, threshold: float) -> bool:
     value, previous = _number(new), _number(old)
-    return value is not None and value >= threshold and (previous is None or previous < threshold)
+    return value is not None and previous is not None and previous < threshold <= value
 
 
-def _parse_time(value: str, default: str) -> datetime.time:
+def _parse_time(value: str | None, default: str) -> time:
     return dt_util.parse_time(value or default) or dt_util.parse_time(default)
 
 
@@ -91,12 +98,18 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.engine = IncidentEngine(self.rules, self.settings, store.weights)
         self.occupancy = RoomOccupancy()
         self.modes = HouseModeMachine(self.now())
+        try:
+            self.modes.set_override(store.override)
+        except ValueError:
+            store.override = None
         self.homekit_contexts = ContextLRU()
+        self.automation_contexts = ContextLRU(size=4096, ttl_s=12 * 3600)
         step, sustain = float(self.house.get(c.CONF_LOAD_STEP, c.DEFAULT_LOAD_STEP)), float(self.house.get(c.CONF_LOAD_SUSTAIN, c.DEFAULT_LOAD_SUSTAIN))
         self.residual = LoadResidualDetector(step, sustain) if self.house.get(c.CONF_LOAD) else None
         self.lcm_slots: dict[int, LcmSlot] = {}
         self.residents = ent.ResidentSet()
         self.trusted: set[str] = set(self.house.get(c.CONF_TRUSTED_USERS) or [])
+        self.user_names: dict[str, str] = {}
         self.toggles: dict[str, bool] = {key: bool(store.toggles.get(key, self.responses.get(key, key == c.CONF_DRY_RUN))) for key in c.TOGGLES}
         self.score = 0.0
         self.tier = TIER_NONE
@@ -107,7 +120,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.alarm_trigger_on = False
         self.last_label: str | None = None
         self._offline_since: dict[str, float] = {}
+        self._offline_scored: set[str] = set()
         self._break_glass_sent: set[str] = set()
+        self._cooldown: dict[tuple[str, str], float] = {}
         self._last_arrival = 0.0
         self._contact_last_on: dict[str, float] = {}
         self._lock_devices: dict[str, str] = {}
@@ -132,6 +147,13 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return the friendly name of a room key."""
         return None if room_id is None else (self.rooms.get(room_id, {}).get("name") or room_id)
 
+    def entity_name(self, entity_id: str | None) -> str:
+        """Return an entity's friendly name, falling back to its id."""
+        if entity_id is None:
+            return "House"
+        state = self.hass.states.get(entity_id)
+        return state.name if state else entity_id
+
     @property
     def incident_id(self) -> str | None:
         """Return the open incident's id."""
@@ -141,20 +163,23 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return a whole-house entity list merged with its additional twin."""
         return list(self.house.get(field) or []) + list(self.house.get(field + c.ADDITIONAL) or [])
 
+    def create_task(self, target: Coroutine[Any, Any, Any], name: str) -> None:
+        """Run a response as an entry task: unload waits for it instead of cutting it off."""
+        self.entry.async_create_task(self.hass, target, name)
+
     async def async_start(self) -> None:
         """Subscribe to everything configured and publish the initial state."""
         registry = er.async_get(self.hass)
         for lock in self.house.get(c.CONF_LOCKS) or []:
             if (entry := registry.async_get(lock)) and entry.device_id:
                 self._lock_devices[entry.device_id] = lock
+        self.user_names = {user.id: user.name for user in await self.hass.auth.async_get_users() if user.name}
         self._refresh_residents()
         self._refresh_lcm_slots()
         self._subscribe()
-        for name in c.EVENTS_HOMEKIT:
-            self._unsubs.append(self.hass.bus.async_listen(name, self._on_homekit))
-        self._unsubs.append(self.hass.bus.async_listen(c.EVENT_ZWAVE_NOTIFICATION, self._on_zwave))
-        self._unsubs.append(self.hass.bus.async_listen(c.EVENT_LCM_LOCK, self._on_lcm_lock))
-        self._unsubs.append(self.hass.bus.async_listen(c.EVENT_MOBILE_ACTION, self._on_mobile_action))
+        listeners = [(name, self._on_homekit) for name in c.EVENTS_HOMEKIT] + [(name, self._on_automation) for name in c.EVENTS_AUTOMATION]
+        listeners += [(c.EVENT_ZWAVE_NOTIFICATION, self._on_zwave), (c.EVENT_LCM_LOCK, self._on_lcm_lock), (c.EVENT_MOBILE_ACTION, self._on_mobile_action)]
+        self._unsubs += [self.hass.bus.async_listen(name, handler) for name, handler in listeners]
         self._unsubs.append(async_track_time_interval(self.hass, self._tick, timedelta(seconds=c.TICK_SECONDS)))
         if self.store.last_digest is None:
             self.store.last_digest = dt_util.now().isoformat()
@@ -164,18 +189,22 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._apply_calendar(self.hass.states.get(calendar))
         self._update_presence(now)
         self._refresh_mode(now)
+        # Never arm or disarm at startup; the recommendation only acts when the mode or night changes.
         self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
         self.publish(now, force=True)
 
     async def async_stop(self) -> None:
-        """Drop every subscription and flush the store."""
+        """Drop every subscription, keep an open incident in the history and flush the store."""
         for unsub in filter(None, [*self._unsubs, self._state_unsub]):
             unsub()
         self._unsubs, self._state_unsub = [], None
+        if (incident := self.engine.current) is not None:
+            self.store.add_incident({**incident.as_dict(), "closed": self.now()})
         await self.store.async_save()
 
     def _subscribe(self) -> None:
-        watched = set(self.meta) | set(self.residents.trackers)
+        # Cameras are only used for snapshots; their state churns with every token refresh.
+        watched = {e for e, m in self.meta.items() if m.get("role") != ent.ROLE_CAMERA} | set(self.residents.trackers)
         if self._state_unsub:
             self._state_unsub()
         self._state_unsub = async_track_state_change_event(self.hass, sorted(watched), self._on_state) if watched else None
@@ -186,7 +215,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.trusted = set(self.house.get(c.CONF_TRUSTED_USERS) or []) | set(self.residents.user_ids)
 
     def _refresh_lcm_slots(self) -> None:
-        attrs = {e: state.attributes for e in self.house_list("lcm_events") if (state := self.hass.states.get(e))}
+        attrs = {e: state.attributes for e in self.house_list(c.CONF_LCM_EVENTS) if (state := self.hass.states.get(e))}
         self.lcm_slots = lcm_slots_from_attributes(attrs)
 
     def _refresh_mode(self, now: float) -> None:
@@ -222,7 +251,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data({"score": score, "tier": tier, "mode": self.house_mode, "night": self.night, "incident_id": self.incident_id})
 
     def _process(self, now: float) -> None:
-        """Advance the engine, publish, and hand transitions to the responder."""
+        """Advance the engine, publish, announce transitions and hand them to the responder."""
         previous = (self.house_mode, self.night)
         self._refresh_mode(now)
         events = self.engine.evaluate(now)
@@ -230,17 +259,19 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for event in events:
             if event.kind == EVENT_CLOSED:
                 self.store.add_incident(event.incident.as_dict())
-            payload = {c.ATTR_INCIDENT_ID: event.incident.id, "tier": event.tier, "previous_tier": event.previous_tier, "score": round(score, 1)}
-            async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, {**payload, "room": self.room_name(event.incident.room), "mode": event.incident.mode})
+            payload = {**self.notifier.incident_payload(event.incident), "kind": event.kind, "tier": event.tier, "previous_tier": event.previous_tier}
+            self.hass.bus.async_fire(c.EVENT_INCIDENT, payload, context=self.responder.context())
+            light = {key: payload[key] for key in (c.ATTR_INCIDENT_ID, "tier", "previous_tier", "score", "room", "mode")}
+            async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, light)
         changed = previous != (self.house_mode, self.night)
         if changed and (recommendation := recommend_arm_mode(self.house_mode, self.night)) != self.recommended_arm:
             self.recommended_arm = recommendation
-            self.hass.async_create_task(self.responder.async_arm(recommendation))
+            self.create_task(self.responder.async_arm(recommendation), "siem arm")
         self.publish(now, force=bool(events) or changed)
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
         if events or renotify:
-            self.hass.async_create_task(self.responder.async_handle(events, incident if renotify else None))
+            self.create_task(self.responder.async_handle(events, incident if renotify else None), "siem response")
 
     def _score(self, rule_id: str, now: float, entity_id: str | None, room: str | None, detail: str, points: float | None = None, allow_open: bool = True) -> None:
         self._refresh_mode(now)
@@ -249,8 +280,22 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         _LOGGER.debug("%s scored %.1f for %s (%s)", rule_id, contribution.points, entity_id, detail)
         if (rule_id == "manual_unlock" and self.house_mode == MODE_VACANT) or rule_id == "keypad_lockout":
-            self.hass.async_create_task(self.responder.async_break_glass(f"{rule_id.replace('_', ' ')} on {entity_id}: {detail}"))
+            message = f"{self.entity_name(entity_id)}: {self.rules[rule_id].description.lower()} ({detail})"
+            self.create_task(self.responder.async_break_glass(message), "siem break glass")
         self._process(now)
+
+    def _cooldown_ok(self, rule_id: str, key: str, now: float) -> bool:
+        """Let the same entity (or room) score a rule once per cooldown: contact bounce, groups of bulbs."""
+        last = self._cooldown.get((rule_id, key))
+        if last is not None and now - last < c.COOLDOWN_S:
+            return False
+        self._cooldown[(rule_id, key)] = now
+        return True
+
+    def _score_once(self, rule_id: str, key: str, now: float, entity_id: str, room: str | None, detail: str) -> None:
+        self.modes.note_activity(now)
+        if self._cooldown_ok(rule_id, key, now):
+            self._score(rule_id, now, entity_id, room, detail)
 
     @callback
     @_safe
@@ -264,11 +309,12 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         role, room = meta.get("role"), meta.get("room")
         if new.state == STATE_UNAVAILABLE:
-            if old is not None and old.state != STATE_UNAVAILABLE:
-                self._offline_since[entity_id] = now
-                self._score("sensor_offline", now, entity_id, room, "became unavailable")
+            # Scored from the tick once it has lasted OFFLINE_GRACE_S, so a reload or restart passes quietly.
+            if old is not None and old.state != STATE_UNAVAILABLE and role in ent.SENSING_ROLES:
+                self._offline_since.setdefault(entity_id, now)
             return
         self._offline_since.pop(entity_id, None)
+        self._offline_scored.discard(entity_id)
         self._break_glass_sent.discard(entity_id)
         if new.state == STATE_UNKNOWN:
             return
@@ -289,43 +335,47 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if role == ent.ROLE_LCM_EVENT:
             self._on_lcm_event(old, new, now)
             return
+        if role in (ent.ROLE_LOAD, ent.ROLE_AUTOMATED_LOAD):
+            if self.residual is not None:
+                self._on_load(now)
+            return
         ctx = event.context
         origin = classify_origin(
-            parent_id=ctx.parent_id, user_id=ctx.user_id, context_id=ctx.id, trusted_user_ids=self.trusted, homekit_contexts=self.homekit_contexts, now=now
+            parent_id=ctx.parent_id, user_id=ctx.user_id, context_id=ctx.id, trusted_user_ids=self.trusted, homekit_contexts=self.homekit_contexts, now=now, automation_contexts=self.automation_contexts
         )
         if origin is Origin.USER_UNTRUSTED:
-            self._score("untrusted_user", now, entity_id, room, f"changed to {new.state} by user {ctx.user_id}")
+            if self._cooldown_ok("untrusted_user", entity_id, now):
+                self._score("untrusted_user", now, entity_id, room, f"set to {new.state} by {self.user_names.get(ctx.user_id or '', ctx.user_id)}")
             return
         if origin in (Origin.AUTOMATION, Origin.USER_TRUSTED):
             return
-        self.modes.note_activity(now)
         self._refresh_mode(now)
         if role == ent.ROLE_OCCUPANCY and _turned_on(old, new):
+            self.modes.note_activity(now)
             self._on_occupancy(entity_id, meta, room, now)
         elif role == ent.ROLE_PERIMETER and _turned_on(old, new):
             self._contact_last_on[entity_id] = now
-            self._score("gate_opened" if meta.get("gate") else "exterior_door_opened", now, entity_id, room, f"{origin} open")
+            self._score_once("gate_opened" if meta.get("gate") else "exterior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_INTERIOR_DOOR and _turned_on(old, new):
-            self._score("interior_door_opened", now, entity_id, room, f"{origin} open")
+            self._score_once("interior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_LIGHT and _turned_on(old, new):
-            self._score("light_homekit" if origin is Origin.HOMEKIT else "light_physical", now, entity_id, room, f"{origin} on")
-        elif role == ent.ROLE_POWER and _crossed_up(old, new, float(meta.get("threshold", 30))):
-            self._score("tv_power", now, entity_id, room, f"{new.state} W")
-        elif role == ent.ROLE_WATER and _crossed_up(old, new, float(meta.get("threshold", 1))):
-            self._score("water_flow", now, entity_id, room, f"{new.state} flow")
+            # One switch can turn on a whole group of bulbs, so lights count once per room.
+            rule = "light_homekit" if origin is Origin.HOMEKIT else "light_physical"
+            self._score_once(rule, room or entity_id, now, entity_id, room, str(origin))
+        elif role == ent.ROLE_POWER and _crossed_up(old, new, float(meta.get("threshold", c.DEFAULT_POWER_THRESHOLD))):
+            self._score_once("appliance_on", entity_id, now, entity_id, room, f"{new.state} W")
+        elif role == ent.ROLE_WATER and _crossed_up(old, new, float(meta.get("threshold", c.DEFAULT_WATER_THRESHOLD))):
+            self._score_once("water_flow", entity_id, now, entity_id, room, f"flow {new.state}")
         elif role == ent.ROLE_CSI and _turned_on(old, new):
             contact = (self.house.get(c.CONF_CSI_MAP) or {}).get(entity_id)
             contact_state = self.hass.states.get(contact) if contact else None
             recently = contact and now - self._contact_last_on.get(contact, -1e12) <= c.CSI_CONTACT_WINDOW_S
             if not recently and not (contact_state and contact_state.state == STATE_ON):
-                self._score("door_csi_motion", now, entity_id, room, f"CSI motion, {contact or 'no contact'} closed")
-        elif role in (ent.ROLE_LOAD, ent.ROLE_AUTOMATED_LOAD) and self.residual is not None:
-            self._on_load(now)
+                self._score_once("door_csi_motion", entity_id, now, entity_id, room, f"{self.entity_name(contact) if contact else 'no door'} stayed closed")
 
     def _on_occupancy(self, entity_id: str, meta: dict[str, Any], room: str | None, now: float) -> None:
         if meta.get("person_detector"):
-            rule = "person_exterior_camera" if meta.get("exterior") else "person_interior_camera"
-            self._score(rule, now, entity_id, room, "person detected")
+            self._score_once("person_exterior_camera" if meta.get("exterior") else "person_interior_camera", entity_id, now, entity_id, room, "person detected")
             return
         base = self.rules["interior_occupied"].points_for(self.house_mode)
         if base <= 0:
@@ -339,10 +389,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _on_load(self, now: float) -> None:
         load = _number(self.hass.states.get(self.house[c.CONF_LOAD]))
-        if load is None:
+        if load is None or self.residual is None:
             return
-        automated = sum(_number(self.hass.states.get(e)) or 0.0 for e in self.house.get("automated_loads") or [])
-        assert self.residual is not None
+        automated = sum(_number(self.hass.states.get(e)) or 0.0 for e in self.house.get(c.CONF_AUTOMATED_LOADS) or [])
         if self.residual.update(load, automated, now):
             self._score("load_residual", now, self.house[c.CONF_LOAD], None, f"residual {self.residual.residual:.0f} W")
 
@@ -351,25 +400,31 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # A person and its tracker arrive together; the suppressor applies once per arrival.
         if new.state == STATE_HOME and (old is None or old.state != STATE_HOME) and now - self._last_arrival >= 60:
             self._last_arrival = now
-            self.engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.entity_id} arrived home")
+            self.engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home")
         self._process(now)
 
     def _on_lcm_event(self, old: State | None, new: State, now: float) -> None:
         self._refresh_lcm_slots()
-        if old is None or old.state == new.state:
+        # A never-fired event entity is unknown, so unknown to a timestamp is a real use; unavailable to a
+        # timestamp is the entity coming back after a restart or reload with its old value.
+        if old is None or old.state in (new.state, STATE_UNAVAILABLE):
             return
         name = str(new.attributes.get("name") or "unknown user")
         if new.attributes.get("operation") == "lock":
             self.modes.note_activity(now)
             return
         self.modes.allowed_pin(now)
-        self.engine.suppress("allowed_pin", SUPPRESSOR_ALLOWED_PIN, now=now, detail=f"allowed PIN use by {name}", person=name)
+        self.engine.suppress("allowed_pin", SUPPRESSOR_ALLOWED_PIN, now=now, detail=f"allowed PIN used by {name}", person=name)
         self._process(now)
         self.publish(now, force=True)
 
     @callback
     def _on_homekit(self, event: Event) -> None:
         self.homekit_contexts.add(event.context.id, self.now())
+
+    @callback
+    def _on_automation(self, event: Event) -> None:
+        self.automation_contexts.add(event.context.id, self.now())
 
     @callback
     @_safe
@@ -384,11 +439,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._lock_event(event.data.get("entity_id"), event.data.get("action_text"), event.data.get("code_slot"))
 
     def _lock_event(self, lock: str | None, label: Any, slot: Any) -> None:
-        """Score a lock event from either source once, attributed to a configured lock."""
+        """Score a lock event from either source once, and only for a configured lock."""
         locks = self.house.get(c.CONF_LOCKS) or []
         if lock is None and len(locks) == 1 and not self._lock_devices:
             lock = locks[0]
-        if locks and lock not in locks:
+        if lock not in locks:
             return
         kind, slot = classify_lock_notification(label, slot)
         now = self.now()
@@ -412,24 +467,39 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             label, incident_id = action[len(c.MOBILE_ACTION_PREFIX) :].lower().split("|", 1)
             self.label(label, incident_id)
 
+    def _check_offline(self, now: float) -> None:
+        """Score sensors that stayed unavailable past the grace period, all of them in one contribution."""
+        due = [e for e, since in self._offline_since.items() if e not in self._offline_scored and now - since >= c.OFFLINE_GRACE_S]
+        if due:
+            self._offline_scored.update(due)
+            names = ", ".join(self.entity_name(e) for e in due)
+            if len(due) == 1:
+                self._score("sensor_offline", now, due[0], self.meta.get(due[0], {}).get("room"), "unavailable")
+            else:
+                self._score("sensor_offline", now, None, None, f"{len(due)} sensors unavailable: {names}")
+        if self.house_mode != MODE_VACANT:
+            return
+        stale = [e for e, since in self._offline_since.items() if e not in self._break_glass_sent and now - since >= c.OFFLINE_BREAK_GLASS_S]
+        if stale:
+            self._break_glass_sent.update(stale)
+            names = ", ".join(self.entity_name(e) for e in stale)
+            self.create_task(self.responder.async_break_glass(f"{names} unavailable for over an hour while the house is vacant"), "siem break glass")
+
     async def _tick(self, _now: datetime) -> None:
         try:
             now = self.now()
             self._update_presence(now)
             if self.residual is not None:
                 self._on_load(now)
+            self._check_offline(now)
             self._process(now)
-            for entity_id, since in list(self._offline_since.items()):
-                if self.house_mode == MODE_VACANT and now - since >= c.OFFLINE_BREAK_GLASS_S and entity_id not in self._break_glass_sent:
-                    self._break_glass_sent.add(entity_id)
-                    await self.responder.async_break_glass(f"{entity_id} unavailable for over 60 minutes while vacant")
             if self.digest.due(dt_util.now()):
                 await self.digest.async_run()
         except Exception:
             _LOGGER.exception("Error in SIEM tick")
 
     def label(self, label: str, incident_id: str | None = None) -> None:
-        """Label an incident and adjust the weights of its rules."""
+        """Label an incident; false_alarm and real adjust the weights of its rules."""
         incident, changes = self.engine.label(label, incident_id)
         self.last_label = label
         self.store.record_weight_changes(changes, self.now(), label, incident.id)
@@ -439,8 +509,10 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.publish(self.now(), force=True)
 
     def set_house_mode(self, mode: str) -> None:
-        """Force a house mode or return to automatic."""
+        """Force a house mode, or return to automatic; the choice survives restarts."""
         self.modes.set_override(mode)
+        self.store.override = self.modes.override
+        self.store.async_schedule_save()
         self._process(self.now())
         self.publish(self.now(), force=True)
 
