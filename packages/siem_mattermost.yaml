@@ -1,5 +1,5 @@
 # =============================================================================
-# SIEM for Home Assistant: alerts to Mattermost (sample package)
+# SIEM Security: alerts to Mattermost (sample package)
 # =============================================================================
 #
 # Posts every SIEM alert, break-glass message and digest to a Mattermost

@@ -1,5 +1,5 @@
 # =============================================================================
-# SIEM for Home Assistant: deterrence (sample package)
+# SIEM Security: deterrence (sample package)
 # =============================================================================
 #
 # Turns on every light in the incident's room when it reaches the deter tier,

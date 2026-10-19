@@ -1,6 +1,6 @@
 {
   "domain": "siem",
-  "name": "SIEM for Home Assistant",
+  "name": "SIEM Security",
   "after_dependencies": [
     "ai_task",
     "calendar",
@@ -20,5 +20,5 @@
   "issue_tracker": "https://github.com/zacs/ha-siem/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.2.0"
+  "version": "0.0.1"
 }

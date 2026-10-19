@@ -21,5 +21,5 @@ class SiemEntity(CoordinatorEntity[SiemCoordinator]):
         self._attr_translation_key = key
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.entry.entry_id)}, name=NAME, manufacturer=MANUFACTURER, model="Risk engine", sw_version=VERSION, entry_type=DeviceEntryType.SERVICE
+            identifiers={(DOMAIN, coordinator.entry.entry_id)}, name=NAME, manufacturer=MANUFACTURER, model="ha-siem", sw_version=VERSION, entry_type=DeviceEntryType.SERVICE
         )

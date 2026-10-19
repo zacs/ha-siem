@@ -1,5 +1,5 @@
 # =============================================================================
-# SIEM for Home Assistant: alerts to the companion app (sample package)
+# SIEM Security: alerts to the companion app (sample package)
 # =============================================================================
 #
 # Pushes SIEM alerts and break-glass messages to a phone running the Home

@@ -1,5 +1,5 @@
 {
-  "title": "SIEM for Home Assistant",
+  "title": "SIEM Security",
   "config": {
     "step": {
       "rooms": {

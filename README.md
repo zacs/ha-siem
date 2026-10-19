@@ -1,4 +1,4 @@
-# <img src="custom_components/siem/brand/icon.png" width="90" height="90" alt="" align="middle"> SIEM for Home Assistant
+# <img src="custom_components/siem/brand/icon.png" width="90" height="90" alt="" align="middle"> SIEM Security
 
 [![Tests](https://github.com/zacs/ha-siem/actions/workflows/tests.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/tests.yaml)
 [![Hassfest](https://github.com/zacs/ha-siem/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/zacs/ha-siem/actions/workflows/hassfest.yaml)
@@ -60,9 +60,9 @@ Each of these adds something. None of them is required.
 
 1. In HACS, open the three-dot menu, then **Custom repositories**. Add
    `https://github.com/zacs/ha-siem` with the type *Integration*.
-2. Install **SIEM for Home Assistant** and restart Home Assistant.
+2. Install **SIEM Security** and restart Home Assistant.
 3. Go to **Settings > Devices & services > Add integration** and pick
-   *SIEM for Home Assistant*.
+   *SIEM Security*.
 
 ## Setup
 

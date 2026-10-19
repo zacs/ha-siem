@@ -1,5 +1,5 @@
 # =============================================================================
-# SIEM for Home Assistant: test entities for a dry run
+# SIEM Security: test entities for a dry run
 # =============================================================================
 #
 # A Home Assistant *package* that builds a fake house of "Test ..." entities so

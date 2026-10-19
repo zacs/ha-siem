@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 DOMAIN = "siem"
 NAME = "SIEM"
 MANUFACTURER = "@zacs"
-VERSION = "0.2.0"
+VERSION = "0.0.1"
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR]
 
 # Config entry data sections.
@@ -53,7 +53,7 @@ CONF_AI_TASK = "ai_task_entity"
 CONF_DIGEST_TIMES = "digest_times"
 CONF_DIGEST_EMPTY = "digest_post_when_empty"
 
-# Settings removed in 0.2, when SIEM became state and events only: no notifications, no alarm panel, no deterrence
+# Settings removed before the first release, when SIEM became state and events only: no notifications, no alarm panel, no deterrence
 # actions, no trusted-user list (every Home Assistant user is trusted) and no dry run or auto alarm switches.
 REMOVED_SETTINGS = {
     "rooms": ("deter_lights", "deter_lights_additional", "deter_players", "deter_script"),
@@ -68,7 +68,7 @@ REMOVED_SWITCHES = ("dry_run", "auto_arm", "auto_alarm")
 # Options sections.
 OPT_RULES = "rules"
 OPT_ENGINE = "engine"
-# Renamed in 0.2; stored options and weights are migrated to the new names.
+# Renamed before the first release; stored options and weights are migrated to the new names.
 RENAMED_RULES = {"tv_power": "appliance_on"}
 RENAMED_MODES = {"sitter": "guest"}
 
