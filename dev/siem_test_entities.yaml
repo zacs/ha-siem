@@ -7,7 +7,7 @@
 # touching a real device. A simulated household drives the sensors on its own;
 # helpers named "(helper)" let you force anything by hand.
 #
-# INSTALL (Home Assistant 2025.9 or newer, for template event entities)
+# INSTALL
 #   1. Copy this file to <config>/packages/siem_test_entities.yaml
 #   2. Enable packages in configuration.yaml if you have not already:
 #        homeassistant:
@@ -17,8 +17,8 @@
 #      In Settings > Devices & services > Entities search "test kitchen",
 #      select everything, and use "Move to area". Repeat for the other rooms.
 #      Leave the whole-house entities (front door CSI, water flow, house load,
-#      EV charger, front door lock, LCM event, persons, house switches, alarm
-#      panel, kitchen speaker helpers, everything named "Test Sim ...") without
+#      EV charger, front door lock, LCM event, persons, house switches,
+#      kitchen speaker helpers, everything named "Test Sim ...") without
 #      an area.
 #   5. Add the SIEM integration. Suggested answers are further down this header.
 #
@@ -88,10 +88,11 @@
 #
 # THINGS THIS FILE CANNOT CREATE (set up by hand, most are optional)
 #   - Areas: create the three areas above and move the entities into them.
-#   - Notifications: pick notify.persistent_notification as a plain-text notify
-#     service and alerts land in the notification drawer, [DRY RUN] action list
-#     included. Or load one of the sample packages in packages/ with a test
-#     channel or phone.
+#   - Notifications: nothing to set up. SIEM sends none itself; the automation
+#     at the bottom of this file turns its siem_notification events into
+#     persistent notifications, so alerts land in the notification drawer,
+#     [DRY RUN] action list included. The sample packages in packages/ do the same for
+#     Mattermost and the companion app.
 #   - Calendar: add a Local Calendar (Settings > Devices & services > Add
 #     integration) named "Test House Calendar" and create events titled
 #     "Guest: Test Guest" or "Service: Plumber". Or set calendar state by hand in
@@ -135,9 +136,7 @@
 #     only records it); deter volume 0.7; restore 15 s; whole-house deter
 #     switch.test_house_deter_switch and script.test_house_deter_script;
 #     whole-house alarm switch.test_house_siren and script.test_house_alarm_script.
-#   Responses: notify.persistent_notification as the plain-text notify
-#     service, alarm_control_panel.test_alarm_panel, dry run on, and a digest
-#     time a few minutes ahead.
+#   Responses: dry run on, and a digest time a few minutes ahead.
 #
 # WATCHING THE SIMULATION
 #   Leave it running. Force the scene to "away" to see a vacant house: an
@@ -348,11 +347,6 @@ input_select:
     options: ["off", idle, playing, paused]
     initial: "off"
     icon: mdi:speaker
-  test_alarm_panel_state:
-    name: Test Alarm Panel State (helper)
-    options: [disarmed, armed_home, armed_away, armed_night, armed_vacation, triggered]
-    initial: disarmed
-    icon: mdi:shield-home
 
 input_text:
   test_kitchen_speaker_media:
@@ -760,42 +754,6 @@ template:
           - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.test_house_siren
-    alarm_control_panel:
-      - name: Test Alarm Panel
-        unique_id: siem_test_alarm_panel
-        code_arm_required: false
-        code_format: no_code
-        state: "{{ states('input_select.test_alarm_panel_state') }}"
-        arm_away:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.test_alarm_panel_state
-            data:
-              option: armed_away
-        arm_home:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.test_alarm_panel_state
-            data:
-              option: armed_home
-        arm_night:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.test_alarm_panel_state
-            data:
-              option: armed_night
-        arm_vacation:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.test_alarm_panel_state
-            data:
-              option: armed_vacation
-        disarm:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.test_alarm_panel_state
-            data:
-              option: disarmed
 
 # A Bayesian sensor is "strong" for the SIEM whatever its device class. It
 # watches the evidence mirror rather than the helper so its changes stay
@@ -1046,11 +1004,27 @@ script:
           event_label: Keypad temporarily disabled
           parameters: {}
 
-# Keeps three legacy device trackers in step with the "... home" helpers and
-# the simulated scene: Alice and Bob are home in every scene except away, the
-# second car only when its helper is on. device_tracker.see creates the
-# trackers on first use (known_devices.yaml).
+# Two automations: one shows SIEM's alerts, and one keeps three legacy device
+# trackers in step with the "... home" helpers and the simulated scene. Alice
+# and Bob are home in every scene except away, the second car only when its
+# helper is on. device_tracker.see creates the trackers on first use
+# (known_devices.yaml).
 automation:
+  # What a real setup does with its own automation: show every SIEM alert. Here
+  # they become persistent notifications in the notification drawer.
+  - id: siem_test_alerts
+    alias: Test SIEM Alerts (helper)
+    description: Shows every siem_notification event as a persistent notification.
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: event
+        event_type: siem_notification
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "{{ trigger.event.data.title }}"
+          message: "{{ trigger.event.data.message }}"
   - id: siem_test_trackers
     alias: Test SIEM Trackers (helper)
     description: Mirrors the phone and car helpers and the simulated scene into device_tracker entities.

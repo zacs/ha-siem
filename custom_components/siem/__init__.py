@@ -8,6 +8,7 @@ import logging
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
@@ -91,17 +92,14 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate 1.1 entries: guest instead of sitter, appliance_on instead of tv_power, plain notify services."""
+    """Migrate older 1.x entries: guest instead of sitter, appliance_on instead of tv_power, no notify or panel settings."""
     if entry.version > 1:
         return False
-    if entry.minor_version < 2:
+    if entry.minor_version < 3:
         data, options = copy.deepcopy(dict(entry.data)), copy.deepcopy(dict(entry.options))
         responses = data.setdefault(c.CONF_RESPONSES, {})
-        # The Mattermost-specific fields are gone; keep alerting through the same services as plain messages.
-        services = [responses.pop(key, None) for key in ("notify_service", "notify_service_2")]
-        for key in ("target", "mobile_notify_service"):
+        for key in c.REMOVED_RESPONSES:
             responses.pop(key, None)
-        responses[c.CONF_NOTIFY] = list(dict.fromkeys([*responses.get(c.CONF_NOTIFY, []), *filter(None, services)]))
         rules = {c.RENAMED_RULES.get(rule_id, rule_id): value for rule_id, value in (options.get(c.OPT_RULES) or {}).items()}
         for value in rules.values():
             points = value.get("points") if isinstance(value, dict) else None
@@ -109,6 +107,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
                 value["points"] = {c.RENAMED_MODES.get(mode, mode): pts for mode, pts in points.items()}
         if rules:
             options[c.OPT_RULES] = rules
-        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=2)
-        _LOGGER.info("Migrated SIEM config entry to 1.2")
+        registry = er.async_get(hass)
+        if entity_id := registry.async_get_entity_id("switch", c.DOMAIN, f"{entry.entry_id}_auto_arm"):
+            registry.async_remove(entity_id)
+        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=3)
+        _LOGGER.info("Migrated SIEM config entry to 1.3")
     return True

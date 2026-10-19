@@ -72,22 +72,18 @@
       },
       "responses": {
         "title": "Responses",
-        "description": "Every alert fires a siem_notification event for your own automations (see the sample packages). Notify services listed here also get the same alert as plain text. Dry run stays on until you turn it off: alerts are marked [DRY RUN] and list the actions that would have run.",
+        "description": "SIEM never sends notifications or changes your alarm panel. Every alert fires a siem_notification event, and your own automations decide what to do with it (see the sample packages). Dry run stays on until you turn it off: deterrence is only described, and every alert is marked [DRY RUN] with the actions that would have run.",
         "data": {
-          "notify_services": "Notify services for plain-text alerts (optional)",
-          "alarm_panel": "Alarm control panel",
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
           "digest_post_when_empty": "Send the digest when nothing happened",
           "dry_run": "Dry run (describe actions instead of running them)",
-          "auto_arm": "Auto arm (arm and disarm the panel with the house mode)",
           "auto_alarm": "Auto alarm (pulse the alarm trigger sensor at the alarm tier)"
         }
       }
     },
     "error": {
       "no_rooms": "Pick at least one area.",
-      "invalid_notify": "Notify services look like notify.mobile_app_phone.",
       "invalid_time": "Digest times must be HH:MM."
     },
     "abort": {
@@ -222,15 +218,12 @@
       },
       "responses": {
         "title": "Responses",
-        "description": "Every alert fires a siem_notification event for your own automations (see the sample packages). Notify services listed here also get the same alert as plain text. Dry run stays on until you turn it off: alerts are marked [DRY RUN] and list the actions that would have run.",
+        "description": "SIEM never sends notifications or changes your alarm panel. Every alert fires a siem_notification event, and your own automations decide what to do with it (see the sample packages). Dry run stays on until you turn it off: deterrence is only described, and every alert is marked [DRY RUN] with the actions that would have run.",
         "data": {
-          "notify_services": "Notify services for plain-text alerts (optional)",
-          "alarm_panel": "Alarm control panel",
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
           "digest_post_when_empty": "Send the digest when nothing happened",
           "dry_run": "Dry run (describe actions instead of running them)",
-          "auto_arm": "Auto arm (arm and disarm the panel with the house mode)",
           "auto_alarm": "Auto alarm (pulse the alarm trigger sensor at the alarm tier)"
         }
       },
@@ -250,7 +243,6 @@
     },
     "error": {
       "no_rooms": "Pick at least one area.",
-      "invalid_notify": "Notify services look like notify.mobile_app_phone.",
       "invalid_time": "Digest times must be HH:MM.",
       "invalid_thresholds": "Thresholds must increase from verify to alarm."
     },
@@ -305,9 +297,6 @@
     "switch": {
       "dry_run": {
         "name": "Dry run"
-      },
-      "auto_arm": {
-        "name": "Auto arm"
       },
       "auto_alarm": {
         "name": "Auto alarm"

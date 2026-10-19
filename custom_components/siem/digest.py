@@ -1,4 +1,4 @@
-"""Digest: summarise the window through ai_task and send it as a notification."""
+"""Digest: summarise the window through ai_task and announce it as an event."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ class DigestRunner:
             return
         text = f"Quiet since {since.strftime('%Y-%m-%d %H:%M') if since else 'setup'}." if quiet else await self._async_generate(summary)
         counts = {key: summary[key] for key in ("since", "until", "incident_count", "labels")}
-        await c.notifier.async_notify(CATEGORY_DIGEST, "SIEM digest", text, summary={**counts, "weight_changes": len(summary["weight_changes"]), "counts": fallback_text(summary)})
+        await c.notifier.async_alert(CATEGORY_DIGEST, "SIEM digest", text, summary={**counts, "weight_changes": len(summary["weight_changes"]), "counts": fallback_text(summary)})
 
     async def _async_generate(self, summary: dict[str, Any]) -> str:
         entity = self.coordinator.responses.get(CONF_AI_TASK)

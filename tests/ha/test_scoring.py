@@ -15,7 +15,7 @@ def noon(freezer):
     freezer.move_to("2026-10-19 12:00:00-07:00")
 
 
-async def test_physical_door_opens_a_verify_incident(hass, freezer, notify_calls, siem_events):
+async def test_physical_door_opens_a_verify_incident(hass, freezer, service_calls, siem_events):
     entry = await setup_siem(hass)
     assert hass.states.get("sensor.siem_house_mode").state == "vacant"
     hass.states.async_set("binary_sensor.back_door", "on", {"device_class": "door", "friendly_name": "Back Door"})
@@ -26,13 +26,24 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, notify_calls
     assert [e["kind"] for e in incident_events] == ["opened", "tier_changed"]
     assert incident_events[1]["tier"] == "verify" and incident_events[1]["room"] == "Kitchen"
     assert incident_events[1]["timeline"][0]["name"] == "Back Door"
+    # The fields the README documents, no more and no fewer.
+    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "mode", "house_mode", "person", "started", "closed", "labels", "top_contributors", "timeline"}
+    assert set(incident_events[1]) == incident_fields | {"kind", "previous_tier"}
+    assert set(incident_events[1]["timeline"][0]) == {"at", "rule", "points", "entity_id", "name", "room", "description", "detail"}
+    assert incident_events[1]["timeline"][0]["room"] == "Kitchen"
+    assert set(incident_events[1]["top_contributors"][0]) == {"rule", "points", "entities"}
+    event_entity = hass.states.get("event.siem_incident").attributes
+    assert {"event_type", "incident_id", "tier", "previous_tier", "score", "room", "mode"} <= set(event_entity)
     alert = notifications(siem_events, "verify")[0]
     assert alert["title"] == "SIEM verify: Kitchen"
     assert alert["dry_run"] is True
     assert alert["message"].startswith("[DRY RUN] Score 40, house vacant.")
     assert alert["message"].endswith("12:00 Back Door: An exterior door or window opened (+40)")
     assert alert["incident"]["incident_id"] == entry.runtime_data.incident_id
-    assert [call.data for call in notify_calls] == [{"title": alert["title"], "message": alert["message"]}]
+    # Every field is present on every alert, and SIEM itself calls no notify service.
+    assert set(alert) == {"category", "title", "message", "dry_run", "incident", "actions", "snapshot", "again", "summary"}
+    assert alert["actions"] == [] and alert["snapshot"] is None and alert["summary"] is None
+    assert not [call for call in service_calls if call[0] in ("notify", "alarm_control_panel")]
 
 
 async def test_automations_users_and_homekit(hass, freezer, siem_events):

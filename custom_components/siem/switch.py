@@ -1,4 +1,4 @@
-"""Runtime toggles exposed as switches: dry run, auto arm, auto alarm."""
+"""Runtime toggles exposed as switches: dry run and auto alarm."""
 
 from __future__ import annotations
 

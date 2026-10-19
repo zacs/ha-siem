@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.auth import models
 from homeassistant.core import callback
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed, async_mock_service
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.siem.config_flow import build_entity_meta
 from custom_components.siem.const import DOMAIN
@@ -69,7 +69,7 @@ HOUSE = {
     "house_deter": ["script.house_deter"],
     "house_alarm": ["switch.siren"],
 }
-RESPONSES = {"notify_services": ["notify.test"], "alarm_panel": "alarm_control_panel.house", "digest_times": ["08:00"], "dry_run": True, "auto_arm": False, "auto_alarm": False}
+RESPONSES = {"digest_times": ["08:00"], "dry_run": True, "auto_alarm": False}
 
 
 @pytest.fixture(autouse=True)
@@ -86,9 +86,11 @@ async def users(hass):
 
 
 @pytest.fixture
-def notify_calls(hass):
-    """Capture the plain-text notify service."""
-    return async_mock_service(hass, "notify", "test")
+def service_calls(hass):
+    """Record every service call as (domain, service), to prove SIEM leaves notify and the alarm panel alone."""
+    calls: list[tuple[str, str]] = []
+    hass.bus.async_listen("call_service", callback(lambda event: calls.append((event.data["domain"], event.data["service"]))))
+    return calls
 
 
 @pytest.fixture

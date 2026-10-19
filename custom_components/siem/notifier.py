@@ -1,4 +1,4 @@
-"""Notifications: a siem_notification event for automations, and plain text to any notify services."""
+"""Alert events: a siem_notification for every alert, with the incident described for automations."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CAMERA, CONF_DRY_RUN, CONF_NOTIFY, EVENT_NOTIFICATION, NOTIFY_TIMEOUT_S, SNAPSHOT_DIR, SNAPSHOT_KEEP, SNAPSHOT_TIMEOUT_S
+from .const import CONF_CAMERA, CONF_DRY_RUN, EVENT_NOTIFICATION, SNAPSHOT_DIR, SNAPSHOT_KEEP, SNAPSHOT_TIMEOUT_S
 from .core.incident import Incident
 from .core.messages import timeline_line
 from .core.rules import describe
@@ -30,7 +30,7 @@ def _prune(directory: Path) -> None:
 
 
 class Notifier:
-    """Describe incidents for events and messages, and deliver both."""
+    """Describe incidents and fire the alert events."""
 
     def __init__(self, hass: HomeAssistant, coordinator: SiemCoordinator) -> None:
         """Bind to the coordinator's response settings."""
@@ -41,7 +41,13 @@ class Notifier:
         """Return the incident timeline with local times, friendly names and rule descriptions."""
         c = self.coordinator
         return [
-            {**entry, "at": c.iso(entry["at"]), "name": c.entity_name(entry.get("entity_id")) if entry.get("entity_id") else None, "description": describe(c.rules, entry["rule"])}
+            {
+                **entry,
+                "at": c.iso(entry["at"]),
+                "room": c.room_name(entry.get("room")),
+                "name": c.entity_name(entry.get("entity_id")) if entry.get("entity_id") else None,
+                "description": describe(c.rules, entry["rule"]),
+            }
             for entry in incident.timeline
         ]
 
@@ -78,22 +84,12 @@ class Notifier:
             "timeline": self.timeline(incident),
         }
 
-    async def async_notify(self, category: str, title: str, message: str, **data: Any) -> None:
-        """Fire ``siem_notification`` and send the plain message to every configured notify service."""
+    async def async_alert(self, category: str, title: str, message: str, **data: Any) -> None:
+        """Fire ``siem_notification``; every field is always present so automations need no guards."""
         c = self.coordinator
-        payload = {"category": category, "title": title, "message": message, "dry_run": c.toggles[CONF_DRY_RUN], **data}
+        payload = {"incident": None, "actions": [], "snapshot": None, "again": False, "summary": None, **data}
+        payload.update(category=category, title=title, message=message, dry_run=c.toggles[CONF_DRY_RUN])
         self.hass.bus.async_fire(EVENT_NOTIFICATION, payload, context=c.responder.context())
-        services = [s for s in c.responses.get(CONF_NOTIFY) or [] if s.startswith("notify.")]
-        await asyncio.gather(*(self._async_call(service, title, message) for service in services))
-
-    async def _async_call(self, service: str, title: str, message: str) -> None:
-        _, name = service.split(".", 1)
-        try:
-            async with asyncio.timeout(NOTIFY_TIMEOUT_S):
-                await self.hass.services.async_call("notify", name, {"title": title, "message": message}, blocking=True, context=self.coordinator.responder.context())
-        except Exception as err:
-            # One broken notify service must never keep the message from the others.
-            _LOGGER.warning("Notify service %s failed: %s", service, err)
 
     def snapshot_dir(self) -> Path:
         """Return the snapshot folder: under the local media folder, which needs a login to browse."""

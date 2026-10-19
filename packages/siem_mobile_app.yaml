@@ -18,8 +18,6 @@
 #          packages: !include_dir_named packages
 #   2. Replace notify.mobile_app_your_phone with your phone's notify service.
 #   3. Restart Home Assistant, or reload automations.
-#   4. Leave the phone out of SIEM's plain-text notify list, or every alert
-#      arrives twice.
 # =============================================================================
 
 automation:
@@ -36,7 +34,7 @@ automation:
         value_template: "{{ trigger.event.data.category in ['verify', 'deter', 'alarm', 'break_glass'] }}"
     variables:
       n: "{{ trigger.event.data }}"
-      incident_id: "{{ (n.get('incident') or {}).get('incident_id', '') }}"
+      incident_id: "{{ n.incident.incident_id if n.incident else '' }}"
       urgent: "{{ n.category in ['alarm', 'break_glass'] }}"
       buttons: >-
         {%- if incident_id %}{{ [

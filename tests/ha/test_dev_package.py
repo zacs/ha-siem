@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from homeassistant.components import persistent_notification as pn
 from homeassistant.config import merge_packages_config
 from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_state_change_event
@@ -68,7 +69,7 @@ async def test_walkthrough_steps_one_and_two(hass, freezer, caplog):
     rooms = {
         "kitchen": {"name": "Test Kitchen", "occupancy": ["binary_sensor.test_kitchen_motion"], "perimeter": ["binary_sensor.test_kitchen_back_door"], "power_threshold": 30},
     }
-    data = {"rooms": rooms, "house": {"residents": ["person.test_alice", "person.test_bob"]}, "responses": {"notify_services": ["notify.persistent_notification"], "dry_run": True}}
+    data = {"rooms": rooms, "house": {"residents": ["person.test_alice", "person.test_bob"]}, "responses": {"dry_run": True}}
     data["entities"] = build_entity_meta(hass, data)
     assert data["entities"]["binary_sensor.test_kitchen_motion"]["strength"] == "medium"
     entry = MockConfigEntry(domain=DOMAIN, data=data, version=1, minor_version=2)
@@ -83,6 +84,10 @@ async def test_walkthrough_steps_one_and_two(hass, freezer, caplog):
     # Back door 40, then medium motion 30 x 1.5 for the entry chain: 85, two seconds of decay later.
     assert float(hass.states.get("sensor.siem_risk_score").state) == pytest.approx(85, abs=0.5)
     assert hass.states.get("sensor.siem_tier").state == "alarm"
+    # The package's own automation shows SIEM's alerts as persistent notifications.
+    await hass.async_block_till_done()
+    titles = [n["title"] for n in pn._async_get_or_create_notifications(hass).values()]
+    assert "SIEM verify: Test Kitchen" in titles and "SIEM alarm: Test Kitchen" in titles
     assert not template_errors(caplog), template_errors(caplog)
 
 

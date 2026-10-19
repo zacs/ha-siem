@@ -2,7 +2,7 @@
 
 import pytest
 
-from custom_components.siem.core.arm import ARM_SERVICES, recommend_arm_mode
+from custom_components.siem.core.arm import ARM_MODES, recommend_arm_mode
 
 
 @pytest.mark.parametrize(
@@ -20,7 +20,7 @@ from custom_components.siem.core.arm import ARM_SERVICES, recommend_arm_mode
 )
 def test_recommendation(mode, night, expected):
     assert recommend_arm_mode(mode, night) == expected
-    assert ARM_SERVICES[expected].startswith("alarm_")
+    assert expected in ARM_MODES
 
 
 def test_unknown_mode():

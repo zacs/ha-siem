@@ -45,7 +45,7 @@ async def step(freezer, seconds: float, steps: int = 50) -> None:
             await asyncio.sleep(0)
 
 
-async def test_live_deterrence_runs_even_when_a_speaker_hangs(hass, freezer, siem_events, notify_calls):
+async def test_live_deterrence_runs_even_when_a_speaker_hangs(hass, freezer, siem_events):
     light_calls = async_mock_service(hass, "light", "turn_on")
     script_calls = async_mock_service(hass, "script", "turn_on")
     create_calls = async_mock_service(hass, "scene", "create")
@@ -70,7 +70,7 @@ async def test_live_deterrence_runs_even_when_a_speaker_hangs(hass, freezer, sie
         assert [c.data["entity_id"] for c in light_calls] == ["light.kitchen"] * 2
         assert [c.data["entity_id"] for c in script_calls] == ["script.house_deter"] * 2
         assert hass.states.get("binary_sensor.siem_alarm_trigger").state == "on"
-        assert any(call.data["title"] == "SIEM alarm: Kitchen" for call in notify_calls)
+        assert notifications(siem_events, "alarm")[0]["title"] == "SIEM alarm: Kitchen"
         assert play_calls == []
         await step(freezer, 3)
     await hass.async_block_till_done()
@@ -110,34 +110,23 @@ async def test_verify_alerts_again_when_the_score_doubles(hass, freezer, siem_ev
     assert again[1]["message"].splitlines()[0] == "[DRY RUN] Score 60, house vacant, score doubled since the last alert."
 
 
-async def test_arming_follows_the_house_mode(hass, freezer, siem_events):
-    arm_calls = async_mock_service(hass, "alarm_control_panel", "alarm_arm_away")
-    disarm_calls = async_mock_service(hass, "alarm_control_panel", "alarm_disarm")
-    await setup_siem(hass, responses={"dry_run": False, "auto_arm": True})
+async def test_the_alarm_panel_is_never_touched(hass, freezer, siem_events, service_calls):
+    await setup_siem(hass, responses={"dry_run": False, "auto_alarm": True})
+    assert hass.states.get("sensor.siem_recommended_alarm_mode").state == "armed_away"
     hass.states.async_set("person.alice", "home", {"device_trackers": ["device_tracker.alice_phone"], "user_id": "trusted-user"})
     await hass.async_block_till_done()
     assert hass.states.get("sensor.siem_house_mode").state == "family"
-    assert [c.data["entity_id"] for c in disarm_calls] == ["alarm_control_panel.house"]
+    assert hass.states.get("sensor.siem_recommended_alarm_mode").state == "disarmed"
     hass.states.async_set("person.alice", "not_home", {"device_trackers": ["device_tracker.alice_phone"], "user_id": "trusted-user"})
     await hass.async_block_till_done()
     await tick(hass, freezer, 31 * 60)
-    assert hass.states.get("sensor.siem_house_mode").state == "vacant"
-    assert [c.data["entity_id"] for c in arm_calls] == ["alarm_control_panel.house"]
-    messages = [n["message"] for n in notifications(siem_events, "arm")]
-    assert messages == ["Set House Alarm to disarmed (house family).", "Set House Alarm to armed away (house vacant)."]
+    assert hass.states.get("sensor.siem_recommended_alarm_mode").state == "armed_away"
+    # The recommendation is a sensor for your own automations; SIEM never calls the panel or a notify service.
+    assert not [call for call in service_calls if call[0] in ("alarm_control_panel", "notify")]
+    assert {n["category"] for n in notifications(siem_events)} <= {"verify", "deter", "alarm", "break_glass", "digest"}
 
 
-async def test_arming_in_dry_run_only_says_so(hass, freezer, siem_events):
-    arm_calls = async_mock_service(hass, "alarm_control_panel", "alarm_disarm")
-    await setup_siem(hass, responses={"auto_arm": True})
-    hass.states.async_set("person.alice", "home", {"device_trackers": [], "user_id": "trusted-user"})
-    await hass.async_block_till_done()
-    assert arm_calls == []
-    arm = notifications(siem_events, "arm")[0]
-    assert arm["message"] == "[DRY RUN] Would set House Alarm to disarmed (house family)." and arm["armed"] is False
-
-
-async def test_digest_falls_back_to_counts_without_an_ai_task(hass, freezer, siem_events, notify_calls):
+async def test_digest_falls_back_to_counts_without_an_ai_task(hass, freezer, siem_events):
     await setup_siem(hass)
     await tick(hass, freezer, 60)
     hass.states.async_set("binary_sensor.back_door", "on")
@@ -147,6 +136,8 @@ async def test_digest_falls_back_to_counts_without_an_ai_task(hass, freezer, sie
     assert digest["title"] == "SIEM digest"
     assert digest["message"] == "1 incidents (1 verify), 0 weight changes"
     assert digest["summary"]["incident_count"] == 1
+    assert set(digest["summary"]) == {"since", "until", "incident_count", "labels", "weight_changes", "counts"}
+    assert digest["incident"] is None and digest["actions"] == []
 
 
 async def test_mobile_label_buttons(hass, freezer):

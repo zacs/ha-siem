@@ -7,17 +7,9 @@ from .rules import MODE_FAMILY, MODE_GUEST, MODE_SERVICE, MODE_VACANT
 ARMED_AWAY, ARMED_NIGHT, ARMED_HOME, DISARMED = "armed_away", "armed_night", "armed_home", "disarmed"
 ARM_MODES: tuple[str, ...] = (ARMED_AWAY, ARMED_NIGHT, ARMED_HOME, DISARMED)
 
-# alarm_control_panel service that reaches each recommendation.
-ARM_SERVICES = {
-    ARMED_AWAY: "alarm_arm_away",
-    ARMED_NIGHT: "alarm_arm_night",
-    ARMED_HOME: "alarm_arm_home",
-    DISARMED: "alarm_disarm",
-}
-
 
 def recommend_arm_mode(mode: str, night: bool) -> str:
-    """Return the alarm mode the house should be in.
+    """Return the alarm mode the house should be in. SIEM only publishes it; it never touches a panel.
 
     Vacant is always armed away. Family and guest arm the perimeter at
     night and stay disarmed by day because both move around inside. Service

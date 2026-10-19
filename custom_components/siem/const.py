@@ -57,15 +57,14 @@ CONF_HOUSE_DETER = "house_deter"
 CONF_HOUSE_ALARM = "house_alarm"
 
 # Responses fields.
-CONF_NOTIFY = "notify_services"
-CONF_ALARM_PANEL = "alarm_panel"
 CONF_AI_TASK = "ai_task_entity"
 CONF_DIGEST_TIMES = "digest_times"
 CONF_DIGEST_EMPTY = "digest_post_when_empty"
 CONF_DRY_RUN = "dry_run"
-CONF_AUTO_ARM = "auto_arm"
 CONF_AUTO_ALARM = "auto_alarm"
-TOGGLES = (CONF_DRY_RUN, CONF_AUTO_ARM, CONF_AUTO_ALARM)
+TOGGLES = (CONF_DRY_RUN, CONF_AUTO_ALARM)
+# Settings removed in 0.2: SIEM no longer sends notifications or touches the alarm panel.
+REMOVED_RESPONSES = ("notify_service", "notify_service_2", "target", "mobile_notify_service", "notify_services", "alarm_panel", "auto_arm")
 
 # Options sections.
 OPT_RULES = "rules"
@@ -87,7 +86,7 @@ DEFAULT_DIGEST_TIMES = ["08:00"]
 # Events SIEM fires for automations to build on.
 EVENT_INCIDENT = "siem_incident"
 EVENT_NOTIFICATION = "siem_notification"
-CATEGORY_BREAK_GLASS, CATEGORY_DIGEST, CATEGORY_ARM = "break_glass", "digest", "arm"
+CATEGORY_BREAK_GLASS, CATEGORY_DIGEST = "break_glass", "digest"
 
 # Events SIEM listens to.
 EVENT_ZWAVE_NOTIFICATION = "zwave_js_notification"
@@ -122,6 +121,5 @@ COOLDOWN_S = 60
 ALARM_TRIGGER_SECONDS = 60
 CSI_CONTACT_WINDOW_S = 60
 AI_TASK_TIMEOUT_S = 20
-NOTIFY_TIMEOUT_S = 30
 SNAPSHOT_TIMEOUT_S = 10
 ACTION_TIMEOUT_S = 15

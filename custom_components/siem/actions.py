@@ -1,4 +1,4 @@
-"""Responses: alerts, deterrence, alarm, arming, break-glass and the dry-run gate."""
+"""Responses: alert events, deterrence, the alarm trigger, break-glass and the dry-run gate."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from homeassistant.core import CALLBACK_TYPE, Context, HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
 
 from . import const
-from .core.arm import ARM_SERVICES
 from .core.dryrun import DRY_RUN_PREFIX, Action, restore_actions, room_deter_actions, whole_house_actions
 from .core.incident import EVENT_TIER_CHANGED, Incident, IncidentEvent
 from .core.messages import alert_message, alert_title
@@ -70,7 +69,7 @@ class Responder:
             actions = [a for a in actions if (a.domain, a.service) != ("scene", "create")]
         elif restore:
             self._deterring.add(room)
-        # Deterrence never waits for a camera or a slow notify service, and the alert never waits for a speaker.
+        # Deterrence never waits for a camera snapshot, and the alert never waits for a slow speaker.
         await asyncio.gather(self.async_run(actions), self._async_alert(incident, tier, actions))
         if restore:
             if cancel := self._restores.pop(room, None):
@@ -93,7 +92,7 @@ class Responder:
         rendered = [action.render() for action in actions]
         message = alert_message(score, c.house_mode, c.notifier.timeline_lines(incident), again=again, actions=rendered, dry_run=self.dry_run)
         title = alert_title(tier, c.room_name(incident.room))
-        await c.notifier.async_notify(tier, title, message, incident=c.notifier.incident_payload(incident), actions=rendered, snapshot=snapshot, again=again)
+        await c.notifier.async_alert(tier, title, message, incident=c.notifier.incident_payload(incident), actions=rendered, snapshot=snapshot, again=again)
 
     def plan(self, incident: Incident, tier: str) -> list[Action]:
         """Build the action list for ``tier``: room deterrence, whole house, alarm."""
@@ -141,23 +140,6 @@ class Responder:
         self._set_alarm_trigger(True)
         async_call_later(self.hass, const.ALARM_TRIGGER_SECONDS, callback(lambda _now: self._set_alarm_trigger(False)))
 
-    async def async_arm(self, recommendation: str) -> None:
-        """Arm or disarm the panel when auto arm is on, and say what happened (or would have)."""
-        c = self.coordinator
-        panel = c.responses.get(const.CONF_ALARM_PANEL)
-        target = recommendation.replace("_", " ")
-        where = c.entity_name(panel) if panel else "the alarm"
-        if c.toggles[const.CONF_AUTO_ARM] and not self.dry_run and panel:
-            armed = await self._async_call(Action("alarm_control_panel", ARM_SERVICES[recommendation], panel))
-            message = f"Set {where} to {target}" if armed else f"Could not set {where} to {target}; see the log"
-        else:
-            armed = False
-            message = f"Would set {where} to {target}"
-        message += f" (house {c.house_mode}{', night' if c.night else ''})."
-        if self.dry_run:
-            message = f"{DRY_RUN_PREFIX} {message}"
-        await c.notifier.async_notify(const.CATEGORY_ARM, "SIEM alarm mode", message, recommendation=recommendation, armed=armed, panel=panel)
-
     async def async_break_glass(self, message: str) -> None:
         """Alert on events that matter whatever the score: a hand unlock while vacant, a keypad lockout, a long outage."""
         c = self.coordinator
@@ -165,4 +147,4 @@ class Responder:
         if self.dry_run:
             text = f"{DRY_RUN_PREFIX} {text}"
         incident = c.engine.current
-        await c.notifier.async_notify(const.CATEGORY_BREAK_GLASS, "SIEM break glass", text, incident=c.notifier.incident_payload(incident) if incident else None)
+        await c.notifier.async_alert(const.CATEGORY_BREAK_GLASS, "SIEM break glass", text, incident=c.notifier.incident_payload(incident) if incident else None)

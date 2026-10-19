@@ -19,7 +19,6 @@
     },
     "switch": {
       "dry_run": { "default": "mdi:test-tube" },
-      "auto_arm": { "default": "mdi:shield-lock" },
       "auto_alarm": { "default": "mdi:alarm-light" }
     },
     "select": {

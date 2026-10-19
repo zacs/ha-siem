@@ -23,23 +23,25 @@ tell it so, and it gets less jumpy about the sensors that misfired. Everything
 starts in dry run, so you can watch what it would have done for a week before
 you let it touch anything.
 
-- **Three tiers.** Verify sends an alert. Deter turns on the room's lights,
-  plays a sound and runs your scripts. Alarm adds sirens and your alarm panel.
+- **Three tiers.** Verify raises an alert. Deter also turns on the room's
+  lights, plays a sound and runs your scripts. Alarm adds your siren scripts
+  and a trigger sensor your alarm panel can watch.
 - **Four house modes.** Family, guest, service and vacant, worked out from
   presence, a calendar and PIN codes. The same open door means something
   different in each.
-- **Plain Home Assistant events.** Every alert is an event, so you can send it
-  anywhere with an ordinary automation.
+- **Plain Home Assistant events.** SIEM never sends a notification or touches
+  your alarm panel. Its state lives in entities and every alert is an event, so
+  you decide what happens with ordinary automations.
 
 ## Requirements
 
-- Home Assistant 2025.8 or newer, and [HACS](https://www.hacs.xyz/docs/use/download/download/)
+- Home Assistant 2026.10 or newer, and [HACS](https://www.hacs.xyz/docs/use/download/download/)
   (Home Assistant Community Store) to install it.
 - Door, window or motion sensors, assigned to areas.
 - People (person entities) with device trackers, so SIEM knows when someone is
   home.
-- Somewhere for alerts to go: any notify service, one of the sample packages,
-  or your own automation.
+- An automation that does something with SIEM's alerts. The sample packages
+  are a starting point.
 
 That's it. Everything below is optional.
 
@@ -49,7 +51,7 @@ Each of these adds something. None of them is required.
 
 | Add | What you get |
 | --- | --- |
-| An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | A recommended alarm mode, optional auto arm and disarm, and a trigger sensor your panel can watch. Any `alarm_control_panel` works. |
+| An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | A trigger sensor your panel can watch at the alarm tier, and a recommended alarm mode you can automate. SIEM never arms or disarms anything itself. |
 | [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM) | Guest mode when someone uses their PIN, and alerts for hand unlocks and unknown codes on any lock LCM supports. Z-Wave JS locks get the lock alerts without it. |
 | [Mattermost](https://github.com/cerebrate/ha-mattermost) | Coloured alerts with the timeline, the actions and a camera snapshot, through `packages/siem_mattermost.yaml`. |
 | The [companion app](https://companion.home-assistant.io/) | Push alerts with *False alarm*, *That's me*, *Real* and *Guest* buttons, through `packages/siem_mobile_app.yaml`. |
@@ -81,8 +83,8 @@ The setup flow walks through:
   each one watches.
 - **Trust, night and deterrence.** Trusted users, the night window, the deter
   sound or message, and whole-house deter and alarm scripts.
-- **Responses.** Plain-text notify services, the alarm panel, the AI task,
-  digest times and the safety switches. Dry run is on until you turn it off.
+- **Responses.** The AI task, digest times, and the dry run and auto alarm
+  switches. Dry run is on until you turn it off.
 
 You can change any of it later from the integration's **Configure** menu.
 
@@ -108,24 +110,9 @@ A few things live outside the flow:
 
 ## Alerts and events
 
-The simplest setup needs no automations: pick one or more notify services in
-the responses step, and SIEM sends every alert to them as plain text.
-
-Every alert is also a Home Assistant event, so you can route it anywhere:
-
-- **`siem_notification`** fires for every alert. `category` is `verify`,
-  `deter`, `alarm`, `break_glass`, `arm` or `digest`. It also carries `title`,
-  `message` (the plain text), `dry_run`, `incident` (when there is one),
-  `actions` (what ran, or would have), `snapshot` (the camera snapshot's path)
-  and `again` (a second verify alert because the score doubled).
-- **`siem_incident`** fires when an incident opens, changes tier or closes,
-  with `kind` set to `opened`, `tier_changed` or `closed`.
-
-An incident carries `incident_id`, `tier`, `peak_tier`, `score`, `peak_score`,
-`room`, `mode` (the house mode when it opened), `house_mode`, `person` (the
-Lock Code Manager user, when a PIN was used), `started`, `closed`, `labels`,
-`top_contributors` and `timeline`. Each timeline entry has `at`, `rule`,
-`points`, `entity_id`, `name`, `description` and `detail`.
+SIEM keeps its state in entities and announces everything else as events. It
+never sends a notification or changes your alarm panel itself; what happens
+next is up to your own automations.
 
 ```yaml
 automation:
@@ -149,6 +136,79 @@ Two ready-made packages live in [`packages/`](packages). Copy one into
   a Mattermost channel with colours, fields, the timeline and the snapshot.
 - [`siem_mobile_app.yaml`](packages/siem_mobile_app.yaml) pushes alerts to a
   phone with label buttons. SIEM listens for the button presses itself.
+
+### `siem_notification`
+
+Fires for every alert. Every field is always present, so templates need no
+guards.
+
+| Field | Type | What it holds |
+| --- | --- | --- |
+| `category` | string | `verify`, `deter`, `alarm`, `break_glass` or `digest` |
+| `title` | string | A short title, such as `SIEM verify: Kitchen` |
+| `message` | string | The alert as plain text: score, house mode, the latest events and the actions |
+| `dry_run` | boolean | True while dry run is on; the message then starts with `[DRY RUN]` |
+| `incident` | object or null | The incident, described below. Set for verify, deter and alarm, and for break glass while an incident is open |
+| `actions` | list of strings | For deter and alarm, each action that ran, or would have in dry run, such as `light.turn_on light.kitchen brightness_pct=100`. Empty otherwise |
+| `snapshot` | string or null | The path of the room camera's snapshot, when the room has a camera |
+| `again` | boolean | True for a second verify alert, sent because the score doubled |
+| `summary` | object or null | Digest only: `since`, `until`, `incident_count`, `labels`, `weight_changes` (a count) and `counts` (one line of totals) |
+
+When each category fires:
+
+- `verify` once when an incident reaches the verify tier, and again with
+  `again` set if its score doubles while it is still at verify.
+- `deter` and `alarm` when an incident climbs to that tier.
+- `break_glass` whatever the score: a hand unlock while vacant, a keypad
+  lockout, or a sensor unavailable for over an hour while vacant.
+- `digest` at each digest time, or when you run `siem.run_digest`.
+
+### `siem_incident`
+
+Fires when an incident opens, changes tier or closes. It carries every field
+of the incident object below, plus:
+
+| Field | Type | What it holds |
+| --- | --- | --- |
+| `kind` | string | `opened`, `tier_changed` or `closed` |
+| `tier` | string | The tier after this change |
+| `previous_tier` | string | The tier before it |
+
+`event.siem_incident` fires on the same changes for automations built in the
+UI. Its attributes are `event_type` (the `kind`), `incident_id`, `tier`,
+`previous_tier`, `score`, `room` and `mode`.
+
+### The incident object
+
+| Field | Type | What it holds |
+| --- | --- | --- |
+| `incident_id` | string | Eight hex characters, such as `3f9a1c2b` |
+| `tier` | string | `none`, `verify`, `deter` or `alarm` |
+| `peak_tier` | string | The highest tier it reached |
+| `score` | number | The live score; 0 once closed |
+| `peak_score` | number | The highest score it reached |
+| `room` | string or null | The room it started in |
+| `mode` | string | The house mode when it opened |
+| `house_mode` | string | The house mode now |
+| `person` | string or null | The Lock Code Manager user, when an allowed PIN was used |
+| `started` | string | When it opened, as local ISO 8601 time |
+| `closed` | string or null | When it closed, as local ISO 8601 time |
+| `labels` | list of strings | The labels given so far |
+| `top_contributors` | list of objects | Up to five rules driving the score now, each with `rule`, `points` and `entities`. Empty once closed |
+| `timeline` | list of objects | The first ten events, each described below |
+
+Each timeline entry has:
+
+| Field | Type | What it holds |
+| --- | --- | --- |
+| `at` | string | When it happened, as local ISO 8601 time |
+| `rule` | string | The rule id, or `family_arrival` or `allowed_pin` for a suppressor |
+| `points` | number | Its points after chains, before weights and decay; negative for a suppressor |
+| `entity_id` | string or null | The entity that set it off |
+| `name` | string or null | That entity's friendly name |
+| `room` | string or null | The room it happened in |
+| `description` | string | The rule in plain words, such as `An exterior door or window opened` |
+| `detail` | string | A short note, such as `opened` or `allowed PIN used by Pat` |
 
 Snapshots go to `siem/` in your media folder, newest 200 kept. You can see them
 in the media browser after you log in.
@@ -238,20 +298,19 @@ Service during a `Service:` event. Vacant otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
 restarts.
 
-**Arming.** The recommended alarm mode is armed away while vacant, armed night
-at night when someone is home, and disarmed by day and during service visits.
-With auto arm on and dry run off, SIEM sets your panel to match, both arming
-and disarming. Disarming follows presence, so a phone that says it's home
-disarms the panel; leave auto arm off if you'd rather not make that trade.
+**Recommended alarm mode.** Armed away while vacant, armed night at night when
+someone is home, and disarmed by day and during service visits. SIEM only
+publishes it, as `sensor.siem_recommended_alarm_mode`; it never arms or
+disarms anything. If you want your panel to follow it, write that automation
+yourself.
 
-**Responses.** Verify alerts once, and again if the score doubles. Deter
-alerts and runs the room's deterrence (lights to full, speakers to the deter
+**Responses.** Verify raises an alert once, and again if the score doubles.
+Deter raises an alert and runs the room's deterrence (lights to full, speakers to the deter
 volume, the sound or spoken message, the room script, speakers restored
 afterwards) and the whole-house deter scripts. Alarm adds the whole-house alarm
-scripts and switches and, with auto alarm on, pulses the alarm trigger. Break
-glass alerts whatever the score: a hand unlock while vacant, a keypad lockout,
-or a sensor unavailable for over an hour while vacant. In dry run every alert
-starts with `[DRY RUN]` and lists what would have run.
+scripts and switches and, with auto alarm on, turns on the alarm trigger for
+60 seconds. Break glass raises an alert whatever the score. In dry run nothing
+runs, and every alert starts with `[DRY RUN]` and lists what would have.
 
 ## Entities and actions
 
@@ -265,7 +324,7 @@ starts with `[DRY RUN]` and lists what would have run.
 | `sensor.siem_recommended_alarm_mode` | `armed_away`, `armed_night`, `armed_home` or `disarmed` |
 | `binary_sensor.siem_night` | On inside the night window |
 | `binary_sensor.siem_alarm_trigger` | On for 60 seconds at the alarm tier, with auto alarm on |
-| `switch.siem_dry_run`, `switch.siem_auto_arm`, `switch.siem_auto_alarm` | The safety switches; they survive restarts |
+| `switch.siem_dry_run`, `switch.siem_auto_alarm` | The safety switches; they survive restarts |
 | `select.siem_label_last_incident` | Label the open or most recent incident |
 | `event.siem_incident` | `opened`, `tier_changed` and `closed`, for automations built in the UI |
 
@@ -277,9 +336,10 @@ Actions: `siem.label_incident`, `siem.run_digest`, `siem.reset_weights` and
 [`dev/siem_test_entities.yaml`](dev/siem_test_entities.yaml) is a package that
 builds a fake house of `Test ...` entities: three rooms of sensors, lights and
 power, a speaker, a lock, a Lock Code Manager style event entity, two people,
-an alarm panel, and scripts that send Z-Wave lock notifications. Copy it to
-`<config>/packages/`, restart, create the three areas it names, and follow the
-setup answers at the top of the file. It needs Home Assistant 2025.9 or newer.
+and scripts that send Z-Wave lock notifications. It also has an automation that
+shows every alert as a persistent notification. Copy it to `<config>/packages/`,
+restart, create the three areas it names, and follow the setup answers at the
+top of the file.
 
 A simulated household then runs the house. Every two seconds each sensor rolls
 dice, with odds that follow the time of day: quiet at night, a busy kitchen in

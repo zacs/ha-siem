@@ -22,7 +22,7 @@ def noon(freezer):
 
 
 async def settle(hass) -> None:
-    """Let SIEM's response task fire its event, then the package's automation run (a loop turn later on older cores)."""
+    """Let SIEM's response task fire its event, then the package's automation run."""
     for _ in range(3):
         await hass.async_block_till_done()
 
@@ -35,7 +35,7 @@ async def load_package(hass, name: str) -> None:
 
 async def test_mattermost_package(hass, freezer):
     posts = async_mock_service(hass, "notify", "mattermost")
-    await setup_siem(hass, responses={"notify_services": []})
+    await setup_siem(hass)
     await load_package(hass, "siem_mattermost")
     flip(hass, "binary_sensor.back_door")
     await settle(hass)
@@ -70,7 +70,7 @@ async def test_mattermost_package(hass, freezer):
 
 async def test_mobile_app_package_and_label_buttons(hass, freezer):
     pushes = async_mock_service(hass, "notify", "mobile_app_your_phone")
-    entry = await setup_siem(hass, responses={"notify_services": []})
+    entry = await setup_siem(hass)
     await load_package(hass, "siem_mobile_app")
     flip(hass, "binary_sensor.back_door")
     await settle(hass)

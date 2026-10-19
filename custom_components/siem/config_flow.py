@@ -134,19 +134,15 @@ def _house_deter_schema(users: list[dict[str, str]]) -> vol.Schema:
     return vol.Schema({vol.Optional(c.CONF_TRUSTED_USERS): _select(users, multiple=True, custom_value=True), **HOUSE_DETER_FIELDS})
 
 
-def _responses_schema(services: list[str]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Optional(c.CONF_NOTIFY): _select(services, multiple=True, custom_value=True),
-            vol.Optional(c.CONF_ALARM_PANEL): _entity("alarm_control_panel", multiple=False),
-            vol.Optional(c.CONF_AI_TASK): _entity("ai_task", multiple=False),
-            vol.Optional(c.CONF_DIGEST_TIMES, default=c.DEFAULT_DIGEST_TIMES): _text(multiple=True),
-            vol.Optional(c.CONF_DIGEST_EMPTY, default=True): sel.BooleanSelector(),
-            vol.Optional(c.CONF_DRY_RUN, default=True): sel.BooleanSelector(),
-            vol.Optional(c.CONF_AUTO_ARM, default=False): sel.BooleanSelector(),
-            vol.Optional(c.CONF_AUTO_ALARM, default=False): sel.BooleanSelector(),
-        }
-    )
+RESPONSES_SCHEMA = vol.Schema(
+    {
+        vol.Optional(c.CONF_AI_TASK): _entity("ai_task", multiple=False),
+        vol.Optional(c.CONF_DIGEST_TIMES, default=c.DEFAULT_DIGEST_TIMES): _text(multiple=True),
+        vol.Optional(c.CONF_DIGEST_EMPTY, default=True): sel.BooleanSelector(),
+        vol.Optional(c.CONF_DRY_RUN, default=True): sel.BooleanSelector(),
+        vol.Optional(c.CONF_AUTO_ALARM, default=False): sel.BooleanSelector(),
+    }
+)
 
 
 async def _user_options(hass: HomeAssistant) -> tuple[list[dict[str, str]], list[UserInfo]]:
@@ -154,11 +150,6 @@ async def _user_options(hass: HomeAssistant) -> tuple[list[dict[str, str]], list
     users = [u for u in await hass.auth.async_get_users() if u.is_active]
     options = [{"value": u.id, "label": f"{u.name or u.id}{' (system)' if u.system_generated else ''}"} for u in users]
     return sorted(options, key=lambda o: o["label"].casefold()), [UserInfo(u.id, u.name, u.system_generated) for u in users]
-
-
-def _notify_services(hass: HomeAssistant) -> list[str]:
-    """Return the notify services that take a plain message (send_message needs a notify entity)."""
-    return sorted(f"notify.{name}" for name in hass.services.async_services_for_domain("notify") if name != "send_message")
 
 
 ROOM_ROLES = ((c.CONF_OCCUPANCY, ent.ROLE_OCCUPANCY), (c.CONF_PERIMETER, ent.ROLE_PERIMETER), (c.CONF_INTERIOR_DOORS, ent.ROLE_INTERIOR_DOOR), (c.CONF_LIGHTS, ent.ROLE_LIGHT), (c.CONF_POWER, ent.ROLE_POWER))
@@ -298,28 +289,25 @@ class SiemStepsMixin:
         return self.async_show_form(step_id="house_deter", data_schema=self.add_suggested_values_to_schema(schema, defaults))
 
     async def async_step_responses(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Notify, alarm panel, AI task, digest and safety toggles."""
+        """AI task, digest and the safety switches."""
         errors: dict[str, str] = {}
-        schema = _responses_schema(_notify_services(self.hass))
         if user_input is not None:
-            if any(not str(s).startswith("notify.") for s in user_input.get(c.CONF_NOTIFY) or []):
-                errors[c.CONF_NOTIFY] = "invalid_notify"
             try:
                 parse_times(user_input.get(c.CONF_DIGEST_TIMES) or [])
             except ValueError:
                 errors[c.CONF_DIGEST_TIMES] = "invalid_time"
             if not errors:
-                _merge(self._data[c.CONF_RESPONSES], schema, user_input)
+                _merge(self._data[c.CONF_RESPONSES], RESPONSES_SCHEMA, user_input)
                 return await self._async_finish()
-        suggested = self.add_suggested_values_to_schema(schema, user_input or self._data[c.CONF_RESPONSES])
-        return self.async_show_form(step_id="responses", data_schema=suggested, errors=errors)
+        schema = self.add_suggested_values_to_schema(RESPONSES_SCHEMA, user_input or self._data[c.CONF_RESPONSES])
+        return self.async_show_form(step_id="responses", data_schema=schema, errors=errors)
 
 
 class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN):
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     def __init__(self) -> None:
         """Start with empty sections."""

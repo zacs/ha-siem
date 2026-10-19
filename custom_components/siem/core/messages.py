@@ -1,4 +1,4 @@
-"""Plain-text notification titles and bodies, shared by every notify service."""
+"""Plain-text alert titles and bodies, carried on every siem_notification event."""
 
 from __future__ import annotations
 

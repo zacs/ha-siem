@@ -189,7 +189,6 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._apply_calendar(self.hass.states.get(calendar))
         self._update_presence(now)
         self._refresh_mode(now)
-        # Never arm or disarm at startup; the recommendation only acts when the mode or night changes.
         self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
         self.publish(now, force=True)
 
@@ -264,9 +263,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             light = {key: payload[key] for key in (c.ATTR_INCIDENT_ID, "tier", "previous_tier", "score", "room", "mode")}
             async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, light)
         changed = previous != (self.house_mode, self.night)
-        if changed and (recommendation := recommend_arm_mode(self.house_mode, self.night)) != self.recommended_arm:
-            self.recommended_arm = recommendation
-            self.create_task(self.responder.async_arm(recommendation), "siem arm")
+        if changed:
+            # Published as a sensor only; acting on it, or not, is up to the user's own automations.
+            self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
         self.publish(now, force=bool(events) or changed)
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
