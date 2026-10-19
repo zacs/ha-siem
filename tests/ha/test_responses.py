@@ -33,7 +33,11 @@ async def test_a_break_in_raises_alerts_and_the_alarm_trigger_and_nothing_else(h
     assert alarm["title"] == "SIEM alarm: Kitchen"
     assert alarm["incident"]["area_id"] == "kitchen" and alarm["incident"]["room"] == "Kitchen"
     assert hass.states.get("sensor.siem_tier").state == "alarm"
-    # The alarm trigger is on while the incident is at the alarm tier, for an alarm panel to watch.
+    # The alarm trigger, for an alarm panel to watch, waits a minute at the alarm tier: time for a late phone to report home.
+    assert hass.states.get("binary_sensor.siem_alarm_trigger").state == "off"
+    await tick(hass, freezer, 59)
+    assert hass.states.get("binary_sensor.siem_alarm_trigger").state == "off"
+    await tick(hass, freezer, 1)
     assert hass.states.get("binary_sensor.siem_alarm_trigger").state == "on"
     assert not [call for call in service_calls if call[0] in ACTION_DOMAINS]
     while hass.states.get("sensor.siem_tier").state == "alarm":

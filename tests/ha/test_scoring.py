@@ -1,4 +1,4 @@
-"""Scoring inside Home Assistant: origins, startup, outages, cooldowns, guest mode, labels, locks."""
+"""Scoring inside Home Assistant: the physical filter, startup, outages, cooldowns, guest mode, labels, locks."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from homeassistant.core import Context
 from homeassistant.exceptions import ServiceValidationError
 import pytest
 
-from .conftest import GUEST_USER, RESIDENT, notifications, scored, setup_siem, tick
+from .conftest import GUEST_USER, RESIDENT, flip, notifications, scored, setup_siem, tick
 
 
 @pytest.fixture(autouse=True)
@@ -45,12 +45,19 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert not [call for call in service_calls if call[0] in ("notify", "alarm_control_panel")]
 
 
-async def test_automations_users_and_homekit(hass, freezer, siem_events):
+async def test_only_what_physically_happened_scores(hass, freezer, siem_events):
     entry = await setup_siem(hass)
-    # A time-triggered automation has neither parent nor user; its context is announced by automation_triggered.
-    run = Context()
-    hass.bus.async_fire("automation_triggered", {"name": "Porch at sunset"}, context=run)
-    hass.states.async_set("light.kitchen", "on", {"friendly_name": "Kitchen Light"}, context=run)
+
+    async def integration(call):
+        """Stand-in for any integration: the state it writes carries the service call's context."""
+        hass.states.async_set(call.data["entity_id"], call.data["state"], context=call.context)
+
+    hass.services.async_register("test", "set", integration)
+    # A time-triggered automation, a HomeKit Bridge command and a voice assistant all reach the house through a
+    # service call; the first two have neither parent nor user, so only the call_service event gives them away.
+    for context in (Context(), Context(), Context(user_id=RESIDENT)):
+        await hass.services.async_call("test", "set", {"entity_id": "light.kitchen", "state": "on"}, blocking=True, context=context)
+        hass.states.async_set("light.kitchen", "off", {}, context=Context(parent_id="x"))
     # A state-triggered automation carries a parent id.
     hass.states.async_set("binary_sensor.fridge_door", "on", {"device_class": "door"}, context=Context(parent_id="trigger"))
     # Any Home Assistant user: a resident, another account, or a system user such as Presence Simulation's or Home Assistant Cloud's.
@@ -60,15 +67,26 @@ async def test_automations_users_and_homekit(hass, freezer, siem_events):
         await hass.async_block_till_done()
         hass.states.async_set("light.kitchen_2", "on", {"friendly_name": "Kitchen Light 2"}, context=Context(user_id=user_id))
         await hass.async_block_till_done()
+    # A light told to turn on that reports back after its command's context has expired.
+    hass.bus.async_fire("call_service", {"domain": "light", "service": "turn_on", "service_data": {"entity_id": "light.kitchen"}}, context=Context())
+    await tick(hass, freezer, 20)
+    flip(hass, "light.kitchen")
+    # A plug switched on in the kitchen by area, whose power reading follows a minute later with no context of its own.
+    hass.bus.async_fire("call_service", {"domain": "switch", "service": "turn_on", "service_data": {"area_id": "kitchen"}}, context=Context())
+    await tick(hass, freezer, 60)
+    flip(hass, "sensor.coffee_power", "800")
+    await hass.async_block_till_done()
     assert scored(entry) == []
-    # A light switched from Apple Home scores the HomeKit rule.
-    homekit = Context()
-    hass.bus.async_fire("homekit_state_change", {"entity_id": "light.kitchen"}, context=homekit)
+    # Asking an integration to refresh a sensor is not Home Assistant changing anything: what it reports happened.
+    refresh = Context()
+    hass.bus.async_fire("call_service", {"domain": "homeassistant", "service": "update_entity", "service_data": {"entity_id": "binary_sensor.back_door"}}, context=refresh)
+    hass.states.async_set("binary_sensor.back_door", "on", {"device_class": "door"}, context=refresh)
+    # And a light switched at the wall once nothing has told it to.
     hass.states.async_set("light.kitchen", "off", {}, context=Context(parent_id="x"))
+    await tick(hass, freezer, 30)
+    flip(hass, "light.kitchen")
     await hass.async_block_till_done()
-    hass.states.async_set("light.kitchen", "on", {}, context=homekit)
-    await hass.async_block_till_done()
-    assert scored(entry) == [("light_homekit", 5.0, "light.kitchen")]
+    assert [r for r, _, _ in scored(entry)] == ["exterior_door_opened", "light_physical"]
 
 
 async def test_startup_and_reconnects_are_not_events(hass, freezer):
@@ -155,19 +173,25 @@ async def test_people_labels_leave_weights_alone(hass, freezer):
 
 
 async def test_lock_events_only_for_configured_locks(hass, freezer, siem_events):
-    entry = await setup_siem(hass)
+    entry = await setup_siem(hass, house={"lcm_events": ["event.lcm_pat", "event.lcm_old"]})
+    hass.states.async_set("event.lcm_old", "unknown", {"code_slot": 4, "name": "Old cleaner", "active": False})
     hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.shed", "action_text": "Manual unlock operation", "code_slot": 0})
+    hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Invalid code", "code_slot": 0})
     await hass.async_block_till_done()
-    assert scored(entry) == []
-    hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Keypad unlock operation", "code_slot": 3})
-    await hass.async_block_till_done()
-    assert scored(entry) == [], "slot 3 belongs to an LCM user"
-    hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Keypad unlock operation", "code_slot": 9})
+    assert scored(entry) == [], "not a configured lock; one wrong code is a typo"
     hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Manual unlock operation", "code_slot": 0})
     await hass.async_block_till_done()
-    assert [r for r, _, _ in scored(entry)] == ["pin_not_allowed", "manual_unlock"]
     glass = notifications(siem_events, "break_glass")
     assert len(glass) == 1 and glass[0]["message"].startswith("Front Door Lock: a lock was unlocked by hand")
+    hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Keypad unlock operation", "code_slot": 4})
+    await hass.async_block_till_done()
+    assert [r for r, _, _ in scored(entry)] == ["manual_unlock", "pin_not_allowed"]
+    assert hass.states.get("sensor.siem_house_mode").state == "vacant"
+    # Any other code the lock accepts lets someone in, known to Lock Code Manager or not.
+    hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Keypad unlock operation", "code_slot": 9})
+    await hass.async_block_till_done()
+    assert [r for r, _, _ in scored(entry)][-1] == "let_in"
+    assert hass.states.get("sensor.siem_house_mode").state == "guest"
 
 
 async def test_override_survives_a_reload(hass, freezer):

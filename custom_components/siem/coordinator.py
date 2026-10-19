@@ -8,12 +8,27 @@ import functools
 import logging
 from typing import Any
 
+from homeassistant.components.lock import LockState
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_HOME, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import (
+    ATTR_AREA_ID,
+    ATTR_DEVICE_ID,
+    ATTR_DOMAIN,
+    ATTR_ENTITY_ID,
+    ATTR_SERVICE,
+    ATTR_SERVICE_DATA,
+    ENTITY_MATCH_ALL,
+    EVENT_CALL_SERVICE,
+    STATE_HOME,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -23,12 +38,20 @@ from .core import entities as ent
 from .core.arm import recommend_arm_mode
 from .core.house_mode import HouseModeMachine
 from .core.incident import EVENT_CLOSED, IncidentEngine
-from .core.locks import KIND_KEYPAD_LOCKOUT, KIND_KEYPAD_UNLOCK, KIND_MANUAL_UNLOCK, LcmSlot, classify_lock_notification, lcm_slots_from_attributes, pin_allowed
-from .core.occupancy import RoomOccupancy
-from .core.origin import ContextLRU, Origin, classify_origin
+from .core.locks import (
+    KIND_KEYPAD_LOCKOUT,
+    KIND_KEYPAD_UNLOCK,
+    KIND_MANUAL_UNLOCK,
+    LcmSlot,
+    classify_lock_notification,
+    lcm_slots_from_attributes,
+    pin_disabled,
+)
+from .core.occupancy import STRENGTH_MEDIUM, RoomOccupancy
+from .core.origin import ContextLRU, is_physical
 from .core.residual import LoadResidualDetector
-from .core.rules import MODE_VACANT, SUPPRESSOR_ALLOWED_PIN, SUPPRESSOR_FAMILY_ARRIVAL, validate_rule_config, validate_settings
-from .core.scoring import TIER_NONE, TIER_VERIFY
+from .core.rules import MODE_VACANT, SUPPRESSOR_FAMILY_ARRIVAL, SUPPRESSOR_LET_IN, validate_rule_config, validate_settings
+from .core.scoring import TIER_ALARM, TIER_NONE, TIER_VERIFY
 from .core.weights import reset_weights
 from .digest import DigestRunner
 from .store import SiemStore
@@ -61,6 +84,13 @@ def _number(state: State | None) -> float | None:
 def _crossed_up(old: State | None, new: State, threshold: float) -> bool:
     value, previous = _number(new), _number(old)
     return value is not None and previous is not None and previous < threshold <= value
+
+
+def _ids(value: Any) -> list[str]:
+    """Return a service call's entity, device or area target as a list."""
+    if isinstance(value, str):
+        return [value]
+    return [v for v in value if isinstance(v, str)] if isinstance(value, (list, tuple, set)) else []
 
 
 def _parse_time(value: str | None, default: str) -> time:
@@ -96,13 +126,16 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.settings = validate_settings(entry.options.get(c.OPT_ENGINE))
         self.engine = IncidentEngine(self.rules, self.settings, store.weights)
         self.occupancy = RoomOccupancy()
+        self.outside = RoomOccupancy(window_s=c.OUTSIDE_WINDOW_S)
+        self.outdoor_rooms = {r for r, room in self.rooms.items() if room.get(c.CONF_OUTDOORS, ent.is_exterior_area(room.get(c.CONF_NAME)))}
         self.modes = HouseModeMachine(self.now())
         try:
             self.modes.set_override(store.override)
         except ValueError:
             store.override = None
-        self.homekit_contexts = ContextLRU()
-        self.automation_contexts = ContextLRU(size=4096, ttl_s=12 * 3600)
+        # Contexts of recent service calls, and when Home Assistant last switched a configured entity or something in a room.
+        self.caused = ContextLRU(size=4096, ttl_s=c.CAUSED_TTL_S)
+        self._commanded: dict[str, float] = {}
         step, sustain = float(self.house.get(c.CONF_LOAD_STEP, c.DEFAULT_LOAD_STEP)), float(self.house.get(c.CONF_LOAD_SUSTAIN, c.DEFAULT_LOAD_SUSTAIN))
         self.residual = LoadResidualDetector(step, sustain) if self.house.get(c.CONF_LOAD) else None
         self.lcm_slots: dict[int, LcmSlot] = {}
@@ -113,6 +146,10 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.house_mode = MODE_VACANT
         self.night = False
         self.recommended_arm: str | None = None
+        self.alarm_trigger = False
+        self._alarm_held = False
+        self._alarm_timer: Callable[[], None] | None = None
+        self._last_let_in = -1e12
         self.last_label: str | None = None
         self._offline_since: dict[str, float] = {}
         self._offline_scored: set[str] = set()
@@ -170,8 +207,12 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._refresh_residents()
         self._refresh_lcm_slots()
         self._subscribe()
-        listeners = [(name, self._on_homekit) for name in c.EVENTS_HOMEKIT] + [(name, self._on_automation) for name in c.EVENTS_AUTOMATION]
-        listeners += [(c.EVENT_ZWAVE_NOTIFICATION, self._on_zwave), (c.EVENT_LCM_LOCK, self._on_lcm_lock), (c.EVENT_MOBILE_ACTION, self._on_mobile_action)]
+        listeners = [
+            (EVENT_CALL_SERVICE, self._on_call_service),
+            (c.EVENT_ZWAVE_NOTIFICATION, self._on_zwave),
+            (c.EVENT_LCM_LOCK, self._on_lcm_lock),
+            (c.EVENT_MOBILE_ACTION, self._on_mobile_action),
+        ]
         self._unsubs += [self.hass.bus.async_listen(name, handler) for name, handler in listeners]
         self._unsubs.append(async_track_time_interval(self.hass, self._tick, timedelta(seconds=c.TICK_SECONDS)))
         if self.store.last_digest is None:
@@ -187,9 +228,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_stop(self) -> None:
         """Drop every subscription, keep an open incident in the history and flush the store."""
-        for unsub in filter(None, [*self._unsubs, self._state_unsub]):
+        for unsub in filter(None, [*self._unsubs, self._state_unsub, self._alarm_timer]):
             unsub()
-        self._unsubs, self._state_unsub = [], None
+        self._unsubs, self._state_unsub, self._alarm_timer = [], None, None
         if (incident := self.engine.current) is not None:
             self.store.add_incident({**incident.as_dict(), "closed": self.now()})
         await self.store.async_save()
@@ -239,13 +280,16 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not force and not self.engine.should_publish(now, score, tier):
             return
         self.score, self.tier, self.top = score, tier, self.engine.top_contributors(now)
-        self.async_set_updated_data({"score": score, "tier": tier, "mode": self.house_mode, "night": self.night, "incident_id": self.incident_id})
+        self.async_set_updated_data(
+            {"score": score, "tier": tier, "alarm_trigger": self.alarm_trigger, "mode": self.house_mode, "night": self.night, "incident_id": self.incident_id}
+        )
 
     def _process(self, now: float) -> None:
         """Advance the engine, publish, and announce transitions and alerts as events."""
         previous = (self.house_mode, self.night)
         self._refresh_mode(now)
         events = self.engine.evaluate(now)
+        trigger = self._track_alarm()
         score = self.engine.score(now)
         for event in events:
             if event.kind == EVENT_CLOSED:
@@ -258,11 +302,32 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if changed:
             # Published as a sensor only; acting on it, or not, is up to the user's own automations.
             self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
-        self.publish(now, force=bool(events) or changed)
+        self.publish(now, force=bool(events) or changed or trigger)
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
         if events or renotify:
             self.create_task(self.alerts.async_handle(events, incident if renotify else None), "siem alerts")
+
+    def _track_alarm(self) -> bool:
+        """Hold the alarm trigger back until the incident has stayed at the alarm tier for ALARM_GRACE_S.
+
+        A resident whose phone reports home a little after they walk in brings the score down with the arrival
+        before the panel goes off. Returns True when the trigger changed.
+        """
+        at_alarm = self.engine.current is not None and self.engine.current.tier == TIER_ALARM
+        if not at_alarm:
+            if self._alarm_timer is not None:
+                self._alarm_timer()
+            self._alarm_timer, self._alarm_held = None, False
+        elif self._alarm_timer is None and not self._alarm_held:
+            self._alarm_timer = async_call_later(self.hass, c.ALARM_GRACE_S, self._alarm_due)
+        previous, self.alarm_trigger = self.alarm_trigger, at_alarm and self._alarm_held
+        return previous != self.alarm_trigger
+
+    @callback
+    def _alarm_due(self, _now: datetime) -> None:
+        self._alarm_timer, self._alarm_held = None, True
+        self._process(self.now())
 
     def _score(self, rule_id: str, now: float, entity_id: str | None, room: str | None, detail: str, points: float | None = None, allow_open: bool = True) -> None:
         self._refresh_mode(now)
@@ -284,9 +349,70 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return True
 
     def _score_once(self, rule_id: str, key: str, now: float, entity_id: str, room: str | None, detail: str) -> None:
-        self.modes.note_activity(now)
         if self._cooldown_ok(rule_id, key, now):
             self._score(rule_id, now, entity_id, room, detail)
+
+    def _commanded_within(self, key: str | None, now: float, window_s: float) -> bool:
+        return key is not None and now - self._commanded.get(key, -1e12) < window_s
+
+    def _room_of(self, entity_id: str) -> str | None:
+        """Return the configured room (an area) an entity or its device sits in."""
+        entry = er.async_get(self.hass).async_get(entity_id)
+        if entry is None:
+            return None
+        area = entry.area_id
+        if area is None and entry.device_id and (device := dr.async_get(self.hass).async_get(entry.device_id)):
+            area = device.area_id
+        return area if area in self.rooms else None
+
+    @callback
+    @_safe
+    def _on_call_service(self, event: Event) -> None:
+        """Remember what Home Assistant is about to change, so the change is not taken for a person.
+
+        Every service call announces its context here before it runs: automations on any trigger, scripts, the app,
+        voice assistants, HomeKit Bridge, other integrations and the API.
+        """
+        data = event.data
+        domain, service = data.get(ATTR_DOMAIN), data.get(ATTR_SERVICE)
+        if (domain, service) in c.READ_ONLY_SERVICES:
+            return
+        now = self.now()
+        self.caused.add(event.context.id, now)
+        target = data.get(ATTR_SERVICE_DATA) or {}
+        entities, rooms = _ids(target.get(ATTR_ENTITY_ID)), set(_ids(target.get(ATTR_AREA_ID))) & set(self.rooms)
+        if ENTITY_MATCH_ALL in entities:
+            rooms |= set(self.rooms)
+        for entity_id in entities:
+            if entity_id in self.meta:
+                self._commanded[entity_id] = now
+            if room := self._room_of(entity_id):
+                rooms.add(room)
+        devices = dr.async_get(self.hass)
+        for device_id in _ids(target.get(ATTR_DEVICE_ID)):
+            if (device := devices.async_get(device_id)) and device.area_id in self.rooms:
+                rooms.add(device.area_id)
+        for room in rooms:
+            self._commanded[room] = now
+        if opened := self._opened_by(domain, service, entities):
+            self._let_in(now, f"{self.entity_name(opened)} opened from Home Assistant")
+
+    def _opened_by(self, domain: Any, service: Any, entities: list[str]) -> str | None:
+        """Return the configured lock, or the garage door, gate or door cover, a service call is opening.
+
+        Home Assistant unlocking the door or opening the garage (from the app, a voice assistant, Apple Home or an
+        automation) is someone being let in, like a code at the keypad. The door's own contact sensor reports the
+        opening with no trace of the command, so this is where it is recognised.
+        """
+        locks = self.house.get(c.CONF_LOCKS) or []
+        for entity_id in entities:
+            state = self.hass.states.get(entity_id)
+            if domain == "lock" and service in ("unlock", "open") and entity_id in locks:
+                return entity_id
+            entry_cover = domain == "cover" and state is not None and state.attributes.get("device_class") in c.ENTRY_COVER_CLASSES
+            if entry_cover and (service == "open_cover" or (service == "toggle" and state.state in ("closed", "closing"))):
+                return entity_id
+        return None
 
     @callback
     @_safe
@@ -331,29 +457,55 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._on_load(now)
             return
         ctx = event.context
-        origin = classify_origin(
-            parent_id=ctx.parent_id, user_id=ctx.user_id, context_id=ctx.id, homekit_contexts=self.homekit_contexts, now=now, automation_contexts=self.automation_contexts
-        )
-        # Anything a Home Assistant user or an automation did is not evidence: the app, voice assistants through
-        # Home Assistant Cloud, Presence Simulation and other integrations acting as their own users all land here.
-        if origin in (Origin.AUTOMATION, Origin.USER):
+        # Users only matter for this: anything Home Assistant did (an automation, a script, a person in the app, a voice
+        # assistant, HomeKit Bridge, Presence Simulation) is not evidence. What is left physically happened.
+        physical = is_physical(parent_id=ctx.parent_id, user_id=ctx.user_id, context_id=ctx.id, caused=self.caused, now=now)
+        if role == ent.ROLE_LOCK:
+            # Locking and unlocking by hand are scored from the lock's notifications. An unlock Home Assistant made
+            # (through an area or device target the service call did not name) lets someone in.
+            if not physical and new.state == LockState.UNLOCKED and _known(old) and old.state != LockState.UNLOCKED:
+                self._let_in(now, f"{new.name} opened from Home Assistant")
+            return
+        if not physical:
             return
         self._refresh_mode(now)
+        outdoors = room in self.outdoor_rooms
         if role == ent.ROLE_OCCUPANCY and _turned_on(old, new):
-            self.modes.note_activity(now)
-            self._on_occupancy(entity_id, meta, room, now)
+            if outdoors:
+                self._on_outside(entity_id, ent.effective_strength(meta), room, now, "seen" if meta.get("person_detector") else "motion")
+            else:
+                self._on_occupancy(entity_id, meta, room, now)
         elif role == ent.ROLE_PERIMETER and _turned_on(old, new):
+            self.modes.note_activity(now)
             self._contact_last_on[entity_id] = now
             self._score_once("gate_opened" if meta.get("gate") else "exterior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_INTERIOR_DOOR and _turned_on(old, new):
+            # Outdoors, a shed or mailbox contact only says someone is outside.
+            if outdoors:
+                self._on_outside(entity_id, STRENGTH_MEDIUM, room, now, "opened")
+                return
+            self.modes.note_activity(now)
             self._score_once("interior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_LIGHT and _turned_on(old, new):
+            # A light Home Assistant was just told to switch can report after its command's context has expired.
+            if self._commanded_within(entity_id, now, c.COMMANDED_LIGHT_S):
+                return
+            # Outdoors, a light that turns itself on is a motion floodlight: someone is outside.
+            if outdoors:
+                self._on_outside(entity_id, STRENGTH_MEDIUM, room, now, "light on")
+                return
             # One switch can turn on a whole group of bulbs, so lights count once per room.
-            rule = "light_homekit" if origin is Origin.HOMEKIT else "light_physical"
-            self._score_once(rule, room or entity_id, now, entity_id, room, str(origin))
+            self.modes.note_activity(now)
+            self._score_once("light_physical", room or entity_id, now, entity_id, room, "switched on")
         elif role == ent.ROLE_POWER and _crossed_up(old, new, float(meta.get("threshold", c.DEFAULT_POWER_THRESHOLD))):
+            # A power reading has no context of its own: an appliance Home Assistant just switched on in the same
+            # room (its smart plug, a TV through its integration) draws power a little later.
+            if outdoors or self._commanded_within(room, now, c.COMMANDED_POWER_S):
+                return
+            self.modes.note_activity(now)
             self._score_once("appliance_on", entity_id, now, entity_id, room, f"{new.state} W")
         elif role == ent.ROLE_WATER and _crossed_up(old, new, float(meta.get("threshold", c.DEFAULT_WATER_THRESHOLD))):
+            self.modes.note_activity(now)
             self._score_once("water_flow", entity_id, now, entity_id, room, f"flow {new.state}")
         elif role == ent.ROLE_CSI and _turned_on(old, new):
             contact = (self.house.get(c.CONF_CSI_MAP) or {}).get(entity_id)
@@ -363,9 +515,6 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._score_once("door_csi_motion", entity_id, now, entity_id, room, f"{self.entity_name(contact) if contact else 'no door'} stayed closed")
 
     def _on_occupancy(self, entity_id: str, meta: dict[str, Any], room: str | None, now: float) -> None:
-        if meta.get("person_detector"):
-            self._score_once("person_exterior_camera" if meta.get("exterior") else "person_interior_camera", entity_id, now, entity_id, room, "person detected")
-            return
         base = self.rules["interior_occupied"].points_for(self.house_mode)
         if base <= 0:
             return
@@ -373,8 +522,20 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if result.points <= 0:
             return
         allow_open = not (result.weak_alone and self.house_mode == MODE_VACANT)
-        detail = f"{result.strength} source" + (", corroborated" if result.corroborated else "")
+        source = "person detected" if meta.get("person_detector") else f"{result.strength} source"
+        detail = source + (", corroborated" if result.corroborated else "")
         self._score("interior_occupied", now, entity_id, room, detail, points=result.points, allow_open=allow_open)
+
+    def _on_outside(self, entity_id: str, strength: str, room: str | None, now: float, what: str) -> None:
+        """Credit "someone is outside" once per window for the whole outdoors, at its strongest source."""
+        base = self.rules["exterior_occupied"].points_for(self.house_mode, self.night)
+        if base <= 0:
+            return
+        result = self.outside.observe("outside", entity_id, strength, now, base)
+        if result.points <= 0:
+            return
+        detail = what + (", corroborated" if result.corroborated else "")
+        self._score("exterior_occupied", now, entity_id, room, detail, points=result.points, allow_open=not result.weak_alone)
 
     def _on_load(self, now: float) -> None:
         load = _number(self.hass.states.get(self.house[c.CONF_LOAD]))
@@ -386,10 +547,21 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _on_arrival(self, old: State | None, new: State, now: float) -> None:
         self._update_presence(now)
-        # A person and its tracker arrive together; the suppressor applies once per arrival.
+        # A person and its tracker arrive together; the suppressor applies once per arrival. A phone can report home a
+        # little after its owner walked in, so the arrival explains whatever was scored in the minutes before it.
         if new.state == STATE_HOME and (old is None or old.state != STATE_HOME) and now - self._last_arrival >= 60:
             self._last_arrival = now
-            self.engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home")
+            self.engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home", explain_s=c.ARRIVAL_EXPLAINS_S)
+        self._process(now)
+
+    def _let_in(self, now: float, detail: str, person: str | None = None) -> None:
+        """Someone was let in: a code the lock accepted, or an unlock from Home Assistant. Starts the guest clock."""
+        self.modes.let_in(now)
+        if now - self._last_let_in >= c.LET_IN_DEDUPE_S:
+            self._last_let_in = now
+            self.engine.suppress("let_in", SUPPRESSOR_LET_IN, now=now, detail=detail, person=person)
+        elif person and self.engine.current is not None:
+            self.engine.current.person = person
         self._process(now)
 
     def _on_lcm_event(self, old: State | None, new: State, now: float) -> None:
@@ -398,22 +570,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # timestamp is the entity coming back after a restart or reload with its old value.
         if old is None or old.state in (new.state, STATE_UNAVAILABLE):
             return
-        name = str(new.attributes.get("name") or "unknown user")
+        self.modes.note_activity(now)
         if new.attributes.get("operation") == "lock":
-            self.modes.note_activity(now)
             return
-        self.modes.allowed_pin(now)
-        self.engine.suppress("allowed_pin", SUPPRESSOR_ALLOWED_PIN, now=now, detail=f"allowed PIN used by {name}", person=name)
-        self._process(now)
-        self.publish(now, force=True)
-
-    @callback
-    def _on_homekit(self, event: Event) -> None:
-        self.homekit_contexts.add(event.context.id, self.now())
-
-    @callback
-    def _on_automation(self, event: Event) -> None:
-        self.automation_contexts.add(event.context.id, self.now())
+        name = str(new.attributes.get("name") or "unknown user")
+        self._let_in(now, f"code used by {name}", person=name)
 
     @callback
     @_safe
@@ -442,9 +603,15 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._refresh_lcm_slots()
         label = str(label or kind)
         if kind == KIND_MANUAL_UNLOCK:
+            self.modes.note_activity(now)
             self._score("manual_unlock", now, lock, None, label)
-        elif kind == KIND_KEYPAD_UNLOCK and not pin_allowed(slot, self.lcm_slots):
-            self._score("pin_not_allowed", now, lock, None, f"{label}, slot {slot}")
+        elif kind == KIND_KEYPAD_UNLOCK and pin_disabled(slot, self.lcm_slots):
+            self._score("pin_not_allowed", now, lock, None, f"{label}, slot {slot} ({self.lcm_slots[slot].name})")
+        elif kind == KIND_KEYPAD_UNLOCK:
+            # The lock accepted the code, so whoever typed it was given it.
+            self.modes.note_activity(now)
+            known = self.lcm_slots.get(slot) if slot is not None else None
+            self._let_in(now, f"code at {self.entity_name(lock)}" + (f", slot {slot}" if slot is not None else ""), person=known.name if known else None)
         elif kind == KIND_KEYPAD_LOCKOUT:
             self._score("keypad_lockout", now, lock, None, label)
 

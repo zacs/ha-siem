@@ -101,8 +101,6 @@
 #     Ollama). Leave it empty to see the digest fall back to raw counts.
 #   - Label buttons on a phone: packages/siem_mobile_app.yaml needs the
 #     companion app (notify.mobile_app_*).
-#   - HomeKit origin: the homekit_state_change event and the light change must
-#     share one context; YAML cannot fake that, the tests cover it.
 #   - Lock Code Manager: event.test_lcm_guest_credential_used below imitates an
 #     LCM per-user "credential used" event entity (code_slot, name, operation).
 #     It fires from the guest's buttons and from the simulated afternoon visit.
@@ -115,7 +113,8 @@
 # SUGGESTED CONFIG FLOW ANSWERS
 #   Rooms: Test Kitchen, Test Living Room, Test Backyard. The room steps are
 #     pre-filled from the areas; check the fridge door landed under interior
-#     doors and the gate under perimeter openings.
+#     doors, the gate under perimeter openings, and that Test Backyard is
+#     ticked as outdoors (its name does that).
 #   Whole house: residents person.test_alice and person.test_bob; additional
 #     tracker device_tracker.test_second_car; CSI binary_sensor.test_front_door_csi
 #     mapped to binary_sensor.test_front_door; water sensor.test_water_flow with
@@ -139,20 +138,19 @@
 #   1. Turn on "Test Kitchen Back Door (helper)": score 40, tier verify, one
 #      notification with the timeline.
 #   2. Within five minutes turn on "Test Kitchen Motion (helper)": medium
-#      source 30 points x 1.5 entry chain = 45, score 85, tier alarm, and
-#      binary_sensor.siem_alarm_trigger turns on.
-#   3. Turn on "Test Alice Phone Home (helper)": -60 suppressor, house mode
-#      family, recommended alarm mode disarmed.
+#      source 30 points x 1.5 entry chain = 45, score 85, tier alarm, and a
+#      minute later binary_sensor.siem_alarm_trigger turns on.
+#   3. Turn on "Test Alice Phone Home (helper)": the arrival cancels what the
+#      last ten minutes scored (at least 60), score 0, house mode family,
+#      recommended alarm mode disarmed. Within the minute after step 2, the
+#      alarm trigger never turns on: a resident whose phone was late.
 #   4. Turn it off again, wait 30 minutes (or force vacant with
 #      select.siem_house_mode_override), then run
 #      script.test_front_door_manual_unlock: 60 points and a break-glass
 #      alert.
 #   5. Press "Test Guest Uses PIN (helper)": -40, house mode guest, incident
-#      person Test Guest. Run script.test_front_door_keypad_unlock_unknown: 30
-#      (pin_not_allowed); script.test_front_door_keypad_unlock_guest: nothing.
-#      Press the guest's button once before the keypad scripts after a restart:
-#      the rig's event entity only publishes the guest's slot after a press,
-#      while a real Lock Code Manager entity carries it from startup.
+#      person Test Guest. The keypad scripts do the same: any code the lock
+#      accepts lets someone in, whether Lock Code Manager knows it or not.
 #   6. Turn off "Test Kitchen Motion Online (helper)": after two minutes,
 #      sensor_offline 20; after 60 minutes vacant, a break-glass alert.
 #   7. Label the incident with select.siem_label_last_incident. False alarm

@@ -6,7 +6,7 @@ from custom_components.siem.core.locks import (
     KIND_MANUAL_UNLOCK,
     classify_lock_notification,
     lcm_slots_from_attributes,
-    pin_allowed,
+    pin_disabled,
 )
 
 
@@ -36,7 +36,8 @@ def test_lcm_slots_and_allowance():
             "event.broken": {"code_slot": "7"},
         }
     )
-    assert slots[3].name == "Pat" and pin_allowed(3, slots)
-    assert not pin_allowed(4, slots)
-    assert slots[5].name == "slot 5" and pin_allowed(5, slots)
-    assert not pin_allowed(7, slots) and not pin_allowed(None, slots)
+    assert slots[3].name == "Pat" and not pin_disabled(3, slots)
+    assert pin_disabled(4, slots)
+    assert slots[5].name == "slot 5" and not pin_disabled(5, slots)
+    # The lock accepted the code: a slot Lock Code Manager does not know, or no slot at all, is someone let in.
+    assert not pin_disabled(7, slots) and not pin_disabled(None, slots) and not pin_disabled(3, {})

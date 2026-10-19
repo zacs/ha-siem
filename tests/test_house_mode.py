@@ -27,9 +27,9 @@ def test_guest_from_calendar_leaves_after_end_plus_two_hours_and_quiet():
     assert machine.mode(1000 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
 
 
-def test_allowed_pin_flips_to_guest():
+def test_letting_someone_in_flips_to_guest():
     machine = HouseModeMachine(0)
-    machine.allowed_pin(50)
+    machine.let_in(50)
     assert machine.mode(51) == "guest"
     assert machine.mode(50 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
 

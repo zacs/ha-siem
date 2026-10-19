@@ -9,7 +9,7 @@ import secrets
 from typing import Any
 
 from .rules import EngineSettings, Rule, chain_factor
-from .scoring import TIER_NONE, Contribution, compute_score, tier_for, tier_rank, top_contributors
+from .scoring import TIER_NONE, Contribution, compute_score, contribution_value, tier_for, tier_rank, top_contributors
 from .weights import LABELS, apply_label
 
 EVENT_OPENED = "opened"
@@ -162,12 +162,21 @@ class IncidentEngine:
             incident.room = room
         return contribution
 
-    def suppress(self, rule_id: str, points: float, *, now: float, detail: str = "", person: str | None = None) -> Contribution | None:
-        """Apply a negative contribution to the open incident, if any."""
+    def suppress(self, rule_id: str, points: float, *, now: float, detail: str = "", person: str | None = None, explain_s: float = 0.0) -> Contribution | None:
+        """Apply a negative contribution to the open incident, if any.
+
+        With ``explain_s`` the suppressor is at least as large as everything scored in the ``explain_s`` seconds
+        before it: a resident arriving home explains the activity that led up to the arrival.
+        """
         incident = self.current
         if incident is None:
             return None
-        contribution = Contribution(rule_id, -abs(points), now, None, None, detail)
+        recent = sum(
+            contribution_value(c.points, self.weights.get(c.rule_id, 1.0), now - c.at, self.settings.half_life_min)
+            for c in incident.contributions
+            if c.points > 0 and now - c.at <= explain_s
+        )
+        contribution = Contribution(rule_id, -max(abs(points), recent), now, None, None, detail)
         self._append(incident, contribution, now, extend=False)
         if person:
             incident.person = person

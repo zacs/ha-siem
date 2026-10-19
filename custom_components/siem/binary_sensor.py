@@ -7,7 +7,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import SiemConfigEntry
-from .core.scoring import TIER_ALARM
 from .entity import SiemEntity
 
 PARALLEL_UPDATES = 0
@@ -19,7 +18,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_a
 
 
 class SiemBinarySensor(SiemEntity, BinarySensorEntity):
-    """Night is on inside the configured window; the alarm trigger while the open incident is at the alarm tier.
+    """Night is on inside the configured window; the alarm trigger once the open incident has held the alarm tier for a minute.
 
     Add the alarm trigger to your alarm panel (in Alarmo, as an always-on sensor) if you want SIEM to set it off.
     """
@@ -27,4 +26,4 @@ class SiemBinarySensor(SiemEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return the flag from the coordinator."""
-        return self.coordinator.night if self.key == "night" else self.coordinator.tier == TIER_ALARM
+        return self.coordinator.night if self.key == "night" else self.coordinator.alarm_trigger

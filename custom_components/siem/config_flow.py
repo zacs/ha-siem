@@ -68,7 +68,9 @@ def prefill_room(hass: HomeAssistant, area_id: str) -> dict[str, Any]:
             infos.append(ent.EntityInfo(entry.entity_id, entry.domain, entry.device_class or entry.original_device_class, entry.platform, entry.name or entry.original_name, area))
     perimeter, interior = ent.split_openings(i for i in infos if i.domain == "binary_sensor")
     cameras = [i.entity_id for i in infos if i.domain == "camera"]
+    area = ar.async_get(hass).async_get_area(area_id)
     return {
+        c.CONF_OUTDOORS: ent.is_exterior_area(area.name if area else area_id),
         c.CONF_OCCUPANCY: ent.occupancy_candidates(infos),
         c.CONF_PERIMETER: perimeter,
         c.CONF_INTERIOR_DOORS: interior,
@@ -81,6 +83,7 @@ def prefill_room(hass: HomeAssistant, area_id: str) -> dict[str, Any]:
 
 ROOM_SCHEMA = vol.Schema(
     {
+        vol.Optional(c.CONF_OUTDOORS, default=False): sel.BooleanSelector(),
         vol.Optional(c.CONF_OCCUPANCY): _entity("binary_sensor", ent.OCCUPANCY_CLASSES),
         vol.Optional(c.CONF_OCCUPANCY + c.ADDITIONAL): _entity(),
         vol.Optional(c.CONF_PERIMETER): _entity("binary_sensor", ent.OPENING_CLASSES),
@@ -146,13 +149,12 @@ def build_entity_meta(hass: HomeAssistant, data: Mapping[str, Any], existing: Ma
         return entry.device_class or entry.original_device_class, entry.platform, entry.name or entry.original_name
 
     for room_id, room in data.get(c.CONF_ROOMS, {}).items():
-        exterior = ent.is_exterior_area(room.get(c.CONF_NAME))
         for key, role in ROOM_ROLES:
             for entity_id in list(room.get(key) or []) + list(room.get(key + c.ADDITIONAL) or []):
                 device_class, platform, name = registry(entity_id)
                 item: dict[str, Any] = {"role": role, "room": room_id}
                 if role == ent.ROLE_OCCUPANCY:
-                    item.update(strength=ent.derive_strength(device_class, platform), person_detector=ent.is_person_detector(entity_id, name), exterior=exterior)
+                    item.update(strength=ent.derive_strength(device_class, platform), person_detector=ent.is_person_detector(entity_id, name))
                 elif role == ent.ROLE_PERIMETER:
                     item["gate"] = ent.is_gate(entity_id, name)
                 elif role == ent.ROLE_POWER:
@@ -210,6 +212,7 @@ class SiemStepsMixin:
             room: dict[str, Any] = {c.CONF_NAME: area.name if area else self._room}
             _merge(room, ROOM_SCHEMA, user_input)
             room[c.CONF_POWER_THRESHOLD] = user_input.get(c.CONF_POWER_THRESHOLD, c.DEFAULT_POWER_THRESHOLD)
+            room[c.CONF_OUTDOORS] = bool(user_input.get(c.CONF_OUTDOORS))
             self._data[c.CONF_ROOMS][self._room] = room
             self._queue = self._queue[1:]
             if not self._queue:
@@ -263,7 +266,7 @@ class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN)
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 4
+    MINOR_VERSION = 5
 
     def __init__(self) -> None:
         """Start with empty sections."""

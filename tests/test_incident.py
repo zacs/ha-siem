@@ -5,7 +5,7 @@ import itertools
 import pytest
 
 from custom_components.siem.core.incident import EVENT_CLOSED, EVENT_OPENED, EVENT_TIER_CHANGED, IncidentEngine
-from custom_components.siem.core.rules import DEFAULT_RULES, SUPPRESSOR_ALLOWED_PIN, SUPPRESSOR_FAMILY_ARRIVAL, EngineSettings
+from custom_components.siem.core.rules import DEFAULT_RULES, SUPPRESSOR_FAMILY_ARRIVAL, SUPPRESSOR_LET_IN, EngineSettings
 
 
 @pytest.fixture
@@ -87,11 +87,32 @@ def test_chain_only_inside_window(engine):
 def test_suppressors_and_person(engine):
     assert engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=0) is None
     engine.add("exterior_door_opened", mode="vacant", now=0)
-    engine.suppress("allowed_pin", SUPPRESSOR_ALLOWED_PIN, now=1, detail="PIN by Pat", person="Pat")
+    engine.suppress("let_in", SUPPRESSOR_LET_IN, now=1, detail="code used by Pat", person="Pat")
     assert engine.score(1) == 0
     assert engine.current.person == "Pat"
     assert engine.current.timeline[-1]["points"] == -40
     assert engine.current.last_event == 0
+
+
+def test_an_arrival_explains_what_came_just_before(engine):
+    def gate(now):
+        return 30 * 0.5 ** (now / 900)
+
+    engine.add("gate_opened", mode="vacant", now=0)
+    engine.add("exterior_door_opened", mode="vacant", now=700)
+    engine.add("interior_occupied", mode="vacant", now=760)
+    assert engine.score(800) == 100
+    arrival = engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=800, explain_s=600)
+    # The door and the room in the ten minutes before are cancelled, well past the usual 60; the gate from thirteen
+    # minutes earlier is not, and the two stay balanced as they decay.
+    assert arrival.points < -100
+    assert engine.score(800) == pytest.approx(gate(800), abs=0.01)
+    assert engine.score(1400) == pytest.approx(gate(1400), abs=0.01)
+
+
+def test_an_arrival_takes_at_least_sixty(engine):
+    engine.add("door_csi_motion", mode="vacant", now=0)
+    assert engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=10, explain_s=600).points == -60
 
 
 def test_labels_adjust_weights_of_incident_rules(engine):

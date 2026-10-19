@@ -8,12 +8,10 @@ from typing import Any
 
 KIND_MANUAL_UNLOCK, KIND_KEYPAD_UNLOCK, KIND_KEYPAD_LOCKOUT = "manual_unlock", "keypad_unlock", "keypad_lockout"
 
-# Z-Wave access-control labels that read as a lockout. Locks rarely send
-# these; the keypad_lockout rule is opportunistic and nothing depends on it.
-LOCKOUT_HINTS: tuple[str, ...] = (
-    "keypad temporarily disabled", "keypad disabled", "code limit", "attempts", "invalid code", "bad code",
-    "wrong code", "too many",
-)
+# Z-Wave access-control labels that read as a lockout after repeated bad codes. A single wrong code is a
+# typo, not an attack, so labels like "invalid code" do not count. Locks rarely send these; the rule is
+# opportunistic and nothing depends on it.
+LOCKOUT_HINTS: tuple[str, ...] = ("keypad temporarily disabled", "keypad disabled", "code limit", "attempts", "too many")
 
 
 def classify_lock_notification(label: str | None, slot: Any) -> tuple[str | None, int | None]:
@@ -62,8 +60,10 @@ def lcm_slots_from_attributes(attributes_by_entity: Mapping[str, Mapping[str, An
     return slots
 
 
-def pin_allowed(slot: int | None, slots: Mapping[int, LcmSlot]) -> bool:
-    """Return True only for a known slot that is not marked disallowed."""
-    if slot is None or slot not in slots:
-        return False
-    return slots[slot].allowed is not False
+def pin_disabled(slot: int | None, slots: Mapping[int, LcmSlot]) -> bool:
+    """Return True only for a slot Lock Code Manager knows and marks disabled.
+
+    The lock accepted the code, so whoever typed it was given it: any other code, a slot Lock Code Manager does not
+    know or a lock without it, lets someone in.
+    """
+    return slot is not None and slot in slots and slots[slot].allowed is False

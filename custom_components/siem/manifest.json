@@ -5,7 +5,6 @@
     "ai_task",
     "calendar",
     "camera",
-    "homekit",
     "lock_code_manager",
     "person",
     "zwave_js"

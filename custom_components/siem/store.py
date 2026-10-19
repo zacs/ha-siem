@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, RENAMED_MODES, RENAMED_RULES
+from .const import DOMAIN, REMOVED_RULES, RENAMED_MODES, RENAMED_RULES
 
 STORAGE_KEY = f"{DOMAIN}.storage"
 STORAGE_VERSION = 1
@@ -33,7 +33,8 @@ class SiemStore:
     async def async_load(self) -> None:
         """Load the file, tolerating a missing or partial one."""
         data = await self._store.async_load() or {}
-        self.weights = {RENAMED_RULES.get(k, k): float(v) for k, v in (data.get("weights") or {}).items()}
+        weights = (data.get("weights") or {}).items()
+        self.weights = {RENAMED_RULES.get(k, k): float(v) for k, v in weights if k not in REMOVED_RULES}
         self.incidents = list(data.get("incidents") or [])[-MAX_INCIDENTS:]
         self.weight_changes = list(data.get("weight_changes") or [])[-MAX_WEIGHT_CHANGES:]
         self.last_digest = data.get("last_digest")

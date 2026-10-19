@@ -25,6 +25,8 @@ CONF_LIGHTS = "lights"
 CONF_POWER = "power"
 CONF_POWER_THRESHOLD = "power_threshold"
 CONF_CAMERA = "camera"
+# An outdoor room (yard, porch, driveway): anything that happens there only means someone is outside.
+CONF_OUTDOORS = "outdoors"
 ADDITIONAL = "_additional"
 
 # Whole-house fields.
@@ -56,7 +58,9 @@ REMOVED_SETTINGS = {
     "house": ("trusted_user_ids", "deter_sound", "deter_tts_entity", "deter_tts_message", "deter_volume", "restore_seconds", "house_deter", "house_deter_additional", "house_alarm", "house_alarm_additional"),
     "responses": ("notify_service", "notify_service_2", "target", "mobile_notify_service", "notify_services", "alarm_panel", "auto_arm", "dry_run", "auto_alarm"),
 }
-REMOVED_RULES = ("untrusted_user",)
+# Rules removed since: the HomeKit light rule (HomeKit is Home Assistant acting, like any app) and the camera person
+# rules (person detection is now the strongest occupancy source, indoors or out).
+REMOVED_RULES = ("untrusted_user", "light_homekit", "person_interior_camera", "person_exterior_camera")
 REMOVED_SWITCHES = ("dry_run", "auto_arm", "auto_alarm")
 
 # Options sections.
@@ -84,10 +88,6 @@ EVENT_ZWAVE_NOTIFICATION = "zwave_js_notification"
 # Lock Code Manager normalises every provider's lock activity into this event.
 EVENT_LCM_LOCK = "lock_code_manager_lock_state_changed"
 LOCK_EVENT_DEDUPE_S = 5
-# Core fires ``homekit_state_change``; the documented name is also watched.
-EVENTS_HOMEKIT = ("homekit_state_change", "homekit_state_changed")
-# Fired with the context an automation or script runs under, so its state changes are not mistaken for physical ones.
-EVENTS_AUTOMATION = ("automation_triggered", "script_started")
 EVENT_MOBILE_ACTION = "mobile_app_notification_action"
 MOBILE_ACTION_PREFIX = "SIEM_LABEL_"
 
@@ -107,8 +107,28 @@ TICK_SECONDS = 30
 # A sensor must stay unavailable this long before it scores, so an integration reload or restart does not.
 OFFLINE_GRACE_S = 120
 OFFLINE_BREAK_GLASS_S = 3600
-# The same entity (a light: the same room) scores the same rule at most once per cooldown.
-COOLDOWN_S = 60
+# The same entity (a light: the same room) scores the same rule at most once per cooldown: a door used to come in
+# and to go out is one visit, a contact bouncing is one opening, a group of bulbs is one switch.
+COOLDOWN_S = 300
 CSI_CONTACT_WINDOW_S = 60
+# Every service call announces its context before it runs; a state change carrying one of these, seen this
+# recently, is Home Assistant acting. Refresh-only services are left out: what they report is still physical.
+CAUSED_TTL_S = 120
+READ_ONLY_SERVICES = frozenset(
+    {("homeassistant", "update_entity"), ("zwave_js", "refresh_value"), ("zwave_js", "refresh_notifications"), ("camera", "snapshot")}
+)
+# A light Home Assistant was told to switch, reporting slowly; an appliance in a room where Home Assistant just
+# switched something (a smart plug, a TV through its integration), whose power climbs a little later.
+COMMANDED_LIGHT_S = 30
+COMMANDED_POWER_S = 120
+# Everything seen outside counts as one "someone is outside" window, credited again every fifteen minutes.
+OUTSIDE_WINDOW_S = 900
+# Covers that let people in when Home Assistant opens them; blinds and shades do not.
+ENTRY_COVER_CLASSES = ("garage", "gate", "door")
+# A resident arriving home explains everything scored in the ten minutes before.
+ARRIVAL_EXPLAINS_S = 600
+LET_IN_DEDUPE_S = 60
+# The alarm trigger turns on once an incident has held the alarm tier this long.
+ALARM_GRACE_S = 60
 AI_TASK_TIMEOUT_S = 20
 SNAPSHOT_TIMEOUT_S = 10

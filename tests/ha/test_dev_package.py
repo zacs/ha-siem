@@ -84,6 +84,8 @@ async def test_walkthrough_steps_one_and_two(hass, freezer, caplog):
     # Back door 40, then medium motion 30 x 1.5 for the entry chain: 85, two seconds of decay later.
     assert float(hass.states.get("sensor.siem_risk_score").state) == pytest.approx(85, abs=0.5)
     assert hass.states.get("sensor.siem_tier").state == "alarm"
+    assert hass.states.get("binary_sensor.siem_alarm_trigger").state == "off"
+    await tick(hass, freezer, 60)
     assert hass.states.get("binary_sensor.siem_alarm_trigger").state == "on"
     # The package's own automation shows SIEM's alerts as persistent notifications.
     await hass.async_block_till_done()

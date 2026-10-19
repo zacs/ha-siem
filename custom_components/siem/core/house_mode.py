@@ -13,13 +13,15 @@ MODE_AUTO = "auto"
 
 
 class HouseModeMachine:
-    """Derive the house mode from presence, the calendar and allowed PIN use.
+    """Derive the house mode from presence, the calendar and people being let in.
 
     Precedence is override, family, guest, service, vacant. Family lingers
     thirty minutes after the last resident leaves. Guest is held while a
     Guest calendar event runs and afterwards until two hours past its end
-    and sixty quiet minutes have both elapsed; an allowed PIN use starts the
-    same clock from the moment of the unlock.
+    and sixty quiet minutes have both elapsed; letting someone in (a code at
+    the keypad, an unlock from Home Assistant) starts the same clock from the
+    moment of the unlock. Motion does not count as activity, so a pet cannot
+    hold guest mode open.
     """
 
     def __init__(self, now: float) -> None:
@@ -39,7 +41,7 @@ class HouseModeMachine:
         self._anyone_home = anyone_home
 
     def note_activity(self, now: float) -> None:
-        """Record house activity, which keeps guest mode alive."""
+        """Record something only a person does (a door, a switch, a tap), which keeps guest mode alive."""
         self._last_activity = now
 
     def set_calendar_event(self, summary: str | None, start: float, end: float) -> str | None:
@@ -59,8 +61,8 @@ class HouseModeMachine:
         self._guest_window = None
         self._service_window = None
 
-    def allowed_pin(self, now: float) -> None:
-        """An allowed PIN was used: start (or extend) the guest clock."""
+    def let_in(self, now: float) -> None:
+        """Someone was let in, with a code or from Home Assistant: start (or extend) the guest clock."""
         self._guest_end = max(self._guest_end or now, now)
         self._last_activity = now
 

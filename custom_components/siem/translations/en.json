@@ -11,8 +11,9 @@
       },
       "room": {
         "title": "Room: {room}",
-        "description": "Pre-filled from the areas of your entities and devices; check it. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name counts as camera person detection. {remaining} room(s) to go.",
+        "description": "Pre-filled from the areas of your entities and devices; check it. In an outdoor room, motion, person detection, lights and contacts only mean someone is outside, and power sensors are not used. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name is camera person detection, the strongest source. {remaining} room(s) to go.",
         "data": {
+          "outdoors": "Outdoors (yard, porch, driveway)",
           "occupancy": "Occupancy sources (occupancy, presence, motion, sound)",
           "occupancy_additional": "More occupancy sources (any entity)",
           "perimeter": "Exterior doors, windows and gates",
@@ -131,8 +132,9 @@
       },
       "room": {
         "title": "Room: {room}",
-        "description": "Pre-filled from the areas of your entities and devices; check it. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name counts as camera person detection. {remaining} room(s) to go.",
+        "description": "Pre-filled from the areas of your entities and devices; check it. In an outdoor room, motion, person detection, lights and contacts only mean someone is outside, and power sensors are not used. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name is camera person detection, the strongest source. {remaining} room(s) to go.",
         "data": {
+          "outdoors": "Outdoors (yard, porch, driveway)",
           "occupancy": "Occupancy sources (occupancy, presence, motion, sound)",
           "occupancy_additional": "More occupancy sources (any entity)",
           "perimeter": "Exterior doors, windows and gates",

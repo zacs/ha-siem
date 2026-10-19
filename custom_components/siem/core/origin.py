@@ -1,22 +1,12 @@
-"""Origin classification: who or what caused a state change."""
+"""Whether a state change physically happened, or Home Assistant caused it."""
 
 from __future__ import annotations
 
 from collections import OrderedDict
-from enum import StrEnum
-
-
-class Origin(StrEnum):
-    """Where a state change came from, in the order the classifier checks."""
-
-    AUTOMATION = "automation"
-    USER = "user"
-    HOMEKIT = "homekit"
-    PHYSICAL = "physical"
 
 
 class ContextLRU:
-    """Bounded, time-limited set of context ids announced by an event (HomeKit changes, automation runs)."""
+    """Bounded, time-limited set of context ids, here the contexts of recent service calls."""
 
     def __init__(self, size: int = 200, ttl_s: float = 60.0) -> None:
         """Keep at most ``size`` ids, each for ``ttl_s`` seconds."""
@@ -44,28 +34,15 @@ class ContextLRU:
         return True
 
 
-def classify_origin(
-    *, parent_id: str | None, user_id: str | None, context_id: str | None, homekit_contexts: ContextLRU, now: float, automation_contexts: ContextLRU | None = None
-) -> Origin:
-    """Classify one state change from its context.
+def is_physical(*, parent_id: str | None, user_id: str | None, context_id: str | None, caused: ContextLRU, now: float) -> bool:
+    """Return True when a person or a device made this change, and Home Assistant did not.
 
-    A change with a ``parent_id`` was caused by something else (an automation
-    reacting to a state change). A change with a ``user_id`` came from a Home
-    Assistant user: someone in the app, a voice assistant through Home
-    Assistant Cloud, or an integration acting as its own user, such as
-    Presence Simulation. Automations started by a time, sun or calendar
-    trigger have neither id, so their context ids are collected from
-    ``automation_triggered`` and ``script_started`` events and matched here.
-    None of those ever score. What is left is HomeKit when its context was
-    announced by ``homekit_state_change``, otherwise physical: a switch, a
-    contact, a person in the room.
+    Anything Home Assistant does leaves a mark on the change's context: a parent id (an
+    automation reacting to another change), a user id (someone in the app, a voice assistant
+    through Home Assistant Cloud, an integration acting as its own user such as Presence
+    Simulation), or the context of a service call. Every service call announces its context
+    on the ``call_service`` event, which covers automations on any trigger, scripts, HomeKit
+    Bridge, other integrations and the API. What is left happened in the house: a switch, a
+    contact, a person in a room.
     """
-    if parent_id:
-        return Origin.AUTOMATION
-    if user_id:
-        return Origin.USER
-    if automation_contexts is not None and automation_contexts.seen(context_id, now):
-        return Origin.AUTOMATION
-    if homekit_contexts.seen(context_id, now):
-        return Origin.HOMEKIT
-    return Origin.PHYSICAL
+    return not (parent_id or user_id or caused.seen(context_id, now))

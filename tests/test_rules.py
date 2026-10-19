@@ -16,14 +16,20 @@ from custom_components.siem.core.rules import (
 
 
 def test_default_points_follow_the_design_table():
-    assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "guest": 5, "service": 5, "family": 0}
+    assert DEFAULT_RULES["exterior_door_opened"].points == {"vacant": 40, "guest": 0, "service": 0, "family": 0}
     assert DEFAULT_RULES["pin_not_allowed"].points == {"vacant": 30, "guest": 30, "service": 30, "family": 20}
-    assert "untrusted_user" not in DEFAULT_RULES
-    assert DEFAULT_RULES["person_exterior_camera"].points["family"] == 2
-    assert len(DEFAULT_RULES) == 16
+    for removed in ("untrusted_user", "light_homekit", "person_interior_camera", "person_exterior_camera"):
+        assert removed not in DEFAULT_RULES
+    assert len(DEFAULT_RULES) == 14
 
 
-@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 5), ("service", 5), ("family", 0)])
+def test_only_lock_trouble_scores_with_someone_trusted_home():
+    for mode in ("guest", "service", "family"):
+        scoring = {r.id for r in DEFAULT_RULES.values() if r.points[mode] > 0}
+        assert scoring == {"pin_not_allowed", "keypad_lockout"}, mode
+
+
+@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 0), ("service", 0), ("family", 0)])
 def test_per_mode_point_selection(mode, expected):
     assert DEFAULT_RULES["exterior_door_opened"].points_for(mode) == expected
 
@@ -36,7 +42,7 @@ def test_night_multiplies_exterior_only():
     assert exterior.points_for("vacant", night=True) == 60
     assert interior.points_for("vacant", night=True) == 50
     assert perimeter.points_for("vacant", night=True) == 60
-    assert DEFAULT_RULES["person_exterior_camera"].points_for("family", night=True) == 3
+    assert DEFAULT_RULES["exterior_occupied"].points_for("vacant", night=True) == 15
 
 
 def test_validation_merges_overrides():

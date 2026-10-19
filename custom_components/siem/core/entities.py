@@ -74,10 +74,12 @@ def derive_strength(device_class: str | None, platform: str | None) -> str:
 
 
 def effective_strength(meta: Mapping[str, Any]) -> str:
-    """Return the per-entity override when set, else the derived strength."""
+    """Return the per-entity override when set, strong for a camera's person detection, else the derived strength."""
     override = meta.get("strength_override")
     if override in STRENGTHS:
         return override
+    if meta.get("person_detector"):
+        return STRENGTH_STRONG
     strength = meta.get("strength")
     return strength if strength in STRENGTHS else STRENGTH_WEAK
 

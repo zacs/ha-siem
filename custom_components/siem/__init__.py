@@ -14,6 +14,7 @@ import voluptuous as vol
 
 from . import const as c
 from .coordinator import SiemConfigEntry, SiemCoordinator
+from .core import entities as ent
 from .core.house_mode import MODE_AUTO
 from .core.rules import MODES, RuleConfigError
 from .core.weights import LABELS
@@ -92,10 +93,13 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate older 1.x entries to 1.4: renamed modes and rules, and the settings 0.2 removed."""
+    """Migrate older 1.x entries to 1.5: renamed modes and rules, the settings and rules removed, outdoor rooms.
+
+    Every step is safe to run again, so one pass covers any older minor version.
+    """
     if entry.version > 1:
         return False
-    if entry.minor_version < 4:
+    if entry.minor_version < 5:
         data, options = copy.deepcopy(dict(entry.data)), copy.deepcopy(dict(entry.options))
         for section in (c.CONF_HOUSE, c.CONF_RESPONSES):
             for key in c.REMOVED_SETTINGS[section]:
@@ -103,6 +107,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
         for room in data.get(c.CONF_ROOMS, {}).values():
             for key in c.REMOVED_SETTINGS[c.CONF_ROOMS]:
                 room.pop(key, None)
+            room.setdefault(c.CONF_OUTDOORS, ent.is_exterior_area(room.get(c.CONF_NAME)))
         rules = {
             c.RENAMED_RULES.get(rule_id, rule_id): value for rule_id, value in (options.get(c.OPT_RULES) or {}).items() if rule_id not in c.REMOVED_RULES
         }
@@ -118,6 +123,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
         for key in c.REMOVED_SWITCHES:
             if entity_id := registry.async_get_entity_id("switch", c.DOMAIN, f"{entry.entry_id}_{key}"):
                 registry.async_remove(entity_id)
-        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=4)
-        _LOGGER.info("Migrated SIEM config entry to 1.4")
+        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=5)
+        _LOGGER.info("Migrated SIEM config entry to 1.5")
     return True

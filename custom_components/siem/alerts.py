@@ -99,18 +99,25 @@ class Alerts:
         self.hass.bus.async_fire(EVENT_NOTIFICATION, payload, context=self.context())
 
     async def async_handle(self, events: list[IncidentEvent], renotify: Incident | None) -> None:
-        """Alert on upward tier changes, and again when a verify incident's score doubled."""
+        """Alert on upward tier changes, and again when a verify incident's score doubled.
+
+        Verify is a heads-up, raised once per incident: once anything was announced, a score that dips below verify
+        and comes back is not announced again. Deter and alarm are announced every time they are reached, since
+        automations act on them.
+        """
         for event in events:
-            if event.kind == EVENT_TIER_CHANGED and tier_rank(event.tier) > tier_rank(event.previous_tier):
-                await self._async_alert(event.incident, event.tier)
+            if event.kind != EVENT_TIER_CHANGED or tier_rank(event.tier) <= tier_rank(event.previous_tier):
+                continue
+            if event.tier == TIER_VERIFY and event.incident.notified_score is not None:
+                continue
+            await self._async_alert(event.incident, event.tier)
         if renotify is not None:
             await self._async_alert(renotify, TIER_VERIFY, again=True)
 
     async def _async_alert(self, incident: Incident, tier: str, again: bool = False) -> None:
         c = self.coordinator
         score = c.engine.score(c.now()) if incident is c.engine.current else incident.peak_score
-        if tier == TIER_VERIFY:
-            incident.notified_score = score
+        incident.notified_score = score
         snapshot = await self.async_snapshot(incident, tier)
         message = alert_message(score, c.house_mode, self.timeline_lines(incident), again=again)
         self.fire(tier, alert_title(tier, c.room_name(incident.room)), message, incident=self.incident_payload(incident), snapshot=snapshot, again=again)

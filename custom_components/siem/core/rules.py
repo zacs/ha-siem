@@ -37,28 +37,28 @@ def _rule(rule_id: str, tag: str, pts: tuple[float, ...], description: str) -> R
 DEFAULT_RULES: dict[str, Rule] = {
     r.id: r
     for r in (
-        _rule("exterior_door_opened", TAG_EXTERIOR, (40, 5, 5, 0), "An exterior door or window opened"),
-        _rule("gate_opened", TAG_EXTERIOR, (30, 5, 5, 0), "A gate opened"),
-        _rule("door_csi_motion", TAG_EXTERIOR, (15, 2, 2, 0), "Wi-Fi motion at a door that did not open"),
-        _rule("interior_occupied", TAG_INTERIOR, (50, 5, 5, 0), "Someone is in a room"),
-        _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 5, 0), "A fridge, cabinet, drawer or closet opened"),
+        # Points are (vacant, guest, service, family). With anyone trusted at home, SIEM stays quiet about what happens
+        # in the house, which is what the house is for, and only speaks up about lock trouble.
+        _rule("exterior_door_opened", TAG_EXTERIOR, (40, 0, 0, 0), "An exterior door or window opened"),
+        _rule("gate_opened", TAG_EXTERIOR, (30, 0, 0, 0), "A gate opened"),
+        _rule("door_csi_motion", TAG_EXTERIOR, (5, 0, 0, 0), "Someone was at a door that did not open"),
+        _rule("exterior_occupied", TAG_EXTERIOR, (10, 0, 0, 0), "Someone is outside"),
+        _rule("interior_occupied", TAG_INTERIOR, (50, 0, 0, 0), "Someone is in a room"),
+        _rule("interior_door_opened", TAG_INTERIOR, (40, 0, 0, 0), "A fridge, cabinet, drawer or closet opened"),
         _rule("light_physical", TAG_INTERIOR, (45, 0, 0, 0), "A light was turned on at the switch"),
-        _rule("light_homekit", TAG_INTERIOR, (5, 0, 0, 0), "A light was turned on from Apple Home"),
         _rule("appliance_on", TAG_INTERIOR, (35, 0, 0, 0), "An appliance turned on"),
-        _rule("water_flow", TAG_INTERIOR, (30, 0, 10, 0), "Water is running"),
+        _rule("water_flow", TAG_INTERIOR, (30, 0, 0, 0), "Water is running"),
         _rule("load_residual", TAG_INTERIOR, (10, 0, 0, 0), "The house is drawing power nothing explains"),
-        _rule("person_interior_camera", TAG_INTERIOR, (40, 5, 5, 0), "A camera saw a person inside"),
-        _rule("person_exterior_camera", TAG_EXTERIOR, (10, 5, 5, 2), "A camera saw a person outside"),
-        _rule("manual_unlock", TAG_PERIMETER, (60, 40, 40, 0), "A lock was unlocked by hand"),
-        _rule("pin_not_allowed", TAG_PERIMETER, (30, 30, 30, 20), "A lock was unlocked with a code that is not allowed"),
+        _rule("manual_unlock", TAG_PERIMETER, (60, 0, 0, 0), "A lock was unlocked by hand"),
+        _rule("pin_not_allowed", TAG_PERIMETER, (30, 30, 30, 20), "A lock was unlocked with a code that is disabled"),
         _rule("keypad_lockout", TAG_PERIMETER, (40, 40, 40, 30), "A keypad locked out after bad codes"),
-        _rule("sensor_offline", TAG_TAMPER, (20, 5, 5, 0), "A sensor went offline"),
+        _rule("sensor_offline", TAG_TAMPER, (20, 0, 0, 0), "A sensor went offline"),
     )
 }
 
 SUPPRESSOR_FAMILY_ARRIVAL = -60.0
-SUPPRESSOR_ALLOWED_PIN = -40.0
-SUPPRESSOR_DESCRIPTIONS = {"family_arrival": "A resident arrived home", "allowed_pin": "An allowed PIN was used"}
+SUPPRESSOR_LET_IN = -40.0
+SUPPRESSOR_DESCRIPTIONS = {"family_arrival": "A resident arrived home", "let_in": "Someone was let in, with a code or from Home Assistant"}
 
 
 def describe(rules: Mapping[str, Rule], rule_id: str) -> str:
@@ -114,9 +114,7 @@ class EngineSettings:
 
     def chains(self) -> tuple[Chain, ...]:
         """Return the default chains with this settings' factors applied."""
-        return tuple(
-            Chain(c.id, c.first, c.second, float(self.chain_factors.get(c.id, c.factor))) for c in DEFAULT_CHAINS
-        )
+        return tuple(Chain(c.id, c.first, c.second, float(self.chain_factors.get(c.id, c.factor))) for c in DEFAULT_CHAINS)
 
 
 class RuleConfigError(ValueError):
@@ -131,9 +129,7 @@ def _number(value: Any, what: str) -> float:
     return float(value)
 
 
-def validate_rule_config(
-    config: Mapping[str, Mapping[str, Any]] | None, base: Mapping[str, Rule] = DEFAULT_RULES
-) -> dict[str, Rule]:
+def validate_rule_config(config: Mapping[str, Mapping[str, Any]] | None, base: Mapping[str, Rule] = DEFAULT_RULES) -> dict[str, Rule]:
     """Merge point overrides ``{rule_id: {"points": {mode: pts}}}`` onto ``base``.
 
     Unknown rules and modes are rejected, and every override must carry a
