@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 DOMAIN = "siem"
 NAME = "SIEM"
 MANUFACTURER = "@zacs"
-VERSION = "0.0.1"
+VERSION = "0.0.2"
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR]
 
 # Config entry data sections.
