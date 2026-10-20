@@ -184,6 +184,7 @@ UI. Its attributes are `event_type` (the `kind`), `incident_id`, `tier`,
 | `started` | string | When it opened, as local ISO 8601 time |
 | `closed` | string or null | When it closed, as local ISO 8601 time |
 | `labels` | list of strings | The labels given so far |
+| `entities` | list of strings | Every entity that has added points to the incident, in the order it first did |
 | `top_contributors` | list of objects | Up to five rules driving the score now, each with `rule`, `points` and `entities`. Empty once closed |
 | `timeline` | list of objects | The first ten events, each described below |
 
@@ -428,7 +429,7 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | --- | --- |
 | `sensor.siem_risk_score` | The live score, with `top_contributors` and `incident_id` |
 | `sensor.siem_tier` | `none`, `verify`, `deter` or `alarm` |
-| `sensor.siem_incident` | The open incident's id, with `started`, `room`, `mode`, `person` and the `timeline` (not recorded) |
+| `sensor.siem_incident` | The open incident's id, with `started`, `room`, `mode`, `person`, `entities` (every entity that has added to the score, recorded in history) and the `timeline` (not recorded) |
 | `sensor.siem_house_mode` | `vacant`, `guest`, `service`, `family` or `night` |
 | `select.siem_house_mode_override` | Force a mode, or `auto` |
 | `sensor.siem_recommended_alarm_mode` | `armed_away`, `armed_night`, `armed_home` or `disarmed` |

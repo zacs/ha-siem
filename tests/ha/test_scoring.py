@@ -27,10 +27,11 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert incident_events[1]["tier"] == "verify" and incident_events[1]["room"] == "Kitchen"
     assert incident_events[1]["timeline"][0]["name"] == "Back Door"
     # The fields the README documents, no more and no fewer.
-    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "house_mode", "person", "started", "closed", "labels", "top_contributors", "timeline"}
+    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "house_mode", "person", "started", "closed", "labels", "entities", "top_contributors", "timeline"}
     assert set(incident_events[1]) == incident_fields | {"kind", "previous_tier"}
     assert set(incident_events[1]["timeline"][0]) == {"at", "rule", "points", "entity_id", "name", "room", "description", "detail"}
     assert incident_events[1]["timeline"][0]["room"] == "Kitchen"
+    assert incident_events[1]["entities"] == ["binary_sensor.back_door"]
     assert set(incident_events[1]["top_contributors"][0]) == {"rule", "points", "entities"}
     event_entity = hass.states.get("event.siem_incident").attributes
     assert {"event_type", "incident_id", "tier", "previous_tier", "score", "room", "mode"} <= set(event_entity)
@@ -43,6 +44,23 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert set(alert) == {"category", "title", "message", "incident", "snapshot", "again", "summary"}
     assert alert["snapshot"] is None and alert["summary"] is None and alert["again"] is False
     assert not [call for call in service_calls if call[0] in ("notify", "alarm_control_panel")]
+
+
+async def test_the_incident_sensor_lists_its_entities_as_they_join(hass, freezer):
+    entry = await setup_siem(hass)
+    assert hass.states.get("sensor.siem_incident").attributes["entities"] == []
+    flip(hass, "binary_sensor.back_door")
+    await hass.async_block_till_done()
+    # The tick publishes the decayed score, which starts the rate limit's thirty seconds.
+    await tick(hass, freezer, 30)
+    await tick(hass, freezer, 5)
+    # The Wi-Fi motion at the front door adds 5: no tier change, inside the publish rate limit, and still shown at once.
+    flip(hass, "binary_sensor.front_door_csi")
+    await hass.async_block_till_done()
+    incident = hass.states.get("sensor.siem_incident")
+    assert incident.state == entry.runtime_data.incident_id
+    assert incident.attributes["entities"] == ["binary_sensor.back_door", "binary_sensor.front_door_csi"]
+    assert hass.states.get("sensor.siem_tier").state == "verify"
 
 
 async def test_only_what_physically_happened_scores(hass, freezer, siem_events):

@@ -316,7 +316,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             {"score": score, "tier": tier, "alarm_trigger": self.alarm_trigger, "mode": self.house_mode, "night": self.night, "incident_id": self.incident_id}
         )
 
-    def _process(self, now: float) -> None:
+    def _process(self, now: float, force: bool = False) -> None:
         """Advance the engine, publish, and announce transitions and alerts as events."""
         previous = (self.house_mode, self.night)
         self._refresh_mode(now)
@@ -334,7 +334,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if changed:
             # Published as a sensor only; acting on it, or not, is up to the user's own automations.
             self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
-        self.publish(now, force=bool(events) or changed or trigger)
+        self.publish(now, force=force or bool(events) or changed or trigger)
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
         if events or renotify:
@@ -376,7 +376,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if (rule_id == "manual_unlock" and self.house_mode == MODE_VACANT) or rule_id == "keypad_lockout":
             message = f"{self.entity_name(entity_id)}: {self.rules[rule_id].description.lower()} ({detail})"
             self.alerts.break_glass(message)
-        self._process(now)
+        # An entity new to the incident is published now, not after the rate limit, so the incident's entities are current.
+        earlier = self.engine.current.contributions[:-1] if self.engine.current else []
+        self._process(now, force=entity_id is not None and all(c.entity_id != entity_id for c in earlier))
 
     def _night_gate(self, rule_id: str, now: float) -> bool:
         """Return whether ``rule_id`` counts now; only night mode holds anything back.

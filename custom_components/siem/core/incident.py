@@ -42,10 +42,14 @@ class Incident:
         """Return the distinct positive rules in this incident, in order."""
         return list(dict.fromkeys(c.rule_id for c in self.contributions if c.points > 0))
 
+    def entity_ids(self) -> list[str]:
+        """Return the distinct entities that added points to this incident, in the order they first did."""
+        return list(dict.fromkeys(c.entity_id for c in self.contributions if c.points > 0 and c.entity_id))
+
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly summary for storage and the digest."""
         data = {k: getattr(self, k) for k in ("id", "started", "closed", "mode", "room", "person", "tier", "peak_tier")}
-        data.update(labels=list(self.labels), timeline=list(self.timeline), rules=self.rule_ids(), peak_score=round(self.peak_score, 1))
+        data.update(labels=list(self.labels), timeline=list(self.timeline), rules=self.rule_ids(), entities=self.entity_ids(), peak_score=round(self.peak_score, 1))
         return data
 
 

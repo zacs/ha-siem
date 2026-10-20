@@ -88,6 +88,7 @@ class Alerts:
             "started": c.iso(incident.started),
             "closed": c.iso(incident.closed),
             "labels": list(incident.labels),
+            "entities": incident.entity_ids(),
             "top_contributors": c.engine.top_contributors(now) if current else [],
             "timeline": self.timeline(incident),
         }
