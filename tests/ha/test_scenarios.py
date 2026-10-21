@@ -76,6 +76,8 @@ PEOPLE: dict[str, tuple[str, dict[str, Any]]] = {
     "event.lcm_cleaner": ("unknown", {"code_slot": 5, "name": "Cleaner", "active": True, "friendly_name": "Cleaner code used"}),
     "event.lcm_old_sitter": ("unknown", {"code_slot": 6, "name": "Old sitter", "active": False, "friendly_name": "Old sitter code used"}),
     "calendar.house": ("off", {"friendly_name": "House"}),
+    # A friend who stays over sometimes, without a person entity: the router sees their phone.
+    "device_tracker.friend_phone": ("not_home", {"friendly_name": "Friend Phone"}),
 }
 
 
@@ -239,6 +241,7 @@ async def house(hass, freezer, siem_events):
             "rooms": rooms,
             "house": {
                 "residents": list(residents),
+                "guest_trackers": ["device_tracker.friend_phone"],
                 "csi_sensors": ["binary_sensor.front_door_csi"],
                 "csi_map": {"binary_sensor.front_door_csi": "binary_sensor.front_door"},
                 "water_flow": ["sensor.water_flow"],
@@ -696,6 +699,48 @@ async def test_coming_home_late_at_night_with_a_code(house, freezer):
 
 
 # --- People we expect -----------------------------------------------------------------------------------------------
+
+
+async def test_a_friend_house_sits_seen_by_the_wifi(house, freezer):
+    """A friend stays while you're away. Their phone on your Wi-Fi is guest mode: an afternoon of doors, lights
+    and the kitchen is quiet. When they leave, the house is vacant again half an hour later."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 16:00:00-07:00")
+    await home.physical("device_tracker.friend_phone", "home")
+    assert home.mode == "guest"
+    for _ in range(8):
+        await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion", "binary_sensor.kitchen_presence", "binary_sensor.fridge_door")
+        await home.physical("light.kitchen", "on")
+        await home.wait(1800)
+        await home.physical("light.kitchen", "off")
+    assert home.alerts == []
+    await home.physical("device_tracker.friend_phone", "not_home")
+    await home.wait(29 * 60)
+    assert home.mode == "guest"
+    await home.wait(2 * 60)
+    assert home.mode == "vacant"
+    await home.physical("binary_sensor.back_door")
+    assert home.alerts == ["verify"]
+
+
+async def test_a_friends_phone_joins_the_wifi_after_they_walk_in(house, freezer):
+    """The friend lets themselves in with a key while the house is empty; their phone joins the Wi-Fi forty
+    seconds later. The key, the door and the hall have already reached alarm and sent their alerts, but the
+    arrival explains them and the panel is never triggered."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 18:00:00-07:00")
+    await home.lock_event("Manual unlock operation")
+    await home.physical("binary_sensor.front_door")
+    await home.pulse("binary_sensor.hall_motion")
+    assert "alarm" in home.alerts
+    await home.wait(40)
+    await home.physical("device_tracker.friend_phone", "home")
+    assert home.score == 0 and home.mode == "guest"
+    assert home.rules()[-1] == "guest_arrival"
+    await home.wait(120)
+    assert not home.trigger_seen
 
 
 async def test_the_cleaner_lets_themselves_in_with_their_code(house, freezer):

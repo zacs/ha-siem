@@ -29,8 +29,8 @@ alerts for a week before you let anything act on them.
 - **Three tiers.** Verify, deter and alarm, each one an event your automations
   can act on.
 - **Five house modes.** Family, night, guest, service and vacant, worked out
-  from presence, bedtime, a calendar and lock codes. The same open door means
-  something different in each.
+  from presence (yours and your guests'), bedtime, a calendar and lock codes.
+  The same open door means something different in each.
 - **Plain Home Assistant state and events.** Sensors for the score, tier,
   incident and house mode, and an event for every alert.
 
@@ -73,10 +73,10 @@ The setup flow walks through:
   and add anything it missed. Tick *Outdoors* for a yard, porch or driveway
   (rooms named like one start ticked): anything there only means someone is
   outside.
-- **Whole house.** Residents, extra trackers, water and power sensors, locks,
-  Lock Code Manager event entities, the calendar, the alarm panel to read
-  bedtime from, the night window, and Wi-Fi motion sensors with the door each
-  one watches.
+- **Whole house.** Residents, extra trackers, guests' device trackers, water
+  and power sensors, locks, Lock Code Manager event entities, the calendar,
+  the alarm panel to read bedtime from, the night window, and Wi-Fi motion
+  sensors with the door each one watches.
 - **Digest.** The AI task and the digest times.
 
 You can change any of it later from the integration's **Configure** menu.
@@ -193,7 +193,7 @@ Each timeline entry has:
 | Field | Type | What it holds |
 | --- | --- | --- |
 | `at` | string | When it happened, as local ISO 8601 time |
-| `rule` | string | The rule id, or `family_arrival` or `let_in` for a suppressor |
+| `rule` | string | The rule id, or `family_arrival`, `guest_arrival` or `let_in` for a suppressor |
 | `points` | number | Its points after chains, before weights and decay; negative for a suppressor |
 | `entity_id` | string or null | The entity that set it off |
 | `name` | string or null | That entity's friendly name |
@@ -309,7 +309,9 @@ same incident: an entry (`exterior_door_opened` or `door_csi_motion`) then
 **Suppressors.** A resident or tracker arriving home switches the house to
 family and takes off at least 60 points, or everything scored in the ten
 minutes before if that is more: a phone that reports home a little after its
-owner walked in explains what they set off. Letting someone in (a code, an
+owner walked in explains what they set off. A guest's tracker arriving does the
+same and switches the house to guest; a phone joining your Wi-Fi usually does
+so a little after its owner walks in. Letting someone in (a code, an
 unlock or a garage opened from Home Assistant) takes 40 off, switches the house
 to guest and records the code's name, when Lock Code Manager knows it, as the
 incident's person.
@@ -325,8 +327,10 @@ late, and lowering the weights would only blunt the next real break-in.
 minutes after. Night instead of family while the household is in bed: while the
 alarm panel you picked is armed night (pending or triggered keeps it), or, with
 no panel picked, inside the night window, midnight to 5:30 unless you change
-it. Guest during a `Guest:` event, or after someone was let in,
-until two hours have passed and the house has been quiet for an hour. Quiet
+it. Guest while any guest's device tracker is home and for 30 minutes after,
+the same grace a resident gets. Also guest during a `Guest:` event, or after
+someone was let in, until two hours have passed and the house has been quiet
+for an hour. Quiet
 means no doors, switches, water or appliances; motion doesn't count, so a pet
 can't hold guest mode open. Service during a `Service:` event. Vacant
 otherwise.
@@ -373,6 +377,8 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | Home through the garage, the phone 30 seconds late | Vacant, then family | Verify and alarm alerts, then the score drops to 0; the trigger never turns on |
 | Home with the phone on time | Family | Nothing |
 | Home at 11:30 p.m. with a code, the phone late | Vacant, then guest | Verify for someone on the porch at night, then nothing |
+| A friend house-sits, their phone seen by your Wi-Fi | Guest | Nothing; vacant again half an hour after they leave |
+| The friend comes in with a key before their phone joins the Wi-Fi | Vacant, then guest | Break glass and alarm alerts, then the score drops to 0; the trigger never turns on |
 | The cleaner's code and three hours of cleaning | Guest | Nothing; vacant again an hour after they leave |
 | A neighbor on the calendar as `Guest:` | Guest | Nothing |
 | Unlocking for the plumber from the app | Guest | Nothing |

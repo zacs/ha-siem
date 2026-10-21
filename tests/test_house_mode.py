@@ -2,7 +2,7 @@
 
 import pytest
 
-from custom_components.siem.core.house_mode import FAMILY_LINGER_S, GUEST_AFTER_END_S, GUEST_QUIET_S, HouseModeMachine
+from custom_components.siem.core.house_mode import FAMILY_LINGER_S, GUEST_AFTER_END_S, GUEST_LINGER_S, GUEST_QUIET_S, HouseModeMachine
 
 
 def test_family_lingers_thirty_minutes():
@@ -13,6 +13,19 @@ def test_family_lingers_thirty_minutes():
     machine.set_presence(False, 100)
     assert machine.mode(100 + FAMILY_LINGER_S - 1) == "family"
     assert machine.mode(100 + FAMILY_LINGER_S) == "vacant"
+
+
+def test_a_guest_tracker_is_guest_mode_and_lingers_half_an_hour():
+    machine = HouseModeMachine(0)
+    machine.set_guest_presence(True, 10)
+    assert machine.mode(10) == "guest"
+    machine.set_presence(True, 20)
+    assert machine.mode(20) == "family", "residents come first"
+    machine.set_presence(False, 30)
+    machine.set_guest_presence(False, 100)
+    assert machine.mode(30 + FAMILY_LINGER_S) == "guest", "the resident's half hour is up, the guest's is not"
+    assert machine.mode(100 + GUEST_LINGER_S - 1) == "guest"
+    assert machine.mode(100 + GUEST_LINGER_S) == "vacant"
 
 
 def test_family_in_bed_is_night():

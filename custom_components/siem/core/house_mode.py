@@ -5,6 +5,8 @@ from __future__ import annotations
 from .rules import MODE_FAMILY, MODE_GUEST, MODE_NIGHT, MODE_SERVICE, MODE_VACANT, MODES
 
 FAMILY_LINGER_S = 30 * 60
+# A guest's tracker lingers the same half hour as a resident's: Wi-Fi trackers drop out while phones sleep.
+GUEST_LINGER_S = FAMILY_LINGER_S
 GUEST_AFTER_END_S = 2 * 3600
 GUEST_QUIET_S = 60 * 60
 GUEST_PREFIX = "Guest:"
@@ -19,6 +21,7 @@ class HouseModeMachine:
     while the household is in bed (the panel armed night, or the night
     window, as the coordinator decides). Family lingers
     thirty minutes after the last resident leaves. Guest is held while a
+    guest's device tracker is home and for thirty minutes after, while a
     Guest calendar event runs and afterwards until two hours past its end
     and sixty quiet minutes have both elapsed; letting someone in (a code at
     the keypad, an unlock from Home Assistant) starts the same clock from the
@@ -32,6 +35,8 @@ class HouseModeMachine:
         self._anyone_home = False
         self._asleep = False
         self._last_home_seen: float | None = None
+        self._guest_here = False
+        self._last_guest_seen: float | None = None
         self._guest_window: tuple[float, float] | None = None
         self._guest_end: float | None = None
         self._service_window: tuple[float, float] | None = None
@@ -42,6 +47,12 @@ class HouseModeMachine:
         if anyone_home or self._anyone_home:
             self._last_home_seen = now
         self._anyone_home = anyone_home
+
+    def set_guest_presence(self, anyone_here: bool, now: float) -> None:
+        """Record whether any guest's device tracker is home."""
+        if anyone_here or self._guest_here:
+            self._last_guest_seen = now
+        self._guest_here = anyone_here
 
     def set_asleep(self, asleep: bool) -> None:
         """Record whether the household is in bed, which turns family into night."""
@@ -88,6 +99,8 @@ class HouseModeMachine:
         return self._last_home_seen is not None and now - self._last_home_seen < FAMILY_LINGER_S
 
     def _guest(self, now: float) -> bool:
+        if self._guest_here or (self._last_guest_seen is not None and now - self._last_guest_seen < GUEST_LINGER_S):
+            return True
         if self._guest_window and self._guest_window[0] <= now < self._guest_window[1]:
             return True
         if self._guest_end is None:

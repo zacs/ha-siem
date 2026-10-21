@@ -34,6 +34,7 @@
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
+          "guest_trackers": "Guests' device trackers: home means guest mode",
           "csi_sensors": "Wi-Fi (CSI) motion sensors at doors",
           "water_flow": "Water flow sensors",
           "water_flow_additional": "More water flow sensors (any entity)",
@@ -163,6 +164,7 @@
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
+          "guest_trackers": "Guests' device trackers: home means guest mode",
           "csi_sensors": "Wi-Fi (CSI) motion sensors at doors",
           "water_flow": "Water flow sensors",
           "water_flow_additional": "More water flow sensors (any entity)",

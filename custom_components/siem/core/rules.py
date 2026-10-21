@@ -61,7 +61,11 @@ DEFAULT_RULES: dict[str, Rule] = {
 
 SUPPRESSOR_FAMILY_ARRIVAL = -60.0
 SUPPRESSOR_LET_IN = -40.0
-SUPPRESSOR_DESCRIPTIONS = {"family_arrival": "A resident arrived home", "let_in": "Someone was let in, with a code or from Home Assistant"}
+SUPPRESSOR_DESCRIPTIONS = {
+    "family_arrival": "A resident arrived home",
+    "guest_arrival": "A guest arrived",
+    "let_in": "Someone was let in, with a code or from Home Assistant",
+}
 
 
 def describe(rules: Mapping[str, Rule], rule_id: str) -> str:

@@ -293,6 +293,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entities = list(self.house.get(c.CONF_RESIDENTS) or []) + self.residents.trackers + list(self.house.get(c.CONF_EXTRA_TRACKERS) or [])
         anyone = any((state := self.hass.states.get(e)) is not None and state.state == STATE_HOME for e in entities)
         self.modes.set_presence(anyone, now)
+        guests = self.house.get(c.CONF_GUEST_TRACKERS) or []
+        self.modes.set_guest_presence(any((state := self.hass.states.get(e)) is not None and state.state == STATE_HOME for e in guests), now)
 
     def _apply_calendar(self, state: State | None) -> None:
         if state is None or state.state != STATE_ON:
@@ -516,8 +518,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._subscribe()
             self._on_arrival(old, new, now)
             return
-        if role == ent.ROLE_TRACKER:
-            self._on_arrival(old, new, now)
+        if role in (ent.ROLE_TRACKER, ent.ROLE_GUEST_TRACKER):
+            self._on_arrival(old, new, now, guest=role == ent.ROLE_GUEST_TRACKER)
             return
         if role == ent.ROLE_CALENDAR:
             self._apply_calendar(new)
@@ -629,13 +631,15 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.residual.update(load, automated, now):
             self._score("load_residual", now, self.house[c.CONF_LOAD], None, f"residual {self.residual.residual:.0f} W")
 
-    def _on_arrival(self, old: State | None, new: State, now: float) -> None:
+    def _on_arrival(self, old: State | None, new: State, now: float, guest: bool = False) -> None:
         self._update_presence(now)
         # A person and its tracker arrive together; the suppressor applies once per arrival. A phone can report home a
-        # little after its owner walked in, so the arrival explains whatever was scored in the minutes before it.
+        # little after its owner walked in (a guest's Wi-Fi tracker usually does), so the arrival explains whatever was
+        # scored in the minutes before it, a guest's as much as a resident's.
         if new.state == STATE_HOME and (old is None or old.state != STATE_HOME) and now - self._last_arrival >= 60:
             self._last_arrival = now
-            self.engine.suppress("family_arrival", SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home", explain_s=c.ARRIVAL_EXPLAINS_S)
+            rule = "guest_arrival" if guest else "family_arrival"
+            self.engine.suppress(rule, SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home", explain_s=c.ARRIVAL_EXPLAINS_S)
         self._process(now)
 
     def _let_in(self, now: float, detail: str, person: str | None = None) -> None:

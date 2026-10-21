@@ -32,6 +32,8 @@ ADDITIONAL = "_additional"
 # Whole-house fields.
 CONF_RESIDENTS = "residents"
 CONF_EXTRA_TRACKERS = "extra_trackers"
+# Device trackers of guests (a Wi-Fi tracker of a regular visitor's phone): home means guest mode.
+CONF_GUEST_TRACKERS = "guest_trackers"
 CONF_CSI = "csi_sensors"
 CONF_CSI_MAP = "csi_map"
 CONF_WATER = "water_flow"

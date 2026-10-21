@@ -102,6 +102,7 @@ HOUSE_SCHEMA = vol.Schema(
     {
         vol.Optional(c.CONF_RESIDENTS): _entity("person"),
         vol.Optional(c.CONF_EXTRA_TRACKERS): _entity("device_tracker"),
+        vol.Optional(c.CONF_GUEST_TRACKERS): _entity("device_tracker"),
         vol.Optional(c.CONF_CSI): _entity("binary_sensor"),
         vol.Optional(c.CONF_WATER): _entity("sensor", ["volume_flow_rate"]),
         vol.Optional(c.CONF_WATER + c.ADDITIONAL): _entity(),
@@ -131,6 +132,7 @@ ROOM_ROLES = ((c.CONF_OCCUPANCY, ent.ROLE_OCCUPANCY), (c.CONF_PERIMETER, ent.ROL
 HOUSE_ROLES = (
     (c.CONF_CSI, ent.ROLE_CSI), (c.CONF_WATER, ent.ROLE_WATER), (c.CONF_AUTOMATED_LOADS, ent.ROLE_AUTOMATED_LOAD), (c.CONF_LOCKS, ent.ROLE_LOCK),
     (c.CONF_LCM_EVENTS, ent.ROLE_LCM_EVENT), (c.CONF_RESIDENTS, ent.ROLE_PERSON), (c.CONF_EXTRA_TRACKERS, ent.ROLE_TRACKER),
+    (c.CONF_GUEST_TRACKERS, ent.ROLE_GUEST_TRACKER),
 )
 
 
