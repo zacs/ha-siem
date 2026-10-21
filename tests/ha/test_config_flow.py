@@ -56,7 +56,7 @@ async def test_full_flow_prefills_rooms(hass):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["08:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.minor_version == 6
+    assert entry.minor_version == 7
     assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True}
     assert entry.data["house"]["csi_map"] == {"binary_sensor.front_door_csi": "binary_sensor.front_door"}
     assert entry.data["house"]["night_start"] == "23:00:00"
@@ -97,7 +97,7 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     hass_storage["siem.storage"] = {"version": 1, "minor_version": 1, "key": "siem.storage", "data": {"weights": weights}}
     old = {
         "rooms": {"kitchen": {"name": "Kitchen", "power": ["sensor.coffee_power"], "power_threshold": 30}, "porch": {"name": "Front Porch", "power_threshold": 30}},
-        "house": {},
+        "house": {"water_flow": ["sensor.water_main"], "water_flow_additional": ["sensor.water_pulse", "sensor.water_main"]},
         "responses": {
             "notify_service": "notify.mattermost",
             "target": "home_security",
@@ -113,10 +113,10 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 6
+    assert entry.minor_version == 7
     assert entry.data["responses"] == {}
-    # The panel SIEM used to arm is kept, to be read for armed night.
-    assert entry.data["house"] == {"alarm_panel": "alarm_control_panel.house"}
+    # The panel SIEM used to arm is kept, to be read for armed night; the second water flow field joins the first.
+    assert entry.data["house"] == {"alarm_panel": "alarm_control_panel.house", "water_flow": ["sensor.water_main", "sensor.water_pulse"]}
     # Rooms named like the outdoors start out as outdoor rooms.
     assert entry.data["rooms"]["kitchen"]["outdoors"] is False and entry.data["rooms"]["porch"]["outdoors"] is True
     assert entry.runtime_data.outdoor_rooms == {"porch"}
@@ -145,7 +145,7 @@ async def test_migration_drops_notify_panel_deterrence_and_trust_settings(hass, 
     orphans = [registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry) for key in ("dry_run", "auto_arm", "auto_alarm")]
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 6
+    assert entry.minor_version == 7
     assert entry.data["rooms"] == {"kitchen": {"name": "Kitchen", "power_threshold": 30, "outdoors": False}}
     assert entry.data["house"] == {"night_start": "22:00:00", "alarm_panel": "alarm_control_panel.house"}
     assert entry.data["responses"] == {"digest_times": ["08:00"]}

@@ -105,7 +105,6 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_GUEST_TRACKERS): _entity("device_tracker"),
         vol.Optional(c.CONF_CSI): _entity("binary_sensor"),
         vol.Optional(c.CONF_WATER): _entity("sensor", ["volume_flow_rate"]),
-        vol.Optional(c.CONF_WATER + c.ADDITIONAL): _entity(),
         vol.Optional(c.CONF_WATER_THRESHOLD, default=c.DEFAULT_WATER_THRESHOLD): _number(0, 1000, 0.1),
         vol.Optional(c.CONF_LOAD): _entity("sensor", ["power"], multiple=False),
         vol.Optional(c.CONF_AUTOMATED_LOADS): _entity("sensor", ["power"]),
@@ -115,6 +114,7 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_LCM_EVENTS): _entity("event"),
         vol.Optional(c.CONF_CALENDAR): _entity("calendar", multiple=False),
         vol.Optional(c.CONF_ALARM_PANEL): _entity("alarm_control_panel", multiple=False),
+        vol.Optional(c.CONF_ASLEEP_SENSOR): _entity(["binary_sensor", "input_boolean"], multiple=False),
         vol.Optional(c.CONF_NIGHT_START, default=c.DEFAULT_NIGHT_START): sel.TimeSelector(),
         vol.Optional(c.CONF_NIGHT_END, default=c.DEFAULT_NIGHT_END): sel.TimeSelector(),
     }
@@ -172,7 +172,8 @@ def build_entity_meta(hass: HomeAssistant, data: Mapping[str, Any], existing: Ma
             if role == ent.ROLE_WATER:
                 item["threshold"] = house.get(c.CONF_WATER_THRESHOLD, c.DEFAULT_WATER_THRESHOLD)
             meta[entity_id] = item
-    for key, role in ((c.CONF_LOAD, ent.ROLE_LOAD), (c.CONF_CALENDAR, ent.ROLE_CALENDAR), (c.CONF_ALARM_PANEL, ent.ROLE_PANEL)):
+    single = ((c.CONF_LOAD, ent.ROLE_LOAD), (c.CONF_CALENDAR, ent.ROLE_CALENDAR), (c.CONF_ALARM_PANEL, ent.ROLE_PANEL), (c.CONF_ASLEEP_SENSOR, ent.ROLE_ASLEEP))
+    for key, role in single:
         if house.get(key):
             meta[house[key]] = {"role": role, "room": None}
     for entity_id, old in (existing or {}).items():
@@ -239,7 +240,9 @@ class SiemStepsMixin:
                 return await self.async_step_csi_map()
             house[c.CONF_CSI_MAP] = {}
             return await self._async_after_house()
-        return self.async_show_form(step_id="house", data_schema=self.add_suggested_values_to_schema(HOUSE_SCHEMA, house))
+        return self.async_show_form(
+            step_id="house", data_schema=self.add_suggested_values_to_schema(HOUSE_SCHEMA, house), description_placeholders={"docs_url": c.DOCS_SENSORS_URL}
+        )
 
     async def async_step_csi_map(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Map each CSI sensor to the perimeter contact it watches."""
@@ -269,7 +272,7 @@ class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN)
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 6
+    MINOR_VERSION = 7
 
     def __init__(self) -> None:
         """Start with empty sections."""

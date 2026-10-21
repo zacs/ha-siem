@@ -20,6 +20,7 @@ from homeassistant.const import (
     ENTITY_MATCH_ALL,
     EVENT_CALL_SERVICE,
     STATE_HOME,
+    STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -164,7 +165,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._alarm_timer: Callable[[], None] | None = None
         self._last_let_in = -1e12
         # Night mode: whether the panel says the household is in bed, and the order of events at night.
-        self._panel_asleep = False
+        self._panel_asleep: bool | None = None
+        self._sensor_asleep: bool | None = None
         self._last_inside = -1e12
         self._family_out_until = -1e12
         self._entry_at = -1e12
@@ -241,6 +243,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._apply_calendar(self.hass.states.get(calendar))
         if panel := self.house.get(c.CONF_ALARM_PANEL):
             self._apply_panel(self.hass.states.get(panel))
+        if sensor := self.house.get(c.CONF_ASLEEP_SENSOR):
+            self._apply_asleep_sensor(self.hass.states.get(sensor))
         self._update_presence(now)
         self._refresh_mode(now)
         self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
@@ -275,8 +279,12 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         start = _parse_time(self.house.get(c.CONF_NIGHT_START), c.DEFAULT_NIGHT_START)
         end = _parse_time(self.house.get(c.CONF_NIGHT_END), c.DEFAULT_NIGHT_END)
         self.night = start <= local < end if start <= end else local >= start or local < end
-        # The household is in bed while the panel is armed night, or, with no panel picked, inside the night window.
-        self.modes.set_asleep(self._panel_asleep if self.house.get(c.CONF_ALARM_PANEL) else self.night)
+        # The household is in bed while any bedtime source picked says so: the panel armed night, or the bedtime sensor
+        # on. The night window stands in when neither is picked, or for a source that is unavailable; it never adds to
+        # a source that can tell.
+        sources = [(c.CONF_ALARM_PANEL, self._panel_asleep), (c.CONF_ASLEEP_SENSOR, self._sensor_asleep)]
+        picked = [self.night if asleep is None else asleep for key, asleep in sources if self.house.get(key)]
+        self.modes.set_asleep(any(picked) if picked else self.night)
         self.house_mode = self.modes.mode(now)
 
     @property
@@ -285,9 +293,15 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.night or self.house_mode == MODE_NIGHT
 
     def _apply_panel(self, state: State | None) -> None:
-        """Armed night means the household is in bed; pending or triggered keeps whatever it was."""
-        if state is not None and state.state not in c.PANEL_KEEPS:
+        """Armed night means the household is in bed; pending or triggered keeps whatever it was; unavailable can't tell."""
+        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            self._panel_asleep = None
+        elif state.state not in c.PANEL_KEEPS:
             self._panel_asleep = state.state == c.PANEL_ASLEEP
+
+    def _apply_asleep_sensor(self, state: State | None) -> None:
+        """On means the household is in bed, off that it is not; anything else can't tell."""
+        self._sensor_asleep = state.state == STATE_ON if state is not None and state.state in (STATE_ON, STATE_OFF) else None
 
     def _update_presence(self, now: float) -> None:
         entities = list(self.house.get(c.CONF_RESIDENTS) or []) + self.residents.trackers + list(self.house.get(c.CONF_EXTRA_TRACKERS) or [])
@@ -501,6 +515,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if meta is None:
             return
         role, room = meta.get("role"), meta.get("room")
+        if role in (ent.ROLE_PANEL, ent.ROLE_ASLEEP):
+            # Bedtime sources, read whatever their state, unavailable included.
+            (self._apply_panel if role == ent.ROLE_PANEL else self._apply_asleep_sensor)(new)
+            self._process(now)
+            return
         if new.state == STATE_UNAVAILABLE:
             # Scored from the tick once it has lasted OFFLINE_GRACE_S, so a reload or restart passes quietly.
             if old is not None and old.state != STATE_UNAVAILABLE and role in ent.SENSING_ROLES:
@@ -523,10 +542,6 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         if role == ent.ROLE_CALENDAR:
             self._apply_calendar(new)
-            self._process(now)
-            return
-        if role == ent.ROLE_PANEL:
-            self._apply_panel(new)
             self._process(now)
             return
         if role == ent.ROLE_LCM_EVENT:

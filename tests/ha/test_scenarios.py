@@ -73,6 +73,8 @@ PEOPLE: dict[str, tuple[str, dict[str, Any]]] = {
     "device_tracker.partner_watch": ("home", {"friendly_name": "Partner Watch"}),
     "person.partner": ("home", {"device_trackers": TRACKERS["partner"], "friendly_name": "Partner"}),
     "alarm_control_panel.house": ("disarmed", {"friendly_name": "House Alarm"}),
+    # A template sensor of your own that works out when everyone is in bed.
+    "binary_sensor.house_asleep": ("off", {"friendly_name": "House Asleep"}),
     "event.lcm_cleaner": ("unknown", {"code_slot": 5, "name": "Cleaner", "active": True, "friendly_name": "Cleaner code used"}),
     "event.lcm_old_sitter": ("unknown", {"code_slot": 6, "name": "Old sitter", "active": False, "friendly_name": "Old sitter code used"}),
     "calendar.house": ("off", {"friendly_name": "House"}),
@@ -230,7 +232,9 @@ async def house(hass, freezer, siem_events):
     hass.services.async_register("lock", "unlock", device("lock.front_door", "unlocked"))
     hass.services.async_register("cover", "open_cover", device("cover.garage", "open"))
 
-    async def load(*, residents: tuple[str, ...] = ("person.resident", "person.partner"), panel: bool = False, weak: tuple[str, ...] = ()) -> House:
+    async def load(
+        *, residents: tuple[str, ...] = ("person.resident", "person.partner"), panel: bool = False, asleep_sensor: bool = False, weak: tuple[str, ...] = ()
+    ) -> House:
         rooms: dict[str, dict[str, Any]] = {}
         for area_id, name in {**INDOORS, **OUTDOORS}.items():
             rooms[area_id] = {"name": name, "outdoors": area_id in OUTDOORS, "power_threshold": 30}
@@ -252,6 +256,7 @@ async def house(hass, freezer, siem_events):
                 "night_start": "22:00:00",
                 "night_end": "06:00:00",
                 **({"alarm_panel": "alarm_control_panel.house"} if panel else {}),
+                **({"asleep_sensor": "binary_sensor.house_asleep"} if asleep_sensor else {}),
             },
             "responses": {"digest_times": ["08:00"]},
         }
@@ -517,6 +522,28 @@ async def test_the_alarm_panel_decides_bedtime(house, freezer):
     freezer.move_to("2026-10-21 06:30:00-07:00")
     await home.panel("disarmed")
     assert home.mode == "family"
+
+
+async def test_a_bedtime_sensor_and_the_panel_either_one_counts(house, freezer):
+    """Your own bedtime sensor and the panel are both picked. Either one says bed and it is night mode; the clock
+    plays no part while they can tell. A sensor that drops out can't, and the night window stands in for it."""
+    freezer.move_to("2026-10-20 23:30:00-07:00")
+    home = await house(panel=True, asleep_sensor=True)
+    assert home.mode == "family", "inside the night window, but neither source says bed"
+    await home.physical("binary_sensor.house_asleep", "on")
+    assert home.mode == "night"
+    await home.physical("binary_sensor.house_asleep", "off")
+    assert home.mode == "family"
+    await home.panel("armed_night")
+    assert home.mode == "night", "the panel alone is enough"
+    await home.panel("disarmed")
+    await home.physical("binary_sensor.house_asleep", "unavailable")
+    assert home.mode == "night", "the sensor can't tell, and it is inside the night window"
+    freezer.move_to("2026-10-21 14:00:00-07:00")
+    await home.wait(30)
+    assert home.mode == "family", "still unavailable, and the window says day"
+    await home.physical("binary_sensor.house_asleep", "on")
+    assert home.mode == "night", "a bedtime source that can tell says bed even by day"
 
 
 # --- The house is empty ------------------------------------------------------------------------------------------

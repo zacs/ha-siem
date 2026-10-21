@@ -73,13 +73,15 @@ The setup flow walks through:
   and add anything it missed. Tick *Outdoors* for a yard, porch or driveway
   (rooms named like one start ticked): anything there only means someone is
   outside.
-- **Whole house.** Residents, extra trackers, guests' device trackers, water
-  and power sensors, locks, Lock Code Manager event entities, the calendar,
-  the alarm panel to read bedtime from, the night window, and Wi-Fi motion
-  sensors with the door each one watches.
+- **Whole house.** Residents, extra trackers, guests' device trackers, the
+  water and power sensors, locks, Lock Code Manager event entities, the
+  calendar, the alarm panel and a bedtime sensor to read bedtime from, the
+  night window, and Wi-Fi motion sensors with the door each one watches.
 - **Digest.** The AI task and the digest times.
 
 You can change any of it later from the integration's **Configure** menu.
+[Sensors, settings and scores](docs/sensors.md) explains what each setting is
+for and why it sits where it does.
 
 Two things live outside the flow:
 
@@ -211,7 +213,8 @@ what sets them off, how they chain, the suppressors, the house mode timings
 and how labels learn. **Configure** lets you change a few numbers when the
 defaults don't suit your house: each rule's points per house mode, the tier
 thresholds, the half-life and the chain factors. Anything more means editing
-`core/rules.py` (see [Adding a rule](#adding-a-rule)).
+`core/rules.py` (see [Adding a rule](#adding-a-rule)). The reasoning behind
+each rule's points is in [Sensors, settings and scores](docs/sensors.md).
 
 **What physically happened.** SIEM only cares about Home Assistant users for
 one thing: telling what Home Assistant did from what happened in the house. A
@@ -325,9 +328,10 @@ late, and lowering the weights would only blunt the next real break-in.
 
 **House mode.** Family while any resident or tracker is home and for 30
 minutes after. Night instead of family while the household is in bed: while the
-alarm panel you picked is armed night (pending or triggered keeps it), or, with
-no panel picked, inside the night window, midnight to 5:30 unless you change
-it. Guest while any guest's device tracker is home and for 30 minutes after,
+bedtime sensor you picked is on or the alarm panel you picked is armed night
+(either one counts; pending or triggered keeps the panel's). The night window,
+midnight to 5:30 unless you change it, decides bedtime only when you picked
+neither, or in place of one that is unavailable. Guest while any guest's device tracker is home and for 30 minutes after,
 the same grace a resident gets. Also guest during a `Guest:` event, or after
 someone was let in, until two hours have passed and the house has been quiet
 for an hour. Quiet
@@ -403,6 +407,7 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | A teenager sneaking out | Night | Nothing; see below |
 | A burglar at the back door a minute after someone walked down the hall | Night | Nothing; see below |
 | The panel armed night at 11:30 p.m. | Family, then night | Bedtime comes from the panel, not the clock |
+| Your own bedtime sensor and the panel, both picked | Night when either says bed | The clock only stands in for one that is unavailable |
 
 ## Known limits
 

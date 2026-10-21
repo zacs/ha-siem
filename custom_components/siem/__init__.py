@@ -93,17 +93,22 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate older 1.x entries to 1.6: renamed modes and rules, the settings and rules removed, outdoor rooms, night.
+    """Migrate older 1.x entries to 1.7.
 
+    Renamed modes and rules, the settings and rules removed, outdoor rooms, night points and one water flow field.
     Every step is safe to run again, so one pass covers any older minor version.
     """
     if entry.version > 1:
         return False
-    if entry.minor_version < 6:
+    if entry.minor_version < 7:
         data, options = copy.deepcopy(dict(entry.data)), copy.deepcopy(dict(entry.options))
         # The panel SIEM used to arm is now only read, for armed night.
         if panel := data.get(c.CONF_RESPONSES, {}).get(c.CONF_ALARM_PANEL):
             data.setdefault(c.CONF_HOUSE, {}).setdefault(c.CONF_ALARM_PANEL, panel)
+        # The second, any-entity water flow field is gone; whatever was in it joins the first.
+        house = data.setdefault(c.CONF_HOUSE, {})
+        if extra := house.pop(c.CONF_WATER + c.ADDITIONAL, None):
+            house[c.CONF_WATER] = list(dict.fromkeys([*(house.get(c.CONF_WATER) or []), *extra]))
         for section in (c.CONF_HOUSE, c.CONF_RESPONSES):
             for key in c.REMOVED_SETTINGS[section]:
                 data.setdefault(section, {}).pop(key, None)
@@ -129,6 +134,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
         for key in c.REMOVED_SWITCHES:
             if entity_id := registry.async_get_entity_id("switch", c.DOMAIN, f"{entry.entry_id}_{key}"):
                 registry.async_remove(entity_id)
-        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=6)
-        _LOGGER.info("Migrated SIEM config entry to 1.6")
+        hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=7)
+        _LOGGER.info("Migrated SIEM config entry to 1.7")
     return True

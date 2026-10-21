@@ -123,8 +123,8 @@
 #     lock.test_front_door_lock; LCM events event.test_lcm_guest_credential_used;
 #     calendar your test calendar; a night window covering "now" if you want
 #     to see the 1.5x exterior multiplier, and night mode while someone is
-#     home. Leave the alarm panel empty: the rig has none, and without one the
-#     night window is bedtime.
+#     home. Leave the alarm panel and the bedtime sensor empty: the rig has
+#     neither, and without them the night window is bedtime.
 #   Digest: a digest time a few minutes ahead.
 #
 # WATCHING THE SIMULATION

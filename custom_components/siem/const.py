@@ -8,6 +8,7 @@ DOMAIN = "siem"
 NAME = "SIEM"
 MANUFACTURER = "@zacs"
 VERSION = "0.0.2"
+DOCS_SENSORS_URL = "https://github.com/zacs/ha-siem/blob/main/docs/sensors.md"
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR]
 
 # Config entry data sections.
@@ -45,8 +46,10 @@ CONF_LOAD_SUSTAIN = "load_sustain_minutes"
 CONF_LOCKS = "locks"
 CONF_LCM_EVENTS = "lcm_events"
 CONF_CALENDAR = "calendar"
-# Read only: armed night means the household is in bed. SIEM never arms or disarms it.
+# Bedtime sources, read only: the panel armed night, or a sensor (a binary sensor or a helper) that is on, means the
+# household is in bed. Either one counts. Only with neither picked does the night window stand in for bedtime.
 CONF_ALARM_PANEL = "alarm_panel"
+CONF_ASLEEP_SENSOR = "asleep_sensor"
 CONF_NIGHT_START = "night_start"
 CONF_NIGHT_END = "night_end"
 
@@ -134,10 +137,11 @@ ARRIVAL_EXPLAINS_S = 600
 LET_IN_DEDUPE_S = 60
 # The alarm trigger turns on once an incident has held the alarm tier this long.
 ALARM_GRACE_S = 60
-# Night mode: the household is in bed while the picked panel is armed night. While it is pending or triggered it
-# still is; any other armed or disarmed state means it is not.
+# Night mode: the household is in bed while the picked panel is armed night. While it is arming, pending or triggered
+# it keeps what it was; any other armed or disarmed state means it is not. A bedtime source that is unavailable or
+# unknown cannot tell, and the night window stands in for it until it can.
 PANEL_ASLEEP = "armed_night"
-PANEL_KEEPS = ("arming", "pending", "triggered", "unavailable", "unknown")
+PANEL_KEEPS = ("arming", "pending", "triggered")
 # A door, window or gate that opens within two minutes of someone moving inside is someone going out; the yard and
 # the doors are theirs for fifteen minutes after their last sign out there. So is a resident's arrival or a code.
 NIGHT_INSIDE_FIRST_S = 120

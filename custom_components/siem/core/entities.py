@@ -21,9 +21,9 @@ STRENGTH_BY_CLASS = {"occupancy": STRENGTH_STRONG, "presence": STRENGTH_STRONG, 
 
 # The role an entity plays, stored per entity in the config entry's metadata dict.
 (ROLE_OCCUPANCY, ROLE_PERIMETER, ROLE_INTERIOR_DOOR, ROLE_LIGHT, ROLE_POWER, ROLE_CAMERA, ROLE_CSI, ROLE_WATER, ROLE_LOAD, ROLE_AUTOMATED_LOAD,
- ROLE_LOCK, ROLE_LCM_EVENT, ROLE_PERSON, ROLE_TRACKER, ROLE_CALENDAR, ROLE_PANEL, ROLE_GUEST_TRACKER) = (
+ ROLE_LOCK, ROLE_LCM_EVENT, ROLE_PERSON, ROLE_TRACKER, ROLE_CALENDAR, ROLE_PANEL, ROLE_GUEST_TRACKER, ROLE_ASLEEP) = (
     "occupancy", "perimeter", "interior_door", "light", "power", "camera", "csi", "water", "load", "automated_load",
-    "lock", "lcm_event", "person", "tracker", "calendar", "panel", "guest_tracker",
+    "lock", "lcm_event", "person", "tracker", "calendar", "panel", "guest_tracker", "asleep",
 )
 # Roles whose loss of contact is worth scoring as sensor_offline. Lights, plugs, cameras and helpers drop out too often.
 SENSING_ROLES: frozenset[str] = frozenset({ROLE_OCCUPANCY, ROLE_PERIMETER, ROLE_INTERIOR_DOOR, ROLE_CSI, ROLE_LOCK})
