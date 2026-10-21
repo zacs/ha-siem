@@ -43,30 +43,43 @@ async def test_mattermost_package(hass, freezer):
     await settle(hass)
     verify = posts[0].data
     assert verify["target"] == ["home_security"]
-    assert verify["message"] == "**SIEM verify: Kitchen** Score 40, house vacant."
+    # Everything sits inside the attachment, headline first: the post has no text above it.
+    assert verify["message"] == ""
     attachment = verify["data"]["attachments"][0]
     assert attachment["color"] == "#F5B700"
+    assert attachment["fallback"] == "SIEM verify: Kitchen. Score 40, house vacant."
     assert [f["title"] for f in attachment["fields"]] == ["Room", "House mode", "Score", "Top contributors"]
     assert [f["value"] for f in attachment["fields"]] == ["Kitchen", "vacant", "40", "exterior_door_opened"]
-    assert attachment["text"] == "- 12:00:00: **exterior_door_opened** +40 Back Door opened"
+    assert attachment["text"] == "**SIEM verify: Kitchen** Score 40, house vacant.\n\n- 12:00:00: **exterior_door_opened** +40 Back Door opened"
     assert "file" not in verify["data"]
+
+    def text(post) -> str:
+        return post.data["data"]["attachments"][0]["text"]
 
     hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Manual unlock operation", "code_slot": 0})
     await settle(hass)
-    glass = next(p.data for p in posts if p.data["message"].startswith("**SIEM break glass**"))
-    assert glass["message"] == "**SIEM break glass** Front Door Lock: a lock was unlocked by hand (Manual unlock operation). House vacant."
-    assert glass["data"]["attachments"][0]["color"] == "#D32F2F"
-    alarm = next(p.data for p in posts if p.data["message"].startswith("**SIEM alarm"))
-    assert alarm["data"]["attachments"][0]["text"].splitlines() == [
+    glass = next(p for p in posts if text(p).startswith("**SIEM break glass**"))
+    # The incident was open, so its timeline follows the headline.
+    assert text(glass).splitlines()[0] == "**SIEM break glass** Front Door Lock: a lock was unlocked by hand (Manual unlock operation). House vacant."
+    assert text(glass).splitlines()[-1] == "- 12:00:00: **manual_unlock** +60 Front Door Lock Manual unlock operation"
+    assert glass.data["data"]["attachments"][0]["color"] == "#D32F2F"
+    alarm = next(p for p in posts if text(p).startswith("**SIEM alarm"))
+    assert text(alarm).splitlines()[1:] == [
+        "",
         "- 12:00:00: **exterior_door_opened** +40 Back Door opened",
         "- 12:00:00: **manual_unlock** +60 Front Door Lock Manual unlock operation",
     ]
 
-    # The digest has no incident: its text is the attachment.
+    # The digest has no incident: its own text follows the headline.
     await hass.services.async_call("siem", "run_digest", {}, blocking=True)
     await settle(hass)
-    assert posts[-1].data["message"] == "**SIEM digest**"
-    assert posts[-1].data["data"]["attachments"][0] == {"color": "#1976D2", "fields": [], "text": "Quiet since 2026-10-19 12:00."}
+    assert posts[-1].data["message"] == ""
+    assert posts[-1].data["data"]["attachments"][0] == {
+        "color": "#1976D2",
+        "fallback": "SIEM digest. Quiet since 2026-10-19 12:00.",
+        "fields": [],
+        "text": "**SIEM digest** Quiet since 2026-10-19 12:00.",
+    }
     # A snapshot travels as data.file.path.
     hass.bus.async_fire("siem_notification", {"category": "verify", "title": "SIEM verify: Hall", "message": "Score 20, house vacant.", "incident": None, "snapshot": "/media/siem/abc_verify.jpg", "again": False, "summary": None})
     await settle(hass)

@@ -3,9 +3,10 @@
 # =============================================================================
 #
 # Posts every SIEM alert, break-glass message and digest to a Mattermost
-# channel as a coloured attachment with the score, the room, the house mode,
-# the top contributors and the timeline, plus the camera snapshot when the room
-# has a camera.
+# channel as one coloured attachment: the headline, the timeline, the room,
+# the house mode, the score and the top contributors, plus the camera snapshot
+# when the room has a camera. The post has no text of its own, so everything
+# sits inside the attachment; its fallback is what notifications show.
 #
 # Needs the Mattermost notification component
 # (https://github.com/cerebrate/ha-mattermost), which provides
@@ -47,8 +48,14 @@ automation:
           {'short': true, 'title': 'Score', 'value': incident.score | round(0) | int | string},
           {'short': true, 'title': 'Top contributors', 'value': (incident.top_contributors | map(attribute='rule') | join(', ')) or '-'}
         ] }}{% else %}[]{% endif %}
+      lines: "{{ n.message.splitlines() }}"
+      headline: >-
+        {{ ('**' ~ n.title ~ '** ' ~ (lines | first | default(''))) | trim }}
+      body: >-
+        {{ (timeline if incident else lines[1:] | join('\n')) | trim }}
       attachment: >-
-        {{ {'color': color, 'fields': fields, 'text': (timeline if incident else n.message) | trim} }}
+        {{ {'color': color, 'fallback': (n.title ~ '. ' ~ (lines | first | default(''))) | trim, 'fields': fields,
+            'text': headline ~ (('\n\n' ~ body) if body else '')} }}
       payload: >-
         {%- set d = {'attachments': [attachment]} %}
         {%- if n.snapshot %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
@@ -57,6 +64,5 @@ automation:
       - action: notify.mattermost
         data:
           target: "{{ [channel] }}"
-          message: >-
-            **{{ n.title }}**{{ (' ' ~ n.message.splitlines()[0]) if incident else '' }}
+          message: ""
           data: "{{ payload }}"
