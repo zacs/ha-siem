@@ -48,44 +48,63 @@ class DigestRunner:
             _LOGGER.warning("Invalid digest times %s", times)
             return False
 
-    async def async_run(self, manual: bool = False) -> None:
-        """Summarise everything since the previous digest and post it."""
+    @property
+    def running(self) -> bool:
+        """Return True while a digest is being written."""
+        return self._running
+
+    async def async_run(self, manual: bool = False, ai_task: str | None = None, preview: bool = False) -> dict[str, Any] | None:
+        """Summarise everything since the previous digest and post it; return what was written.
+
+        ``ai_task`` writes this one digest with another AI task entity than the configured one. A ``preview`` posts
+        nothing and leaves the digest period alone, so the same stretch of time can be summarised again, say by
+        another model. Returns None when a digest is already running, a scheduled one had nothing to say, or it failed.
+        """
         if self._running:
-            return
+            return None
         self._running = True
         try:
-            await self._async_run(manual)
+            return await self._async_run(manual, ai_task, preview)
         except Exception:
             _LOGGER.exception("Digest failed")
+            return None
         finally:
             self._running = False
 
-    async def _async_run(self, manual: bool) -> None:
+    async def _async_run(self, manual: bool, ai_task: str | None, preview: bool) -> dict[str, Any] | None:
         c = self.coordinator
         now = dt_util.now()
         since = self._last_run()
         incidents = list(c.store.incidents) + ([c.engine.current.as_dict()] if c.engine.current else [])
         summary = summarize_window(incidents, c.store.weight_changes, since, now)
-        c.store.last_digest = now.isoformat()
-        c.store.async_schedule_save()
+        if not preview:
+            c.store.last_digest = now.isoformat()
+            c.store.async_schedule_save()
         quiet = summary["incident_count"] == 0 and not summary["weight_changes"]
         if quiet and not manual and not c.responses.get(CONF_DIGEST_EMPTY, True):
-            return
-        text = f"Quiet since {since.strftime('%Y-%m-%d %H:%M') if since else 'setup'}." if quiet else await self._async_generate(summary)
+            return None
+        written_by = None
+        if quiet:
+            text = f"Quiet since {since.strftime('%Y-%m-%d %H:%M') if since else 'setup'}."
+        else:
+            text, written_by = await self._async_generate(summary, ai_task or c.responses.get(CONF_AI_TASK))
         counts = {key: summary[key] for key in ("since", "until", "incident_count", "labels")}
-        c.alerts.fire(CATEGORY_DIGEST, "SIEM digest", text, summary={**counts, "weight_changes": len(summary["weight_changes"]), "counts": fallback_text(summary)})
+        digest = {**counts, "weight_changes": len(summary["weight_changes"]), "counts": fallback_text(summary)}
+        if not preview:
+            c.alerts.fire(CATEGORY_DIGEST, "SIEM digest", text, summary=digest)
+        return {"message": text, "ai_task_entity": written_by, "summary": digest}
 
-    async def _async_generate(self, summary: dict[str, Any]) -> str:
-        entity = self.coordinator.responses.get(CONF_AI_TASK)
+    async def _async_generate(self, summary: dict[str, Any], entity: str | None) -> tuple[str, str | None]:
+        """Return the digest text and the AI task entity that wrote it, or the raw counts and None."""
         if not entity:
-            return fallback_text(summary)
+            return fallback_text(summary), None
         data = {"task_name": "siem digest", "instructions": INSTRUCTIONS + json.dumps(summary, default=str), "entity_id": entity}
         try:
             async with asyncio.timeout(AI_TASK_TIMEOUT_S):
                 result = await self.hass.services.async_call("ai_task", "generate_data", data, blocking=True, return_response=True)
             text = (result or {}).get("data")
             if text:
-                return text.strip() if isinstance(text, str) else json.dumps(text)
+                return (text.strip() if isinstance(text, str) else json.dumps(text)), entity
         except Exception as err:
-            _LOGGER.warning("ai_task digest failed (%s); posting raw counts", err)
-        return fallback_text(summary)
+            _LOGGER.warning("ai_task digest with %s failed (%s); posting raw counts", entity, err)
+        return fallback_text(summary), None

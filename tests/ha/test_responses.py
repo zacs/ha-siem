@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from homeassistant.core import Context
+from homeassistant.core import Context, ServiceCall, SupportsResponse
 import pytest
+import voluptuous as vol
 
 from .conftest import RESIDENT, flip, notifications, scored, setup_siem, tick
 
@@ -98,6 +99,34 @@ async def test_digest_falls_back_to_counts_without_an_ai_task(hass, freezer, sie
     assert digest["summary"]["incident_count"] == 1
     assert set(digest["summary"]) == {"since", "until", "incident_count", "labels", "weight_changes", "counts"}
     assert digest["incident"] is None and digest["snapshot"] is None
+
+
+async def test_digest_on_demand_with_another_ai_task_and_previews(hass, freezer, siem_events):
+    """Comparing models: previews of the same stretch from two AI tasks, then the real digest from the configured one."""
+
+    async def generate(call: ServiceCall):
+        return {"data": f"Five lines from {call.data['entity_id']}."}
+
+    hass.services.async_register("ai_task", "generate_data", generate, supports_response=SupportsResponse.ONLY)
+    entry = await setup_siem(hass, responses={"ai_task_entity": "ai_task.everyday"})
+    await tick(hass, freezer, 60)
+    flip(hass, "binary_sensor.back_door")
+    await hass.async_block_till_done()
+    period = entry.runtime_data.store.last_digest
+    for ai_task in ("ai_task.small_model", "ai_task.big_model"):
+        preview = await hass.services.async_call("siem", "run_digest", {"ai_task_entity": ai_task, "preview": True}, blocking=True, return_response=True)
+        assert preview["message"] == f"Five lines from {ai_task}."
+        assert preview["ai_task_entity"] == ai_task
+        assert preview["summary"]["incident_count"] == 1
+    # Previews send nothing and leave the digest period alone.
+    assert notifications(siem_events, "digest") == []
+    assert entry.runtime_data.store.last_digest == period
+    result = await hass.services.async_call("siem", "run_digest", {}, blocking=True, return_response=True)
+    assert result["ai_task_entity"] == "ai_task.everyday"
+    assert [n["message"] for n in notifications(siem_events, "digest")] == ["Five lines from ai_task.everyday."]
+    assert entry.runtime_data.store.last_digest != period
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call("siem", "run_digest", {"ai_task_entity": "light.kitchen"}, blocking=True)
 
 
 async def test_mobile_label_buttons(hass, freezer):

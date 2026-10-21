@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
@@ -25,6 +25,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(c.DOMAIN)
 
 LABEL_SCHEMA = vol.Schema({vol.Required(c.ATTR_LABEL): vol.In(LABELS), vol.Optional(c.ATTR_INCIDENT_ID): cv.string})
 MODE_SCHEMA = vol.Schema({vol.Required(c.ATTR_MODE): vol.In([MODE_AUTO, *MODES])})
+DIGEST_SCHEMA = vol.Schema({vol.Optional(c.CONF_AI_TASK): cv.entity_domain("ai_task"), vol.Optional(c.ATTR_PREVIEW, default=False): cv.boolean})
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -41,8 +42,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         except LookupError as err:
             raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="no_incident") from err
 
-    async def run_digest(call: ServiceCall) -> None:
-        await coordinator().digest.async_run(manual=True)
+    async def run_digest(call: ServiceCall) -> ServiceResponse:
+        digest = coordinator().digest
+        if digest.running:
+            raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="digest_running")
+        result = await digest.async_run(manual=True, ai_task=call.data.get(c.CONF_AI_TASK), preview=call.data[c.ATTR_PREVIEW])
+        if result is None:
+            raise HomeAssistantError(translation_domain=c.DOMAIN, translation_key="digest_failed")
+        return result
 
     async def reset_weights(call: ServiceCall) -> None:
         await coordinator().async_reset_weights()
@@ -52,11 +59,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     for name, handler, schema in (
         (c.SERVICE_LABEL_INCIDENT, label_incident, LABEL_SCHEMA),
-        (c.SERVICE_RUN_DIGEST, run_digest, None),
         (c.SERVICE_RESET_WEIGHTS, reset_weights, None),
         (c.SERVICE_SET_HOUSE_MODE, set_house_mode, MODE_SCHEMA),
     ):
         hass.services.async_register(c.DOMAIN, name, handler, schema=schema)
+    # The digest is also returned, for scripts and for comparing AI tasks from Developer tools.
+    hass.services.async_register(c.DOMAIN, c.SERVICE_RUN_DIGEST, run_digest, schema=DIGEST_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     return True
 
 

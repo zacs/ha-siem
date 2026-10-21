@@ -152,7 +152,8 @@ When each category fires:
 - `deter` and `alarm` every time an incident climbs to that tier.
 - `break_glass` whatever the score: a hand unlock while vacant, a keypad
   lockout, or a sensor unavailable for over an hour while vacant.
-- `digest` at each digest time, or when you run `siem.run_digest`.
+- `digest` at each digest time, or when you run `siem.run_digest` (but not
+  for a preview).
 
 ### `siem_incident`
 
@@ -451,6 +452,26 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 
 Actions: `siem.label_incident`, `siem.run_digest`, `siem.reset_weights` and
 `siem.set_house_mode`.
+
+`siem.run_digest` writes the digest for everything since the previous one
+right away, sends it, and also returns it as the action's response (with
+`message`, `ai_task_entity` and `summary`). Two optional fields help compare AI
+models:
+
+- `ai_task_entity` writes this one digest with another AI task than the
+  configured one. The response's `ai_task_entity` says which one wrote it,
+  and is empty when it fell back to raw counts.
+- `preview: true` only returns the digest. Nothing is sent and the digest
+  period doesn't move on, so you can have the same stretch written again by
+  another model.
+
+```yaml
+action: siem.run_digest
+data:
+  ai_task_entity: ai_task.claude
+  preview: true
+response_variable: digest
+```
 
 ## Dry run with test entities
 

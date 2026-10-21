@@ -16,7 +16,18 @@ label_incident:
       example: "3f9a1c2b"
       selector:
         text:
-run_digest: {}
+run_digest:
+  fields:
+    ai_task_entity:
+      required: false
+      selector:
+        entity:
+          domain: ai_task
+    preview:
+      required: false
+      default: false
+      selector:
+        boolean:
 reset_weights: {}
 set_house_mode:
   fields:

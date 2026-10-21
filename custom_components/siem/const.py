@@ -105,6 +105,7 @@ SERVICE_SET_HOUSE_MODE = "set_house_mode"
 ATTR_INCIDENT_ID = "incident_id"
 ATTR_LABEL = "label"
 ATTR_MODE = "mode"
+ATTR_PREVIEW = "preview"
 
 SIGNAL_INCIDENT_EVENT = f"{DOMAIN}_incident_event"
 

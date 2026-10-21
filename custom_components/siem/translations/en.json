@@ -312,6 +312,12 @@
     },
     "no_incident": {
       "message": "There is no incident with that id."
+    },
+    "digest_running": {
+      "message": "A digest is already being written; try again in a moment."
+    },
+    "digest_failed": {
+      "message": "The digest could not be written; see the log."
     }
   },
   "services": {
@@ -331,7 +337,17 @@
     },
     "run_digest": {
       "name": "Run digest",
-      "description": "Send the digest for everything since the previous one."
+      "description": "Write the digest for everything since the previous one now, send it, and return it.",
+      "fields": {
+        "ai_task_entity": {
+          "name": "AI task",
+          "description": "Write this digest with another AI task than the configured one, to compare models."
+        },
+        "preview": {
+          "name": "Preview",
+          "description": "Only return the digest: don't send it, and don't start a new digest period, so the same stretch can be written again."
+        }
+      }
     },
     "reset_weights": {
       "name": "Reset weights",
