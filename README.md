@@ -29,7 +29,8 @@ alerts for a week before you let anything act on them.
 - **Three tiers.** Verify, deter and alarm, each one an event your automations
   can act on.
 - **Five house modes.** Family, night, guest, service and vacant, worked out
-  from presence (yours and your guests'), bedtime, a calendar and lock codes.
+  from presence (yours and your guests'), bedtime, a calendar or sensors, and
+  lock codes.
   The same open door means something different in each.
 - **Plain Home Assistant state and events.** Sensors for the score, tier,
   incident and house mode, and an event for every alert.
@@ -52,6 +53,7 @@ Each of these adds something. None of them is required.
 | An alarm panel, such as [Alarmo](https://github.com/nielsfaber/alarmo) | Add `binary_sensor.siem_alarm_trigger` to it and SIEM's alarm tier sets off your alarm. Pick it in setup and arming it night tells SIEM everyone's in bed; SIEM only reads it. |
 | [Lock Code Manager](https://github.com/raman325/lock_code_manager) (LCM) | Codes and hand unlocks from any lock LCM supports, with the code's name on the incident, and an alert when a code LCM has switched off still opens the lock. Z-Wave JS locks report codes and hand unlocks without it. |
 | A calendar, such as [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/) | `Guest:` and `Service:` on event names set the house mode. |
+| A [Workday](https://www.home-assistant.io/integrations/workday/) sensor, a schedule or a helper | Guest or service mode while it's on, such as on the cleaners' day. |
 | An [AI task](https://www.home-assistant.io/integrations/ai_task/) entity | A daily digest written in plain English instead of raw counts. OpenAI, Anthropic, Google and Ollama all provide one. |
 | Cameras | A snapshot from the room's camera with each alert. |
 | Wi-Fi motion sensors | Someone at a door that never opened. These are CSI (channel state information) sensors: an ESP32 running [ESP-CSI](https://github.com/espressif/esp-csi) or [ESPectre](https://github.com/francescopace/espectre) senses motion from changes in the Wi-Fi signal. |
@@ -75,8 +77,9 @@ The setup flow walks through:
   outside.
 - **Whole house.** Residents, extra trackers, guests' device trackers, the
   water and power sensors, locks, Lock Code Manager event entities, the
-  calendar, the alarm panel and a bedtime sensor to read bedtime from, the
-  night window, and Wi-Fi motion sensors with the door each one watches.
+  calendar and guest and service sensors, the alarm panel and a bedtime sensor
+  to read bedtime from, the night window, and Wi-Fi motion sensors with the
+  door each one watches.
 - **Digest.** The AI task and the digest times.
 
 You can change any of it later from the integration's **Configure** menu.
@@ -87,9 +90,10 @@ Two things live outside the flow:
 
 - **Guest and service events.** On the calendar you picked, an event whose
   title starts with `Guest:` puts the house in guest mode, and `Service:` in
-  service mode. Guest mode ends two hours after the event, or later if the
-  house hasn't been quiet for an hour by then. Service mode ends with the
-  event.
+  service mode. A guest or service sensor that is on does the same, and
+  either the calendar or a sensor is enough. Guest mode ends two hours after
+  the event or the sensor, or later if the house hasn't been quiet for an
+  hour by then. Service mode ends with the event or the sensor.
 - **The alarm trigger.** To have SIEM set off your alarm, add
   `binary_sensor.siem_alarm_trigger` to your panel as an always-on sensor (in
   Alarmo, type *other*). It turns on once an incident has stayed at the alarm

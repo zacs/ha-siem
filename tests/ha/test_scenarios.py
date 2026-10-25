@@ -78,6 +78,10 @@ PEOPLE: dict[str, tuple[str, dict[str, Any]]] = {
     "event.lcm_cleaner": ("unknown", {"code_slot": 5, "name": "Cleaner", "active": True, "friendly_name": "Cleaner code used"}),
     "event.lcm_old_sitter": ("unknown", {"code_slot": 6, "name": "Old sitter", "active": False, "friendly_name": "Old sitter code used"}),
     "calendar.house": ("off", {"friendly_name": "House"}),
+    # The Workday integration, set to the cleaners' weekday: on all that day, off the rest of the week.
+    "binary_sensor.cleaners_day": ("off", {"friendly_name": "Cleaners' day"}),
+    # A helper you switch on while friends are staying.
+    "input_boolean.guests_staying": ("off", {"friendly_name": "Guests staying"}),
     # A friend who stays over sometimes, without a person entity: the router sees their phone.
     "device_tracker.friend_phone": ("not_home", {"friendly_name": "Friend Phone"}),
 }
@@ -253,6 +257,8 @@ async def house(hass, freezer, siem_events):
                 "locks": ["lock.front_door"],
                 "lcm_events": ["event.lcm_cleaner", "event.lcm_old_sitter"],
                 "calendar": "calendar.house",
+                "guest_sensors": ["input_boolean.guests_staying"],
+                "service_sensors": ["binary_sensor.cleaners_day"],
                 "night_start": "22:00:00",
                 "night_end": "06:00:00",
                 **({"alarm_panel": "alarm_control_panel.house"} if panel else {}),
@@ -806,6 +812,58 @@ async def test_a_neighbor_on_the_calendar(house, freezer):
     await home.physical("light.kitchen")
     await home.physical("sensor.water_flow", "3")
     assert home.alerts == [] and home.mode == "guest"
+
+
+async def test_the_cleaners_day_on_a_workday_sensor(house, freezer):
+    """The cleaners come every Wednesday with a key, and a Workday sensor set to Wednesdays says so instead of the
+    calendar. It is on from midnight to midnight, so the whole day is service mode: the key, the doors, every room and
+    the water are all expected. The next day SIEM is back on watch."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 00:00:00-07:00")
+    await home.physical("binary_sensor.cleaners_day", "on")
+    assert home.mode == "service"
+    await home.wait(10 * 3600)
+    await home.lock_event("Manual unlock operation")
+    for _ in range(12):
+        await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion", "binary_sensor.kitchen_presence", "binary_sensor.closet_door")
+        await home.physical("light.kitchen", "on")
+        await home.physical("sensor.water_flow", "5")
+        await home.wait(600)
+        await home.physical("light.kitchen", "off")
+        await home.physical("sensor.water_flow", "0")
+    assert home.alerts == [] and home.mode == "service"
+    freezer.move_to("2026-10-22 00:00:00-07:00")
+    await home.physical("binary_sensor.cleaners_day", "off")
+    assert home.mode == "vacant", "service mode ends with the sensor"
+    freezer.move_to("2026-10-22 09:00:00-07:00")
+    await home.physical("binary_sensor.back_door")
+    assert home.alerts == ["verify"]
+
+
+async def test_guests_staying_on_a_helper_and_on_the_calendar(house, freezer):
+    """Friends stay for the weekend; you switch on a Guests staying helper, and a 'Guest:' event covers the Friday
+    they arrive. Either one is guest mode. When you switch the helper off, guest mode lasts two hours, and until the
+    house has been quiet for an hour, the same as after a calendar event."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-23 10:00:00-07:00")
+    await home.calendar("Guest: Sam and Alex arrive", "2026-10-23 10:00:00", "2026-10-23 12:00:00")
+    await home.physical("input_boolean.guests_staying", "on")
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    home.hass.states.async_set("calendar.house", "off", {"friendly_name": "House"})
+    # Long enough that the event alone would have let go: two hours past its end, and an hour of quiet.
+    await home.wait(5 * 3600)
+    assert home.mode == "guest", "the helper holds it after the event"
+    await home.pulse("binary_sensor.kitchen_presence", "binary_sensor.fridge_door")
+    await home.physical("input_boolean.guests_staying", "off")
+    await home.wait(3600)
+    await home.pulse("binary_sensor.back_door")
+    assert home.mode == "guest" and home.alerts == []
+    await home.wait(2 * 3600)
+    assert home.mode == "vacant"
+    await home.physical("binary_sensor.back_door")
+    assert home.alerts == ["verify"]
 
 
 async def test_letting_the_plumber_in_from_the_app(house, freezer):

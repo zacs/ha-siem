@@ -155,10 +155,12 @@ pending or triggered keeps the panel's). The night window, midnight to 5:30
 unless you change it, decides bedtime only when you picked neither, or in
 place of one that is unavailable. Guest while any guest's device tracker is
 home and for 30 minutes after, the same grace a resident gets. Also guest
-during a `Guest:` event, or after someone was let in, until two hours have
-passed and the house has been quiet for an hour. Quiet means no doors,
-switches, water or appliances; motion doesn't count, so a pet can't hold guest
-mode open. Service during a `Service:` event. Vacant otherwise.
+during a `Guest:` event or while a guest sensor is on, and after either one
+ends or someone was let in, until two hours have passed and the house has been
+quiet for an hour. Quiet means no doors, switches, water or appliances; motion
+doesn't count, so a pet can't hold guest mode open. Service during a
+`Service:` event or while a service sensor is on. The calendar and the
+sensors add up: either one is enough. Vacant otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
 restarts until you set it back to auto. Every digest ends with the house mode,
 and says so while a mode is forced, with the date it was set.

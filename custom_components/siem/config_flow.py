@@ -113,6 +113,8 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_LOCKS): _entity("lock"),
         vol.Optional(c.CONF_LCM_EVENTS): _entity("event"),
         vol.Optional(c.CONF_CALENDAR): _entity("calendar", multiple=False),
+        vol.Optional(c.CONF_GUEST_SENSORS): _entity(["binary_sensor", "input_boolean", "schedule"]),
+        vol.Optional(c.CONF_SERVICE_SENSORS): _entity(["binary_sensor", "input_boolean", "schedule"]),
         vol.Optional(c.CONF_ALARM_PANEL): _entity("alarm_control_panel", multiple=False),
         vol.Optional(c.CONF_ASLEEP_SENSOR): _entity(["binary_sensor", "input_boolean"], multiple=False),
         vol.Optional(c.CONF_NIGHT_START, default=c.DEFAULT_NIGHT_START): sel.TimeSelector(),
@@ -132,7 +134,7 @@ ROOM_ROLES = ((c.CONF_OCCUPANCY, ent.ROLE_OCCUPANCY), (c.CONF_PERIMETER, ent.ROL
 HOUSE_ROLES = (
     (c.CONF_CSI, ent.ROLE_CSI), (c.CONF_WATER, ent.ROLE_WATER), (c.CONF_AUTOMATED_LOADS, ent.ROLE_AUTOMATED_LOAD), (c.CONF_LOCKS, ent.ROLE_LOCK),
     (c.CONF_LCM_EVENTS, ent.ROLE_LCM_EVENT), (c.CONF_RESIDENTS, ent.ROLE_PERSON), (c.CONF_EXTRA_TRACKERS, ent.ROLE_TRACKER),
-    (c.CONF_GUEST_TRACKERS, ent.ROLE_GUEST_TRACKER),
+    (c.CONF_GUEST_TRACKERS, ent.ROLE_GUEST_TRACKER), (c.CONF_GUEST_SENSORS, ent.ROLE_GUEST_SENSOR), (c.CONF_SERVICE_SENSORS, ent.ROLE_SERVICE_SENSOR),
 )
 
 

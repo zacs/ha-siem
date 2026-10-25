@@ -46,6 +46,10 @@ CONF_LOAD_SUSTAIN = "load_sustain_minutes"
 CONF_LOCKS = "locks"
 CONF_LCM_EVENTS = "lcm_events"
 CONF_CALENDAR = "calendar"
+# Guest and service mode from entities that are on or off (a workday sensor, a schedule, a helper), alongside the
+# calendar: any one of them on means that mode, the same as a Guest: or Service: event running.
+CONF_GUEST_SENSORS = "guest_sensors"
+CONF_SERVICE_SENSORS = "service_sensors"
 # Bedtime sources, read only: the panel armed night, or a sensor (a binary sensor or a helper) that is on, means the
 # household is in bed. Either one counts. Only with neither picked does the night window stand in for bedtime.
 CONF_ALARM_PANEL = "alarm_panel"

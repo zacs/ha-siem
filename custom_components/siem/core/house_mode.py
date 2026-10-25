@@ -15,18 +15,20 @@ MODE_AUTO = "auto"
 
 
 class HouseModeMachine:
-    """Derive the house mode from presence, bedtime, the calendar and people being let in.
+    """Derive the house mode from presence, bedtime, the calendar, guest and service sensors and people being let in.
 
     Precedence is override, family, guest, service, vacant; family is night
     while the household is in bed (the panel armed night, or the night
     window, as the coordinator decides). Family lingers
     thirty minutes after the last resident leaves. Guest is held while a
     guest's device tracker is home and for thirty minutes after, while a
-    Guest calendar event runs and afterwards until two hours past its end
-    and sixty quiet minutes have both elapsed; letting someone in (a code at
-    the keypad, an unlock from Home Assistant) starts the same clock from the
-    moment of the unlock. Motion does not count as activity, so a pet cannot
-    hold guest mode open.
+    Guest calendar event runs or a guest sensor is on, and afterwards until
+    two hours past its end and sixty quiet minutes have both elapsed; letting
+    someone in (a code at the keypad, an unlock from Home Assistant) starts
+    the same clock from the moment of the unlock. Motion does not count as
+    activity, so a pet cannot hold guest mode open. Service is held while a
+    Service calendar event runs or a service sensor is on, and ends with it.
+    The calendar and the sensors add up: either one is enough.
     """
 
     def __init__(self, now: float) -> None:
@@ -40,6 +42,8 @@ class HouseModeMachine:
         self._guest_window: tuple[float, float] | None = None
         self._guest_end: float | None = None
         self._service_window: tuple[float, float] | None = None
+        self._guest_sensor = False
+        self._service_sensor = False
         self._last_activity = now
 
     def set_presence(self, anyone_home: bool, now: float) -> None:
@@ -79,6 +83,13 @@ class HouseModeMachine:
         self._guest_window = None
         self._service_window = None
 
+    def set_mode_sensors(self, guest: bool, service: bool, now: float) -> None:
+        """Record whether any guest or service sensor is on; a guest sensor turning off starts the guest clock."""
+        if self._guest_sensor and not guest:
+            self._guest_end = max(self._guest_end or now, now)
+        self._guest_sensor = guest
+        self._service_sensor = service
+
     def let_in(self, now: float) -> None:
         """Someone was let in, with a code or from Home Assistant: start (or extend) the guest clock."""
         self._guest_end = max(self._guest_end or now, now)
@@ -101,7 +112,7 @@ class HouseModeMachine:
     def _guest(self, now: float) -> bool:
         if self._guest_here or (self._last_guest_seen is not None and now - self._last_guest_seen < GUEST_LINGER_S):
             return True
-        if self._guest_window and self._guest_window[0] <= now < self._guest_window[1]:
+        if self._guest_sensor or (self._guest_window and self._guest_window[0] <= now < self._guest_window[1]):
             return True
         if self._guest_end is None:
             return False
@@ -111,7 +122,7 @@ class HouseModeMachine:
         return False
 
     def _service(self, now: float) -> bool:
-        return bool(self._service_window and self._service_window[0] <= now < self._service_window[1])
+        return self._service_sensor or bool(self._service_window and self._service_window[0] <= now < self._service_window[1])
 
     def mode(self, now: float) -> str:
         """Return the current house mode."""

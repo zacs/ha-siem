@@ -45,12 +45,16 @@
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
           "calendar": "Calendar with 'Guest:' and 'Service:' events",
+          "guest_sensors": "Guest sensors: on means guest mode",
+          "service_sensors": "Service sensors: on means service mode",
           "alarm_panel": "Alarm panel: armed night means everyone is in bed",
           "asleep_sensor": "Bedtime sensor: on means everyone is in bed",
           "night_start": "Night starts",
           "night_end": "Night ends"
         },
         "data_description": {
+          "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
+          "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
           "night_start": "Outdoor rules count 1.5 times inside the night window. It is also bedtime, but only when no bedtime sensor or alarm panel is picked."
         }
       },
@@ -178,12 +182,16 @@
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
           "calendar": "Calendar with 'Guest:' and 'Service:' events",
+          "guest_sensors": "Guest sensors: on means guest mode",
+          "service_sensors": "Service sensors: on means service mode",
           "alarm_panel": "Alarm panel: armed night means everyone is in bed",
           "asleep_sensor": "Bedtime sensor: on means everyone is in bed",
           "night_start": "Night starts",
           "night_end": "Night ends"
         },
         "data_description": {
+          "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
+          "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
           "night_start": "Outdoor rules count 1.5 times inside the night window. It is also bedtime, but only when no bedtime sensor or alarm panel is picked."
         }
       },

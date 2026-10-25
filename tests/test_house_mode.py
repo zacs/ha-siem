@@ -67,6 +67,43 @@ def test_service_only_during_event_and_precedence():
     assert machine.mode(150) == "family"
 
 
+def test_service_sensor_holds_service_mode_and_adds_to_the_calendar():
+    machine = HouseModeMachine(0)
+    machine.set_mode_sensors(False, True, 10)
+    assert machine.mode(10) == "service"
+    machine.set_mode_sensors(False, False, 100)
+    assert machine.mode(100) == "vacant", "service ends with the sensor"
+    # Either one is enough: the calendar's event outlasts the sensor, and the sensor outlasts the event.
+    machine.set_calendar_event("Service: Plumber", 100, 200)
+    machine.set_mode_sensors(False, True, 100)
+    machine.set_mode_sensors(False, False, 150)
+    assert machine.mode(150) == "service"
+    machine.set_mode_sensors(False, True, 190)
+    assert machine.mode(250) == "service"
+    machine.set_presence(True, 250)
+    assert machine.mode(250) == "family", "residents come first"
+
+
+def test_guest_sensor_lingers_like_the_end_of_a_guest_event():
+    machine = HouseModeMachine(0)
+    machine.set_mode_sensors(True, False, 10)
+    assert machine.mode(10_000) == "guest"
+    machine.note_activity(10_000)
+    machine.set_mode_sensors(False, False, 10_000)
+    assert machine.mode(10_000 + GUEST_AFTER_END_S - 1) == "guest"
+    assert machine.mode(10_000 + GUEST_AFTER_END_S) == "vacant", "two hours on, and quiet for an hour"
+    # A guest sensor that was never on starts no clock.
+    fresh = HouseModeMachine(0)
+    fresh.set_mode_sensors(False, False, 10)
+    assert fresh.mode(10) == "vacant"
+
+
+def test_guest_comes_before_service():
+    machine = HouseModeMachine(0)
+    machine.set_mode_sensors(True, True, 10)
+    assert machine.mode(10) == "guest"
+
+
 def test_override():
     machine = HouseModeMachine(0)
     machine.set_override("guest")

@@ -250,6 +250,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = self.now()
         if calendar := self.house.get(c.CONF_CALENDAR):
             self._apply_calendar(self.hass.states.get(calendar))
+        self._apply_mode_sensors(now)
         if panel := self.house.get(c.CONF_ALARM_PANEL):
             self._apply_panel(self.hass.states.get(panel))
         if sensor := self.house.get(c.CONF_ASLEEP_SENSOR):
@@ -328,6 +329,14 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if start is None or end is None:
             return
         self.modes.set_calendar_event(state.attributes.get("message"), dt_util.as_utc(start).timestamp(), dt_util.as_utc(end).timestamp())
+
+    def _apply_mode_sensors(self, now: float) -> None:
+        """Any guest or service sensor on means that mode, the same as a Guest: or Service: event; anything else is off."""
+
+        def any_on(field: str) -> bool:
+            return any((state := self.hass.states.get(e)) is not None and state.state == STATE_ON for e in self.house_list(field))
+
+        self.modes.set_mode_sensors(any_on(c.CONF_GUEST_SENSORS), any_on(c.CONF_SERVICE_SENSORS), now)
 
     def publish(self, now: float | None = None, force: bool = False) -> None:
         """Refresh the entities, subject to the rate limit unless forced."""
@@ -537,6 +546,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if meta is None:
             return
         role, room = meta.get("role"), meta.get("room")
+        if role in (ent.ROLE_GUEST_SENSOR, ent.ROLE_SERVICE_SENSOR):
+            # Read whatever their state: one that is unavailable stops counting, so the house is watched again.
+            self._apply_mode_sensors(now)
+            self._process(now)
+            return
         if role in (ent.ROLE_PANEL, ent.ROLE_ASLEEP):
             # Bedtime sources, read whatever their state, unavailable included.
             (self._apply_panel if role == ent.ROLE_PANEL else self._apply_asleep_sensor)(new)

@@ -29,6 +29,8 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | The friend comes in with a key before their phone joins the Wi-Fi | Vacant, then guest | Break glass and alarm alerts, then the score drops to 0; the trigger never turns on |
 | The cleaner's code and three hours of cleaning | Guest | Nothing; vacant again an hour after they leave |
 | A neighbor on the calendar as `Guest:` | Guest | Nothing |
+| The cleaners' day on a Workday sensor: a key, every room, the water | Service, all day | Nothing; vacant again when the sensor turns off at midnight |
+| Friends staying, on a helper and a `Guest:` event | Guest | Nothing; vacant again two hours after the helper turns off and the house goes quiet |
 | Unlocking for the plumber from the app | Guest | Nothing |
 | Opening the garage from the app for a delivery | Guest | Nothing |
 | The dog, on weak motion sensors, for six hours | Vacant | Nothing |

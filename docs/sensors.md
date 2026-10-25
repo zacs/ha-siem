@@ -266,13 +266,44 @@ lock scores `pin_not_allowed`, 30 points (20 with the family home): codes are
 usually removed from the lock when switched off, so this means the lock and
 Lock Code Manager disagree.
 
-### Calendar
+### Calendar, guest sensors and service sensors
 
-Optional. An event whose title starts with `Guest:` puts the house in guest
-mode for the event, then until two hours after it and an hour of quiet;
-`Service:` puts it in service mode for the event only. This is how you tell
-SIEM about the cleaner, the pet sitter, the plumber. Guests' trackers and lock
-codes do the same without a calendar.
+Optional. These are how you tell SIEM about the cleaner, the pet sitter, the
+plumber. Guests' trackers and lock codes do the same without either.
+
+- **Calendar:** an event whose title starts with `Guest:` puts the house in
+  guest mode for the event, then until two hours after it and an hour of
+  quiet; `Service:` puts it in service mode for the event only.
+- **Guest and service sensors:** any binary sensor, helper or schedule that
+  is on while guests are staying or someone is working in the house. A guest
+  sensor works like a `Guest:` event that lasts while it's on, so guest mode
+  carries on for two hours after it turns off, and an hour of quiet. A
+  service sensor works like a `Service:` event and ends when it turns off.
+  One that is unavailable counts as off, so the house is watched again.
+
+**They are a union.** Pick a calendar and sensors and either one is enough:
+a `Service:` event for the plumber and a cleaners'-day sensor both put the
+house in service mode, each for its own stretch. If you pick several sensors,
+any one on counts.
+
+**A Workday sensor is on all day.** The
+[Workday](https://www.home-assistant.io/integrations/workday/) integration set
+to the cleaners' weekday is a simple way to say when they come, and it skips
+holidays. But it's on from midnight to midnight, so the whole day is service
+mode, and in service mode only lock trouble scores: the house isn't watched
+that day, before or after they leave. If they come for a morning, a
+[schedule](https://www.home-assistant.io/integrations/schedule/) helper set
+to their hours keeps the rest of the day watched. To keep Workday's holidays
+too, a template binary sensor can combine the two:
+
+```yaml
+template:
+  - binary_sensor:
+      - name: Cleaners here
+        state: >-
+          {{ is_state('binary_sensor.cleaners_day', 'on')
+             and today_at('09:00') <= now() < today_at('13:00') }}
+```
 
 ### Bedtime: the alarm panel and a bedtime sensor
 
