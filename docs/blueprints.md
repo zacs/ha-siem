@@ -7,6 +7,12 @@ versions of the automations most houses want. Import one, pick your phones or
 lights, and save. You can edit or replace any of them later; SIEM doesn't
 care where its events go.
 
+Each one also comes as a plain YAML package in [`packages/`](../packages), for
+configuration you keep under source control. The packages behave the same, so
+everything on this page applies to them too; their settings are variables
+marked `EDIT` instead of a form. [Packages](../packages/README.md) explains
+how to install them.
+
 | Blueprint | What it does | Import |
 | --- | --- | --- |
 | [SIEM alerts to phones](#siem-alerts-to-phones) | Pushes alerts to phones with label buttons | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/create-link/?redirect=blueprint_import&blueprint_url=https%3A%2F%2Fgithub.com%2Fzacs%2Fha-siem%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsiem%2Fmobile_app.yaml) |

@@ -41,7 +41,7 @@ alerts for a week before you let anything act on them.
   home. Residents are person entities; anyone without a Home Assistant login
   can be an extra tracker, such as their phone seen by your router.
 - Automations that do something with SIEM's alerts. The
-  [blueprints](#blueprints) are a starting point.
+  [blueprints and packages](#blueprints) are a starting point.
 
 ## Nice to haves
 
@@ -100,7 +100,9 @@ Two things live outside the flow:
 
 SIEM fires events; these turn them into notifications and lights. Import one,
 pick your phones or lights, and save. [Blueprints](docs/blueprints.md) has
-every input, and what Mattermost needs for its buttons to work.
+every input, and what Mattermost needs for its buttons to work. Prefer plain
+YAML you keep under source control? The same four are in
+[`packages/`](packages).
 
 | Blueprint | What it does | Import |
 | --- | --- | --- |
@@ -192,7 +194,8 @@ AI task, or preview without sending; see [the digest](docs/events.md#the-digest)
 ## More
 
 - [Blueprints](docs/blueprints.md): each blueprint, labelling from
-  notifications, and SIEM's label webhook.
+  notifications, and SIEM's label webhook. [Packages](packages/README.md):
+  the same automations as plain YAML.
 - [Events](docs/events.md): every field of SIEM's events, labelling and the
   digest.
 - [How scoring works](docs/scoring.md),

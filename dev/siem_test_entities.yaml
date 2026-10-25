@@ -89,8 +89,8 @@
 #   - Notifications: nothing to set up. SIEM sends none itself; the automation
 #     at the bottom of this file turns its siem_notification events into
 #     persistent notifications, so alerts land in the notification drawer.
-#     The blueprints in blueprints/ do the same for Mattermost and the
-#     companion app.
+#     The blueprints in blueprints/, or the same as packages in packages/, do
+#     the same for Mattermost and the companion app.
 #   - Calendar: add a Local Calendar (Settings > Devices & services > Add
 #     integration) named "Test House Calendar" and create events titled
 #     "Guest: Test Guest" or "Service: Plumber". Or set calendar state by hand in

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -129,6 +130,21 @@ async def tick(hass, freezer, seconds: float) -> None:
     freezer.tick(timedelta(seconds=seconds))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
+
+
+async def settle(hass) -> None:
+    """Let SIEM's response task fire its event, then the automations that answer it run."""
+    for _ in range(3):
+        await hass.async_block_till_done()
+
+
+async def nudge(hass, freezer=None, seconds: float = 0) -> None:
+    """Move the clock and let callbacks run, without waiting for an automation that is itself waiting."""
+    if seconds:
+        freezer.tick(timedelta(seconds=seconds))
+        async_fire_time_changed(hass)
+    for _ in range(20):
+        await asyncio.sleep(0)
 
 
 def scored(entry) -> list[tuple[str, float, str | None]]:

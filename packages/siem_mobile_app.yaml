@@ -1,0 +1,103 @@
+# =============================================================================
+# SIEM Security: alerts to phones (package)
+# =============================================================================
+#
+# Pushes SIEM's alerts to phones running the Home Assistant companion app
+# (https://companion.home-assistant.io/), with buttons that label the incident
+# the alert is about: False alarm, That's me, Real and Guest. Each button
+# labels its own incident, however many alerts have come since. SIEM listens
+# for the presses itself; nothing else is needed for the labels to land.
+#
+# When the incident is labelled, from a phone or anywhere else, the alert is
+# replaced by one that says who answered and how. Alarm and break-glass alerts
+# are time sensitive, so they break through Focus on iOS. Android shows the
+# first three buttons only.
+#
+# The same automation as the "SIEM alerts to phones" blueprint.
+#
+# INSTALL
+#   1. Copy this file to <config>/packages/siem_mobile_app.yaml and enable
+#      packages in configuration.yaml if you have not already:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   2. Under "EDIT" below, list your phones' notify actions.
+#   3. Restart Home Assistant, or reload automations.
+# =============================================================================
+
+automation:
+  - id: siem_mobile_app
+    alias: SIEM to the companion app
+    description: Pushes SIEM alerts with label buttons, and replaces them once the incident is labelled.
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: event
+        event_type: siem_notification
+        id: alert
+      - trigger: event
+        event_type: siem_incident
+        event_data:
+          kind: labelled
+        id: labelled
+    variables:
+      # EDIT: your phones' notify actions, from Developer tools > Actions.
+      phones:
+        - notify.mobile_app_your_phone
+      # EDIT: which alerts to push. Add digest for the daily summary.
+      categories: [verify, deter, alarm, break_glass]
+      label_names:
+        false_alarm: False alarm
+        thats_me: That's me
+        real: Real
+        guest: Guest
+    actions:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: alert
+              - condition: template
+                value_template: "{{ trigger.event.data.category in categories }}"
+            sequence:
+              - variables:
+                  n: "{{ trigger.event.data }}"
+                  incident_id: "{{ n.incident.incident_id if n.incident else '' }}"
+                  urgent: "{{ n.category in ['alarm', 'break_glass'] }}"
+                  push_data: >-
+                    {%- set d = {'tag': 'siem-' ~ (incident_id or n.category), 'group': 'siem', 'ttl': 0, 'priority': 'high',
+                                 'push': {'interruption-level': 'time-sensitive' if urgent else 'active'}} %}
+                    {%- if incident_id %}
+                    {%- set d = dict(d, actions=[
+                          {'action': 'SIEM_LABEL_FALSE_ALARM|' ~ incident_id, 'title': 'False alarm'},
+                          {'action': 'SIEM_LABEL_THATS_ME|' ~ incident_id, 'title': "That's me"},
+                          {'action': 'SIEM_LABEL_REAL|' ~ incident_id, 'title': 'Real'},
+                          {'action': 'SIEM_LABEL_GUEST|' ~ incident_id, 'title': 'Guest'}]) %}
+                    {%- endif %}
+                    {%- if n.snapshot %}{% set d = dict(d, image='/media/local/siem/' ~ (n.snapshot | regex_replace('^.*/', ''))) %}{% endif %}
+                    {{ d }}
+              - repeat:
+                  for_each: "{{ phones }}"
+                  sequence:
+                    - action: "{{ repeat.item }}"
+                      data:
+                        title: "{{ n.title }}"
+                        message: "{{ n.message }}"
+                        data: "{{ push_data }}"
+          - conditions:
+              - condition: trigger
+                id: labelled
+            sequence:
+              - variables:
+                  e: "{{ trigger.event.data }}"
+                  name: "{{ label_names.get(e.label, e.label) }}"
+              # Same tag as the alert: the phone replaces it, buttons and all.
+              - repeat:
+                  for_each: "{{ phones }}"
+                  sequence:
+                    - action: "{{ repeat.item }}"
+                      data:
+                        title: "SIEM: {{ name }}"
+                        message: >-
+                          {{ e.tier | capitalize }} incident{{ ' in ' ~ e.room if e.room else '' }} labelled {{ name }}{{ ' by ' ~ e.by if e.by else '' }}.
+                        data:
+                          tag: "siem-{{ e.incident_id }}"
+                          group: siem

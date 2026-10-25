@@ -10,16 +10,18 @@ pytest
 
 The tests in `tests/` cover the pure-Python engine in
 `custom_components/siem/core/`, which never imports Home Assistant. The tests
-in `tests/ha/` run the integration, the blueprints, the test package and
+in `tests/ha/` run the integration, the blueprints, the packages, the test package and
 the end-to-end scenarios inside a real Home Assistant, pinned by
 `pytest-homeassistant-custom-component`.
 Without that plugin installed, only the core tests run. CI runs three
 GitHub Actions workflows: tests, Home Assistant's hassfest checks, and HACS
 validation.
 
-The blueprint tests load the files in `blueprints/` into Home Assistant and
-drive them with real SIEM events, so a template that breaks shows up as a
-failing test rather than on someone's phone.
+The blueprint and package tests load the files in `blueprints/` and
+`packages/` into Home Assistant and drive them with real SIEM events, so a
+template that breaks shows up as a failing test rather than on someone's
+phone. Each blueprint and its package are the same automation; change both
+together.
 
 ## Dry run with test entities
 

@@ -1,0 +1,181 @@
+# =============================================================================
+# SIEM Security: escalation (package)
+# =============================================================================
+#
+# When nobody answers an incident, tells more people. An answer is any label
+# on the incident (False alarm, That's me, Real, Guest), from a phone, a chat
+# button or the SIEM device page.
+#
+# If an incident reaches the tiers below and nobody has labelled it within the
+# wait, the escalation phones get it too, with the same label buttons. An alarm
+# doesn't wait. If it is still unanswered after another wait, the package runs
+# script.siem_still_unanswered, which you fill in: a siren, a script that calls
+# someone. Once someone answers, the escalation phones are told who and how.
+#
+# The same automation as the "SIEM escalation" blueprint. Use it alongside the
+# phone package: your own phones get every alert at once, and the escalation
+# phones only hear about the ones you didn't answer.
+#
+# INSTALL
+#   1. Copy this file to <config>/packages/siem_escalation.yaml and enable
+#      packages in configuration.yaml if you have not already:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   2. Change everything marked "EDIT" below: the phones to escalate to, the
+#      wait and tiers, and what script.siem_still_unanswered does.
+#   3. Restart Home Assistant, or reload automations and scripts.
+# =============================================================================
+
+script:
+  siem_still_unanswered:
+    alias: SIEM still unanswered
+    description: Runs when nobody has answered a SIEM incident after the escalation either.
+    mode: parallel
+    fields:
+      incident_id:
+        description: The incident's id.
+      tier:
+        description: Its tier now.
+      room:
+        description: The room it started in.
+    sequence:
+      # EDIT: what to do when nobody answers at all, such as a siren or a script
+      # that calls someone. The default only leaves a note in Home Assistant.
+      - action: persistent_notification.create
+        data:
+          notification_id: "siem_unanswered_{{ incident_id }}"
+          title: "SIEM: nobody answered"
+          message: >-
+            Nobody has labelled the {{ tier }} incident{{ ' in ' ~ room if room else '' }} ({{ incident_id }}).
+
+automation:
+  - id: siem_escalation
+    alias: SIEM escalation
+    description: Tells more phones about SIEM incidents nobody has answered.
+    mode: parallel
+    max: 20
+    # The first time an incident reaches a tier.
+    triggers:
+      - trigger: event
+        event_type: siem_incident
+        event_data:
+          kind: tier_changed
+          previous_tier: none
+    variables:
+      # EDIT: the phones to escalate to, from Developer tools > Actions.
+      escalate_to:
+        - notify.mobile_app_partner_phone
+      # EDIT: minutes to wait for an answer, before escalating and again before
+      # script.siem_still_unanswered.
+      wait_minutes: 5
+      # EDIT: incidents that reach these tiers are escalated when unanswered.
+      tiers: [verify, deter, alarm]
+      incident: "{{ trigger.event.data }}"
+      incident_id: "{{ incident.incident_id }}"
+      label_names:
+        false_alarm: False alarm
+        thats_me: That's me
+        real: Real
+        guest: Guest
+    conditions:
+      - condition: template
+        value_template: "{{ incident.tier in tiers }}"
+    actions:
+      # An alarm doesn't wait. A condition at this level ends the run, so an answer stops everything below.
+      - wait_for_trigger:
+          - trigger: event
+            event_type: siem_incident
+            event_data:
+              kind: labelled
+              incident_id: "{{ incident_id }}"
+            id: answered
+          - trigger: event
+            event_type: siem_incident
+            event_data:
+              kind: tier_changed
+              tier: alarm
+              incident_id: "{{ incident_id }}"
+            id: alarm
+        timeout: "{{ 0 if incident.tier == 'alarm' else (wait_minutes | float * 60) | int }}"
+        continue_on_timeout: true
+      - condition: template
+        value_template: "{{ not wait.trigger or wait.trigger.id != 'answered' }}"
+      - variables:
+          latest: "{{ wait.trigger.event.data if wait.trigger else incident }}"
+          steps: >-
+            {{ latest.timeline[:5] | map(attribute='name') | select | unique | join(', ') }}
+      - repeat:
+          for_each: "{{ escalate_to }}"
+          sequence:
+            - action: "{{ repeat.item }}"
+              data:
+                title: "SIEM {{ latest.tier }}: {{ latest.room or 'House' }}, no answer"
+                message: >-
+                  Nobody has labelled this {{ latest.tier }} incident yet.{{ ' ' ~ steps ~ '.' if steps else '' }}
+                  House {{ latest.house_mode }}.
+                data:
+                  tag: "siem-{{ incident_id }}"
+                  group: siem
+                  ttl: 0
+                  priority: high
+                  push:
+                    interruption-level: "{{ 'time-sensitive' if latest.tier == 'alarm' else 'active' }}"
+                  actions:
+                    - action: "SIEM_LABEL_FALSE_ALARM|{{ incident_id }}"
+                      title: False alarm
+                    - action: "SIEM_LABEL_THATS_ME|{{ incident_id }}"
+                      title: That's me
+                    - action: "SIEM_LABEL_REAL|{{ incident_id }}"
+                      title: Real
+                    - action: "SIEM_LABEL_GUEST|{{ incident_id }}"
+                      title: Guest
+      # Wait for the answer once more. Still nothing: run the script, then keep
+      # listening for an hour to say who answered.
+      - wait_for_trigger:
+          - trigger: event
+            event_type: siem_incident
+            event_data:
+              kind: labelled
+              incident_id: "{{ incident_id }}"
+        timeout: "{{ (wait_minutes | float * 60) | int }}"
+        continue_on_timeout: true
+      - variables:
+          answer: "{{ wait.trigger.event.data if wait.trigger else none }}"
+      - if:
+          - condition: template
+            value_template: "{{ answer is none }}"
+        then:
+          - action: script.turn_on
+            target:
+              entity_id: script.siem_still_unanswered
+            data:
+              variables:
+                incident_id: "{{ incident_id }}"
+                tier: "{{ latest.tier }}"
+                room: "{{ latest.room }}"
+      - wait_for_trigger:
+          - trigger: event
+            event_type: siem_incident
+            event_data:
+              kind: labelled
+              incident_id: "{{ incident_id }}"
+        timeout: "{{ 0 if answer is not none else 3600 }}"
+        continue_on_timeout: true
+      - variables:
+          answer: "{{ answer if answer is not none else (wait.trigger.event.data if wait.trigger else none) }}"
+      - condition: template
+        value_template: "{{ answer is not none }}"
+      # Same tag as the escalation: the phone replaces it, buttons and all.
+      - variables:
+          name: "{{ label_names.get(answer.label, answer.label) }}"
+      - repeat:
+          for_each: "{{ escalate_to }}"
+          sequence:
+            - action: "{{ repeat.item }}"
+              data:
+                title: "SIEM: {{ name }}"
+                message: >-
+                  {{ answer.tier | capitalize }} incident{{ ' in ' ~ answer.room if answer.room else '' }} labelled {{ name }}{{ ' by ' ~ answer.by if answer.by else '' }}.
+                data:
+                  tag: "siem-{{ incident_id }}"
+                  group: siem
