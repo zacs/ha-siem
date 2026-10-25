@@ -137,18 +137,17 @@ async def test_escalation_package_when_nobody_answers(hass, freezer):
     incident_id = entry.runtime_data.incident_id
     await nudge(hass, freezer, 4 * 60)
     assert partner == []
-    await nudge(hass, freezer, 61)
+    await nudge(hass, freezer, 61, until=lambda: partner)
     push = partner[0].data
     assert push["title"] == "SIEM verify: Kitchen, no answer"
     assert push["message"].startswith("Nobody has labelled this verify incident yet. Back Door.")
     assert push["data"]["actions"][0]["action"] == f"SIEM_LABEL_FALSE_ALARM|{incident_id}"
     # Still nobody: script.siem_still_unanswered runs.
-    await nudge(hass, freezer, 5 * 60 + 1)
-    await nudge(hass)
+    await nudge(hass, freezer, 5 * 60 + 1, until=lambda: notes)
     assert [n.data["message"] for n in notes] == [f"Nobody has labelled the verify incident in Kitchen ({incident_id})."]
     # An answer after all is still passed on.
     await hass.services.async_call("siem", "label_incident", {"label": "false_alarm", "incident_id": incident_id}, blocking=True)
-    await nudge(hass)
+    await nudge(hass, until=lambda: len(partner) == 2)
     assert partner[-1].data["message"] == "Verify incident in Kitchen labelled False alarm."
 
 
@@ -168,11 +167,11 @@ async def test_escalation_package_stops_at_an_answer(hass, freezer):
     flip(hass, "binary_sensor.front_door")
     await nudge(hass)
     incident_id = entry.runtime_data.incident_id
-    await nudge(hass, freezer, 5 * 60 + 1)
+    await nudge(hass, freezer, 5 * 60 + 1, until=lambda: partner)
     assert partner[-1].data["title"] == "SIEM verify: Hall, no answer"
     hass.states.async_set("person.zac", "home", {"friendly_name": "Zac", "user_id": "abc123"})
     hass.bus.async_fire("mobile_app_notification_action", {"action": f"SIEM_LABEL_GUEST|{incident_id}"}, context=Context(user_id="abc123"))
-    await nudge(hass)
+    await nudge(hass, until=lambda: len(partner) == 2)
     assert partner[-1].data["message"] == "Verify incident in Hall labelled Guest by Zac."
     await nudge(hass, freezer, 10 * 60)
     assert notes == []

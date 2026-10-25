@@ -138,13 +138,20 @@ async def settle(hass) -> None:
         await hass.async_block_till_done()
 
 
-async def nudge(hass, freezer=None, seconds: float = 0) -> None:
-    """Move the clock and let callbacks run, without waiting for an automation that is itself waiting."""
+async def nudge(hass, freezer=None, seconds: float = 0, until=None) -> None:
+    """Move the clock and let callbacks run, without waiting for an automation that is itself waiting.
+
+    An automation sitting in a wait can't be waited on, only watched: with ``until``, keep letting callbacks run
+    until it holds, however many turns of the loop that takes on a slow machine.
+    """
     if seconds:
         freezer.tick(timedelta(seconds=seconds))
         async_fire_time_changed(hass)
-    for _ in range(20):
+    for _ in range(20 if until is None else 2000):
+        if until is not None and until():
+            return
         await asyncio.sleep(0)
+    assert until is None or until(), "the automation never got there"
 
 
 def scored(entry) -> list[tuple[str, float, str | None]]:

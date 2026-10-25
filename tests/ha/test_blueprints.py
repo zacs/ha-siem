@@ -158,13 +158,13 @@ async def test_escalation_when_nobody_answers(hass, freezer):
     incident_id = entry.runtime_data.incident_id
     await nudge(hass, freezer, 4 * 60)
     assert partner == []
-    await nudge(hass, freezer, 61)
+    await nudge(hass, freezer, 61, until=lambda: partner)
     push = partner[0].data
     assert push["title"] == "SIEM verify: Kitchen, no answer"
     assert push["message"].startswith("Nobody has labelled this verify incident yet. Back Door.")
     assert push["data"]["tag"] == f"siem-{incident_id}"
     assert push["data"]["actions"][0]["action"] == f"SIEM_LABEL_FALSE_ALARM|{incident_id}"
-    await nudge(hass, freezer, 5 * 60 + 1)
+    await nudge(hass, freezer, 5 * 60 + 1, until=lambda: calls)
     assert len(calls) == 1, "still unanswered after the escalation too"
 
 
@@ -184,11 +184,12 @@ async def test_an_answer_stops_the_escalation_and_an_alarm_skips_the_wait(hass, 
         flip(hass, entity_id)
         await nudge(hass)
     assert hass.states.get("sensor.siem_tier").state == "alarm"
-    assert partner and partner[-1].data["title"] == "SIEM alarm: Hall, no answer"
+    await nudge(hass, until=lambda: partner)
+    assert partner[-1].data["title"] == "SIEM alarm: Hall, no answer"
     # Once someone answers, the escalation is replaced by who answered and how.
     hass.states.async_set("person.zac", "home", {"friendly_name": "Zac", "user_id": "abc123"})
     hass.bus.async_fire("mobile_app_notification_action", {"action": f"SIEM_LABEL_REAL|{entry.runtime_data.incident_id}"}, context=Context(user_id="abc123"))
-    await nudge(hass)
+    await nudge(hass, until=lambda: len(partner) == 2)
     assert partner[-1].data["title"] == "SIEM: Real"
     assert partner[-1].data["message"] == "Alarm incident in Hall labelled Real by Zac."
     assert "actions" not in partner[-1].data["data"]
