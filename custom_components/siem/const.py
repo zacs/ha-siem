@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 DOMAIN = "siem"
 NAME = "SIEM"
 MANUFACTURER = "@zacs"
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 DOCS_SENSORS_URL = "https://github.com/zacs/ha-siem/blob/main/docs/sensors.md"
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SELECT, Platform.SENSOR]
 
