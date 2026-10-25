@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.core import Context, ServiceCall, SupportsResponse
 import pytest
 import voluptuous as vol
@@ -95,9 +97,9 @@ async def test_digest_falls_back_to_counts_without_an_ai_task(hass, freezer, sie
     await hass.services.async_call("siem", "run_digest", {}, blocking=True)
     digest = notifications(siem_events, "digest")[0]
     assert digest["title"] == "SIEM digest"
-    assert digest["message"] == "1 incidents (1 verify), 0 weight changes"
+    assert digest["message"] == "1 incidents (1 verify), 0 weight changes\n\nHouse mode: vacant."
     assert digest["summary"]["incident_count"] == 1
-    assert set(digest["summary"]) == {"since", "until", "incident_count", "labels", "weight_changes", "counts"}
+    assert set(digest["summary"]) == {"since", "until", "incident_count", "labels", "weight_changes", "counts", "house_mode", "forced", "forced_since"}
     assert digest["incident"] is None and digest["snapshot"] is None
 
 
@@ -115,7 +117,7 @@ async def test_digest_on_demand_with_another_ai_task_and_previews(hass, freezer,
     period = entry.runtime_data.store.last_digest
     for ai_task in ("ai_task.small_model", "ai_task.big_model"):
         preview = await hass.services.async_call("siem", "run_digest", {"ai_task_entity": ai_task, "preview": True}, blocking=True, return_response=True)
-        assert preview["message"] == f"Five lines from {ai_task}."
+        assert preview["message"] == f"Five lines from {ai_task}.\n\nHouse mode: vacant."
         assert preview["ai_task_entity"] == ai_task
         assert preview["summary"]["incident_count"] == 1
     # Previews send nothing and leave the digest period alone.
@@ -123,10 +125,45 @@ async def test_digest_on_demand_with_another_ai_task_and_previews(hass, freezer,
     assert entry.runtime_data.store.last_digest == period
     result = await hass.services.async_call("siem", "run_digest", {}, blocking=True, return_response=True)
     assert result["ai_task_entity"] == "ai_task.everyday"
-    assert [n["message"] for n in notifications(siem_events, "digest")] == ["Five lines from ai_task.everyday."]
+    assert [n["message"] for n in notifications(siem_events, "digest")] == ["Five lines from ai_task.everyday.\n\nHouse mode: vacant."]
     assert entry.runtime_data.store.last_digest != period
     with pytest.raises(vol.Invalid):
         await hass.services.async_call("siem", "run_digest", {"ai_task_entity": "light.kitchen"}, blocking=True)
+
+
+async def test_the_digest_reminds_you_of_a_mode_set_by_hand(hass, freezer, siem_events):
+    entry = await setup_siem(hass)
+    await hass.services.async_call("siem", "set_house_mode", {"mode": "guest"}, blocking=True)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    await tick(hass, freezer, 4 * 86400)
+    digest = await hass.services.async_call("siem", "run_digest", {"preview": True}, blocking=True, return_response=True)
+    assert digest["message"].endswith("House mode: guest, set by hand since Oct 19, 12:00. It stays that way until you set it back to auto.")
+    assert digest["summary"]["house_mode"] == "guest" and digest["summary"]["forced"] is True
+    assert digest["summary"]["forced_since"].startswith("2026-10-19T12:00")
+    await hass.services.async_call("siem", "set_house_mode", {"mode": "auto"}, blocking=True)
+    digest = await hass.services.async_call("siem", "run_digest", {"preview": True}, blocking=True, return_response=True)
+    assert digest["message"].endswith("\n\nHouse mode: vacant.")
+    assert digest["summary"]["forced"] is False and digest["summary"]["forced_since"] is None
+
+
+async def test_debug_log_says_why_nothing_scored(hass, freezer, caplog):
+    caplog.set_level(logging.DEBUG, logger="custom_components.siem")
+    await setup_siem(hass)
+    flip(hass, "binary_sensor.back_door")
+    await hass.async_block_till_done()
+    flip(hass, "binary_sensor.back_door", "off")
+    flip(hass, "binary_sensor.back_door")
+    hass.states.async_set("light.kitchen", "on", {}, context=Context(user_id=RESIDENT))
+    await hass.services.async_call("siem", "set_house_mode", {"mode": "guest"}, blocking=True)
+    flip(hass, "binary_sensor.fridge_door")
+    await hass.async_block_till_done()
+    lines = [r.getMessage() for r in caplog.records if r.name.startswith("custom_components.siem")]
+    assert "binary_sensor.back_door scored exterior_door_opened +40.0 (opened)" in lines
+    assert "binary_sensor.back_door not scored as exterior_door_opened: already counted in the last 5 minutes" in lines
+    assert "light.kitchen not scored: Home Assistant made the change" in lines
+    assert "House mode vacant -> guest" in lines
+    assert "binary_sensor.fridge_door not scored as interior_door_opened: guest mode gives it 0 points" in lines
 
 
 async def test_mobile_label_buttons(hass, freezer):

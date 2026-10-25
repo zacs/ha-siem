@@ -348,3 +348,20 @@ only lock trouble scores: a disabled code, a keypad lockout. Guest and
 service modes are how you tell SIEM that the activity is expected even with
 everyone away. Night mode is the exception, described above, because the
 family is home but not watching.
+
+## Seeing it happen
+
+Turn on **Enable debug logging** on the integration's page, and SIEM logs one
+line for each thing it weighs: a door opening, motion starting, a light
+switched on, a power sensor crossing its threshold. Raw readings that change
+nothing, such as a power sensor ticking along below its threshold, aren't
+logged. Each line says what scored, or why it didn't:
+
+```
+binary_sensor.back_door scored exterior_door_opened +40.0 (opened)
+binary_sensor.back_door not scored as exterior_door_opened: already counted in the last 5 minutes
+light.kitchen not scored: Home Assistant made the change
+binary_sensor.fridge_door not scored as interior_door_opened: guest mode gives it 0 points
+binary_sensor.back_door not scored as exterior_door_opened: night mode, and someone was up inside first: someone going out
+House mode vacant -> guest
+```

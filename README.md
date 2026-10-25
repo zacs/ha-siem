@@ -143,7 +143,7 @@ guards.
 | `incident` | object or null | The incident, described below. Set for verify, deter and alarm, and for break glass while an incident is open |
 | `snapshot` | string or null | The path of the room camera's snapshot, when the room has a camera |
 | `again` | boolean | True for a second verify alert, sent because the score doubled |
-| `summary` | object or null | Digest only: `since`, `until`, `incident_count`, `labels`, `weight_changes` (a count) and `counts` (one line of totals) |
+| `summary` | object or null | Digest only: `since`, `until`, `incident_count`, `labels`, `weight_changes` (a count), `counts` (one line of totals), `house_mode`, `forced` (whether the mode was set by hand) and `forced_since` |
 
 When each category fires:
 
@@ -214,7 +214,9 @@ what sets them off, how they chain, the suppressors, the house mode timings
 and how labels learn. **Configure** lets you change a few numbers when the
 defaults don't suit your house: each rule's points per house mode, the tier
 thresholds, the half-life and the chain factors. Anything more means editing
-`core/rules.py` (see [Adding a rule](#adding-a-rule)). The reasoning behind
+`core/rules.py` (see [Adding a rule](#adding-a-rule)). To see why something
+did or didn't score, turn on **Enable debug logging** on the integration's
+page. The reasoning behind
 each rule's points is in [Sensors, settings and scores](docs/sensors.md).
 
 **What physically happened.** SIEM only cares about Home Assistant users for
@@ -340,7 +342,8 @@ means no doors, switches, water or appliances; motion doesn't count, so a pet
 can't hold guest mode open. Service during a `Service:` event. Vacant
 otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
-restarts.
+restarts until you set it back to auto. Every digest ends with the house mode,
+and says so while a mode is forced, with the date it was set.
 
 **Recommended alarm mode.** Armed away while vacant, armed night inside the
 night window when someone is home, and disarmed by day and during service

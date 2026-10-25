@@ -78,7 +78,7 @@ async def test_mattermost_package(hass, freezer):
         "color": "#1976D2",
         "fallback": "SIEM digest. Quiet since 2026-10-19 12:00.",
         "fields": [],
-        "text": "**SIEM digest** Quiet since 2026-10-19 12:00.",
+        "text": "**SIEM digest** Quiet since 2026-10-19 12:00.\n\nHouse mode: vacant.",
     }
     # A snapshot travels as data.file.path.
     hass.bus.async_fire("siem_notification", {"category": "verify", "title": "SIEM verify: Hall", "message": "Score 20, house vacant.", "incident": None, "snapshot": "/media/siem/abc_verify.jpg", "again": False, "summary": None})

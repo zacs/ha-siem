@@ -89,10 +89,29 @@ class DigestRunner:
         else:
             text, written_by = await self._async_generate(summary, ai_task or c.responses.get(CONF_AI_TASK))
         counts = {key: summary[key] for key in ("since", "until", "incident_count", "labels")}
-        digest = {**counts, "weight_changes": len(summary["weight_changes"]), "counts": fallback_text(summary)}
+        forced = c.modes.override is not None
+        digest = {
+            **counts,
+            "weight_changes": len(summary["weight_changes"]),
+            "counts": fallback_text(summary),
+            "house_mode": c.house_mode,
+            "forced": forced,
+            "forced_since": c.store.override_since if forced else None,
+        }
+        text = f"{text}\n\n{self._mode_line()}"
         if not preview:
             c.alerts.fire(CATEGORY_DIGEST, "SIEM digest", text, summary=digest)
         return {"message": text, "ai_task_entity": written_by, "summary": digest}
+
+    def _mode_line(self) -> str:
+        """Say what mode the house is in, and remind that a mode forced by hand stays until set back to auto."""
+        c = self.coordinator
+        if c.modes.override is None:
+            return f"House mode: {c.house_mode}."
+        since = dt_util.parse_datetime(c.store.override_since) if c.store.override_since else None
+        local = dt_util.as_local(since) if since else None
+        when = f" since {local:%b} {local.day}, {local:%H:%M}" if local else ""
+        return f"House mode: {c.house_mode}, set by hand{when}. It stays that way until you set it back to auto."
 
     async def _async_generate(self, summary: dict[str, Any], entity: str | None) -> tuple[str, str | None]:
         """Return the digest text and the AI task entity that wrote it, or the raw counts and None."""
