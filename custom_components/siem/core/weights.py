@@ -10,6 +10,7 @@ WEIGHT_CAP = 1.5
 
 LABEL_FALSE_ALARM, LABEL_THATS_ME, LABEL_GUEST, LABEL_REAL = "false_alarm", "thats_me", "guest", "real"
 LABELS: tuple[str, ...] = (LABEL_FALSE_ALARM, LABEL_THATS_ME, LABEL_GUEST, LABEL_REAL)
+LABEL_NAMES = {LABEL_FALSE_ALARM: "False alarm", LABEL_THATS_ME: "That's me", LABEL_GUEST: "Guest", LABEL_REAL: "Real"}
 # Only labels about the sensors move weights. "That's me" and "guest" say the sensors were right and
 # presence detection missed someone; lowering the weights for that would blunt the next real intrusion.
 LABEL_FACTORS = {LABEL_FALSE_ALARM: 0.9, LABEL_REAL: 1.1}

@@ -95,7 +95,7 @@ class Alerts:
 
     def fire(self, category: str, title: str, message: str, **data: Any) -> None:
         """Fire ``siem_notification``; every field is always present so automations need no guards."""
-        payload = {"incident": None, "snapshot": None, "again": False, "summary": None, **data}
+        payload = {"incident": None, "snapshot": None, "again": False, "summary": None, "label_url": None, **data}
         payload.update(category=category, title=title, message=message)
         self.hass.bus.async_fire(EVENT_NOTIFICATION, payload, context=self.context())
 
@@ -121,13 +121,21 @@ class Alerts:
         incident.notified_score = score
         snapshot = await self.async_snapshot(incident, tier)
         message = alert_message(score, c.house_mode, self.timeline_lines(incident), again=again)
-        self.fire(tier, alert_title(tier, c.room_name(incident.room)), message, incident=self.incident_payload(incident), snapshot=snapshot, again=again)
+        self.fire(
+            tier, alert_title(tier, c.room_name(incident.room)), message, incident=self.incident_payload(incident), snapshot=snapshot, again=again, label_url=c.label_url
+        )
 
     def break_glass(self, message: str) -> None:
         """Alert on what matters whatever the score: a hand unlock while vacant, a keypad lockout, a long outage."""
         c = self.coordinator
         incident = c.engine.current
-        self.fire(CATEGORY_BREAK_GLASS, "SIEM break glass", f"{message}. House {c.house_mode}.", incident=self.incident_payload(incident) if incident else None)
+        self.fire(
+            CATEGORY_BREAK_GLASS,
+            "SIEM break glass",
+            f"{message}. House {c.house_mode}.",
+            incident=self.incident_payload(incident) if incident else None,
+            label_url=c.label_url if incident else None,
+        )
 
     def snapshot_dir(self) -> Path:
         """Return the snapshot folder: under the local media folder, which needs a login to browse."""

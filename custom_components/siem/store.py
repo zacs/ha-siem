@@ -15,7 +15,7 @@ STORAGE_VERSION = 1
 SAVE_DELAY = 5
 MAX_INCIDENTS = 200
 MAX_WEIGHT_CHANGES = 200
-KEYS = ("weights", "incidents", "weight_changes", "last_digest", "override", "override_since")
+KEYS = ("weights", "incidents", "weight_changes", "last_digest", "override", "override_since", "label_webhook")
 
 
 class SiemStore:
@@ -30,6 +30,7 @@ class SiemStore:
         self.last_digest: str | None = None
         self.override: str | None = None
         self.override_since: str | None = None
+        self.label_webhook: str | None = None
 
     async def async_load(self) -> None:
         """Load the file, tolerating a missing or partial one."""
@@ -41,6 +42,7 @@ class SiemStore:
         self.last_digest = data.get("last_digest")
         self.override = RENAMED_MODES.get(data.get("override"), data.get("override"))
         self.override_since = data.get("override_since") if self.override else None
+        self.label_webhook = data.get("label_webhook")
 
     def _data(self) -> dict[str, Any]:
         return {key: getattr(self, key) for key in KEYS}

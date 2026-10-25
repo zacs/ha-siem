@@ -15,7 +15,8 @@ from .weights import LABELS, apply_label
 EVENT_OPENED = "opened"
 EVENT_TIER_CHANGED = "tier_changed"
 EVENT_CLOSED = "closed"
-INCIDENT_EVENT_TYPES: tuple[str, ...] = (EVENT_OPENED, EVENT_TIER_CHANGED, EVENT_CLOSED)
+EVENT_LABELLED = "labelled"
+INCIDENT_EVENT_TYPES: tuple[str, ...] = (EVENT_OPENED, EVENT_TIER_CHANGED, EVENT_CLOSED, EVENT_LABELLED)
 
 
 @dataclass
@@ -45,6 +46,14 @@ class Incident:
     def entity_ids(self) -> list[str]:
         """Return the distinct entities that added points to this incident, in the order they first did."""
         return list(dict.fromkeys(c.entity_id for c in self.contributions if c.points > 0 and c.entity_id))
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Incident:
+        """Rebuild a stored incident, without its contributions, for labelling and describing it after a restart."""
+        fields = ("id", "started", "mode", "room", "person", "closed", "tier", "peak_tier", "peak_score")
+        incident = cls(**{k: data[k] for k in fields if data.get(k) is not None})
+        incident.labels, incident.timeline = list(data.get("labels") or []), list(data.get("timeline") or [])
+        return incident
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly summary for storage and the digest."""

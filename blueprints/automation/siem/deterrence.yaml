@@ -1,0 +1,107 @@
+blueprint:
+  name: SIEM deterrence
+  description: >-
+    Turns on the lights in the incident's room when SIEM reaches the deter
+    tier, and the lights you pick (or every light) at the alarm tier. The room
+    is the Home Assistant area SIEM reports with each alert, so its lights are
+    whatever you have assigned to that area. Add a sound, a siren or your own
+    scripts as extra actions. SIEM ignores everything this does, like anything
+    else Home Assistant does. Watching SIEM's alerts for a week or two before
+    turning this on is a good idea.
+  domain: automation
+  author: zacs
+  source_url: https://github.com/zacs/ha-siem/blob/main/blueprints/automation/siem/deterrence.yaml
+  homeassistant:
+    min_version: 2026.10.0
+  input:
+    room_lights:
+      name: Light the room at deter
+      description: Turn on every light in the incident's room at the deter tier.
+      default: true
+      selector:
+        boolean:
+    brightness:
+      name: Brightness
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+    alarm_lights:
+      name: Lights at alarm
+      description: The lights to turn on at the alarm tier. Leave empty for every light in the house.
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+    deter_actions:
+      name: More at deter
+      description: Anything else to do at the deter tier, such as a sound on the room's speaker.
+      default: []
+      selector:
+        action: {}
+    alarm_actions:
+      name: More at alarm
+      description: Anything else to do at the alarm tier, such as a siren.
+      default: []
+      selector:
+        action: {}
+
+mode: queued
+max: 10
+
+triggers:
+  - trigger: event
+    event_type: siem_notification
+    event_data:
+      category: deter
+  - trigger: event
+    event_type: siem_notification
+    event_data:
+      category: alarm
+
+variables:
+  light_room: !input room_lights
+  brightness: !input brightness
+  alarm_target: !input alarm_lights
+  category: "{{ trigger.event.data.category }}"
+  area: "{{ trigger.event.data.incident.area_id if trigger.event.data.incident else none }}"
+  room_light_ids: "{{ area_entities(area) | select('match', 'light[.]') | list if area else [] }}"
+  alarm_all: "{{ not alarm_target or not (alarm_target.values() | select | list) }}"
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ light_room and room_light_ids | count > 0 }}"
+    then:
+      - action: light.turn_on
+        target:
+          entity_id: "{{ room_light_ids }}"
+        data:
+          brightness_pct: "{{ brightness }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ category == 'deter' }}"
+        sequence: !input deter_actions
+      - conditions:
+          - condition: template
+            value_template: "{{ category == 'alarm' }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ alarm_all }}"
+            then:
+              - action: light.turn_on
+                target:
+                  entity_id: all
+                data:
+                  brightness_pct: "{{ brightness }}"
+            else:
+              - action: light.turn_on
+                target: !input alarm_lights
+                data:
+                  brightness_pct: "{{ brightness }}"
+          - sequence: !input alarm_actions

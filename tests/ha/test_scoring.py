@@ -41,7 +41,7 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert alert["message"].endswith("12:00 Back Door: An exterior door or window opened (+40)")
     assert alert["incident"]["incident_id"] == entry.runtime_data.incident_id
     # Every field is present on every alert, and SIEM itself calls no notify service.
-    assert set(alert) == {"category", "title", "message", "incident", "snapshot", "again", "summary"}
+    assert set(alert) == {"category", "title", "message", "incident", "snapshot", "again", "summary", "label_url"}
     assert alert["snapshot"] is None and alert["summary"] is None and alert["again"] is False
     assert not [call for call in service_calls if call[0] in ("notify", "alarm_control_panel")]
 

@@ -8,6 +8,7 @@ import functools
 import logging
 from typing import Any
 
+from homeassistant.components import webhook
 from homeassistant.components.lock import LockState
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -30,6 +31,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event, async_track_time_interval
+from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -38,7 +40,7 @@ from .alerts import Alerts
 from .core import entities as ent
 from .core.arm import recommend_arm_mode
 from .core.house_mode import HouseModeMachine
-from .core.incident import EVENT_CLOSED, IncidentEngine
+from .core.incident import EVENT_CLOSED, EVENT_LABELLED, Incident, IncidentEngine
 from .core.locks import (
     KIND_KEYPAD_LOCKOUT,
     KIND_KEYPAD_UNLOCK,
@@ -62,8 +64,9 @@ from .core.rules import (
     validate_settings,
 )
 from .core.scoring import TIER_ALARM, TIER_NONE, TIER_VERIFY
-from .core.weights import reset_weights
+from .core.weights import LABELS, apply_label, reset_weights
 from .digest import DigestRunner
+from .labels import async_handle_label
 from .store import SiemStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -235,6 +238,12 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ]
         self._unsubs += [self.hass.bus.async_listen(name, handler) for name, handler in listeners]
         self._unsubs.append(async_track_time_interval(self.hass, self._tick, timedelta(seconds=c.TICK_SECONDS)))
+        # Chat buttons label incidents through SIEM's own webhook; its id is made once and kept.
+        if not self.store.label_webhook:
+            self.store.label_webhook = webhook.async_generate_id()
+            self.store.async_schedule_save()
+        webhook.async_register(self.hass, c.DOMAIN, "SIEM labels", self.store.label_webhook, async_handle_label, allowed_methods=["POST"])
+        self._unsubs.append(lambda: webhook.async_unregister(self.hass, self.store.label_webhook))
         if self.store.last_digest is None:
             self.store.last_digest = dt_util.now().isoformat()
             self.store.async_schedule_save()
@@ -759,7 +768,10 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         action = str(event.data.get("action") or "")
         if action.startswith(c.MOBILE_ACTION_PREFIX):
             label, incident_id = action[len(c.MOBILE_ACTION_PREFIX) :].lower().split("|", 1)
-            self.label(label, incident_id)
+            # The phone's app is logged in as someone; their person entity names them.
+            user_id = event.context.user_id
+            person = next((s for s in self.hass.states.async_all("person") if user_id and s.attributes.get("user_id") == user_id), None)
+            self.label(label, incident_id, by=person.name if person else None)
 
     def _check_offline(self, now: float) -> None:
         """Score sensors that stayed unavailable past the grace period, all of them in one contribution."""
@@ -792,15 +804,51 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception:
             _LOGGER.exception("Error in SIEM tick")
 
-    def label(self, label: str, incident_id: str | None = None) -> None:
-        """Label an incident; false_alarm and real adjust the weights of its rules."""
-        incident, changes = self.engine.label(label, incident_id)
+    @property
+    def label_url(self) -> str | None:
+        """Return the URL chat buttons post labels to, preferring the address Home Assistant has on the network."""
+        try:
+            return webhook.async_generate_url(self.hass, self.store.label_webhook, prefer_external=False)
+        except NoURLAvailableError:
+            return None
+
+    def label(self, label: str, incident_id: str | None = None, by: str | None = None) -> tuple[str, bool]:
+        """Label an incident; false_alarm and real adjust the weights of its rules.
+
+        The incident is the open one, a recent one, or one from the stored history, so a button pressed after a
+        restart still lands. A label the incident already has changes nothing, so a button pressed twice counts once.
+        Returns the incident's id and whether the label was new; announces a new one as a ``labelled`` incident event.
+        """
+        if label not in LABELS:
+            raise ValueError(f"unknown label {label!r}")
+        incident, stored = self.engine.find(incident_id), None
+        if incident is None:
+            stored = next((i for i in reversed(self.store.incidents) if incident_id in (None, i.get("id"))), None)
+            if stored is None:
+                raise LookupError("no incident to label")
+            incident = Incident.from_dict(stored)
+        if label in incident.labels:
+            return incident.id, False
+        if stored is None:
+            incident, changes = self.engine.label(label, incident.id)
+        else:
+            incident.labels.append(label)
+            changes = apply_label(self.engine.weights, stored.get("rules") or [], label)
         self.last_label = label
         self.store.record_weight_changes(changes, self.now(), label, incident.id)
-        if incident.closed:
+        if stored is not None:
+            self.store.add_incident({**stored, "labels": list(incident.labels)})
+        elif incident.closed:
             self.store.add_incident(incident.as_dict())
-        _LOGGER.info("Incident %s labelled %s; weights changed: %s", incident.id, label, changes)
+        _LOGGER.info("Incident %s labelled %s%s; weights changed: %s", incident.id, label, f" by {by}" if by else "", changes)
+        payload = {**self.alerts.incident_payload(incident), "kind": EVENT_LABELLED, "previous_tier": incident.tier, "label": label, "by": by}
+        if stored is not None:
+            payload["entities"] = list(stored.get("entities") or [])
+        self.hass.bus.async_fire(c.EVENT_INCIDENT, payload, context=self.alerts.context())
+        light = {key: payload[key] for key in (c.ATTR_INCIDENT_ID, "tier", "previous_tier", "score", "room", "mode", "label")}
+        async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, EVENT_LABELLED, light)
         self.publish(self.now(), force=True)
+        return incident.id, True
 
     def set_house_mode(self, mode: str) -> None:
         """Force a house mode, or return to automatic; the choice survives restarts."""

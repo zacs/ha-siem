@@ -2,7 +2,7 @@
 
 The setup flow keeps its labels short. This page is the long version: what
 each setting is for, why it sits where it does, and why its rule scores what
-it scores. The [README](../README.md#how-scoring-works) has the rules table
+it scores. [How scoring works](scoring.md) has the rules table
 and the mechanics; this page explains the thinking behind them.
 
 ## Reading the points

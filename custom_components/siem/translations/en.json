@@ -60,7 +60,7 @@
       },
       "responses": {
         "title": "Digest",
-        "description": "SIEM never acts on its own: it keeps its state in entities and fires a siem_notification event for every alert, and your automations decide what happens (see the sample packages). The digest summarises each day's incidents, written by an AI task entity when you pick one.",
+        "description": "SIEM never acts on its own: it keeps its state in entities and fires a siem_notification event for every alert, and your automations decide what happens (see the blueprints). The digest summarises each day's incidents, written by an AI task entity when you pick one.",
         "data": {
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
@@ -193,7 +193,7 @@
       },
       "responses": {
         "title": "Digest",
-        "description": "SIEM never acts on its own: it keeps its state in entities and fires a siem_notification event for every alert, and your automations decide what happens (see the sample packages). The digest summarises each day's incidents, written by an AI task entity when you pick one.",
+        "description": "SIEM never acts on its own: it keeps its state in entities and fires a siem_notification event for every alert, and your automations decide what happens (see the blueprints). The digest summarises each day's incidents, written by an AI task entity when you pick one.",
         "data": {
           "ai_task_entity": "AI task entity for the digest",
           "digest_times": "Digest times (HH:MM)",
@@ -299,7 +299,8 @@
             "state": {
               "opened": "Opened",
               "tier_changed": "Tier changed",
-              "closed": "Closed"
+              "closed": "Closed",
+              "labelled": "Labelled"
             }
           }
         }

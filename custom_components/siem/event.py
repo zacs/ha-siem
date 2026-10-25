@@ -23,7 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_a
 
 
 class SiemIncidentEvent(SiemEntity, EventEntity):
-    """Fires ``opened``, ``tier_changed`` and ``closed`` with the incident summary."""
+    """Fires ``opened``, ``tier_changed``, ``closed`` and ``labelled`` with the incident summary."""
 
     _attr_event_types = list(INCIDENT_EVENT_TYPES)
 

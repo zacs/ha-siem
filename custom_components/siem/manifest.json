@@ -13,7 +13,9 @@
     "@zacs"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "webhook"
+  ],
   "documentation": "https://github.com/zacs/ha-siem",
   "integration_type": "service",
   "iot_class": "calculated",

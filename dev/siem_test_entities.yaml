@@ -79,7 +79,7 @@
 #   state in Developer tools > States carries your user id instead, and SIEM
 #   ignores it; the mirror snaps back within two seconds.
 #
-#   Because of that, leave packages/siem_deterrence.yaml out while this file
+#   Because of that, don't run the SIEM deterrence blueprint while this file
 #   is loaded: the lights it turns on here are mirrors too, so they would look
 #   like someone at the switch and score against themselves. Real lights keep
 #   the automation's context and never do.
@@ -88,8 +88,8 @@
 #   - Areas: create the three areas above and move the entities into them.
 #   - Notifications: nothing to set up. SIEM sends none itself; the automation
 #     at the bottom of this file turns its siem_notification events into
-#     persistent notifications, so alerts land in the notification drawer,
-#     The sample packages in packages/ do the same for Mattermost and the
+#     persistent notifications, so alerts land in the notification drawer.
+#     The blueprints in blueprints/ do the same for Mattermost and the
 #     companion app.
 #   - Calendar: add a Local Calendar (Settings > Devices & services > Add
 #     integration) named "Test House Calendar" and create events titled
@@ -99,8 +99,8 @@
 #     URL, or leave the room camera empty (snapshots are then skipped).
 #   - AI task entity: comes from an LLM integration (OpenAI, Anthropic, Google,
 #     Ollama). Leave it empty to see the digest fall back to raw counts.
-#   - Label buttons on a phone: packages/siem_mobile_app.yaml needs the
-#     companion app (notify.mobile_app_*).
+#   - Label buttons on a phone: the SIEM alerts to phones blueprint needs the
+#     companion app.
 #   - Lock Code Manager: event.test_lcm_guest_credential_used below imitates an
 #     LCM per-user "credential used" event entity (code_slot, name, operation).
 #     It fires from the guest's buttons and from the simulated afternoon visit.

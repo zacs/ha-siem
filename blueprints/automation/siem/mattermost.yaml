@@ -1,0 +1,131 @@
+blueprint:
+  name: SIEM alerts to Mattermost
+  description: >-
+    Posts every SIEM alert, break-glass message and digest to a Mattermost
+    channel as one coloured box: the headline, the timeline, the room, the house
+    mode, the score and the top contributors, and the camera snapshot when the
+    room has one. Each alert has buttons that label its own incident (False
+    alarm, That's me, Real, Guest); Mattermost shows you a confirmation when you
+    press one, and the channel gets a line saying so. Needs the Mattermost
+    component from https://github.com/cerebrate/ha-mattermost. For the buttons,
+    your Mattermost server must be able to reach Home Assistant; see the SIEM
+    docs on blueprints.
+  domain: automation
+  author: zacs
+  source_url: https://github.com/zacs/ha-siem/blob/main/blueprints/automation/siem/mattermost.yaml
+  homeassistant:
+    min_version: 2026.10.0
+  input:
+    channel:
+      name: Channel
+      description: The channel to post to, by name.
+      selector:
+        text:
+    notify_action:
+      name: Notify action
+      description: The Mattermost notify action.
+      default: notify.mattermost
+      selector:
+        text:
+    buttons:
+      name: Label buttons
+      default: true
+      selector:
+        boolean:
+    ha_url:
+      name: Home Assistant address for Mattermost
+      description: >-
+        The address your Mattermost server reaches Home Assistant at, such as
+        http://192.168.1.10:8123. Leave empty to use Home Assistant's own
+        network address.
+      default: ""
+      selector:
+        text:
+
+mode: queued
+max: 25
+
+triggers:
+  - trigger: event
+    event_type: siem_notification
+    id: alert
+  - trigger: event
+    event_type: siem_incident
+    event_data:
+      kind: labelled
+    id: labelled
+
+variables:
+  channel: !input channel
+  notify_action: !input notify_action
+  buttons: !input buttons
+  ha_url: !input ha_url
+  label_names:
+    false_alarm: False alarm
+    thats_me: That's me
+    real: Real
+    guest: Guest
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: alert
+        sequence:
+          - variables:
+              n: "{{ trigger.event.data }}"
+              incident: "{{ n.incident or {} }}"
+              color: >-
+                {{ {'verify': '#F5B700', 'deter': '#F57C00', 'alarm': '#D32F2F', 'break_glass': '#D32F2F', 'digest': '#1976D2'}.get(n.category, '#607D8B') }}
+              timeline: |-
+                {%- for e in incident.get('timeline', []) %}
+                - {{ (e.at | as_datetime | as_local).strftime('%H:%M:%S') }}: **{{ e.rule }}** {{ '%+g' | format(e.points) }} {{ e.name or '' }} {{ e.detail or '' }}
+                {%- endfor %}
+              fields: >-
+                {%- if incident %}{{ [
+                  {'short': true, 'title': 'Room', 'value': incident.room or '-'},
+                  {'short': true, 'title': 'House mode', 'value': incident.house_mode},
+                  {'short': true, 'title': 'Score', 'value': incident.score | round(0) | int | string},
+                  {'short': true, 'title': 'Top contributors', 'value': (incident.top_contributors | map(attribute='rule') | join(', ')) or '-'}
+                ] }}{% else %}[]{% endif %}
+              lines: "{{ n.message.splitlines() }}"
+              headline: >-
+                {{ ('**' ~ n.title ~ '** ' ~ (lines | first | default(''))) | trim }}
+              body: >-
+                {{ (timeline if incident else lines[1:] | join('\n')) | trim }}
+              label_url: >-
+                {%- if not (buttons and incident and n.label_url) %}{{ '' }}
+                {%- elif ha_url %}{{ ha_url | regex_replace('/+$', '') ~ '/api/webhook/' ~ n.label_url.split('/api/webhook/')[1] }}
+                {%- else %}{{ n.label_url }}{% endif %}
+              actions: >-
+                {%- if label_url %}{{ [
+                  {'id': 'falsealarm', 'name': 'False alarm', 'integration': {'url': label_url, 'context': {'incident_id': incident.incident_id, 'label': 'false_alarm'}}},
+                  {'id': 'thatsme', 'name': "That's me", 'integration': {'url': label_url, 'context': {'incident_id': incident.incident_id, 'label': 'thats_me'}}},
+                  {'id': 'real', 'name': 'Real', 'integration': {'url': label_url, 'context': {'incident_id': incident.incident_id, 'label': 'real'}}},
+                  {'id': 'guest', 'name': 'Guest', 'integration': {'url': label_url, 'context': {'incident_id': incident.incident_id, 'label': 'guest'}}}
+                ] }}{% else %}[]{% endif %}
+              attachment: >-
+                {%- set a = {'color': color, 'fallback': (n.title ~ '. ' ~ (lines | first | default(''))) | trim, 'fields': fields,
+                             'text': headline ~ (('\n\n' ~ body) if body else '')} %}
+                {%- if actions %}{% set a = dict(a, actions=actions) %}{% endif %}
+                {{ a }}
+              payload: >-
+                {%- set d = {'attachments': [attachment]} %}
+                {%- if n.snapshot %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
+                {{ d }}
+          # No text of its own: everything sits inside the attachment, whose fallback notifications show.
+          - action: "{{ notify_action }}"
+            data:
+              target: "{{ [channel] }}"
+              message: ""
+              data: "{{ payload }}"
+      - conditions:
+          - condition: trigger
+            id: labelled
+        sequence:
+          - action: "{{ notify_action }}"
+            data:
+              target: "{{ [channel] }}"
+              message: >-
+                SIEM: incident `{{ trigger.event.data.incident_id }}`{{ ' (' ~ trigger.event.data.room ~ ')' if trigger.event.data.room else '' }}
+                labelled **{{ label_names.get(trigger.event.data.label, trigger.event.data.label) }}**{{ ' by @' ~ trigger.event.data.by if trigger.event.data.by else '' }}.
