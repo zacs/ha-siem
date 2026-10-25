@@ -1,8 +1,8 @@
-"""House mode: family, guest, service or vacant, with an override."""
+"""House mode: who is home (family, guest, service or vacant), with an override; and whether they are in bed."""
 
 from __future__ import annotations
 
-from .rules import MODE_FAMILY, MODE_GUEST, MODE_NIGHT, MODE_SERVICE, MODE_VACANT, MODES
+from .rules import HOUSE_MODES, MODE_FAMILY, MODE_GUEST, MODE_SERVICE, MODE_VACANT
 
 FAMILY_LINGER_S = 30 * 60
 # A guest's tracker lingers the same half hour as a resident's: Wi-Fi trackers drop out while phones sleep.
@@ -15,27 +15,35 @@ MODE_AUTO = "auto"
 
 
 class HouseModeMachine:
-    """Derive the house mode from presence, bedtime, the calendar, guest and service sensors and people being let in.
+    """Derive who is home (the house mode) and whether they are in bed (bedtime).
 
-    Precedence is override, family, guest, service, vacant; family is night
-    while the household is in bed (the panel armed night, or the night
-    window, as the coordinator decides). Family lingers
-    thirty minutes after the last resident leaves. Guest is held while a
-    guest's device tracker is home and for thirty minutes after, while a
-    Guest calendar event runs or a guest sensor is on, and afterwards until
-    two hours past its end and sixty quiet minutes have both elapsed; letting
-    someone in (a code at the keypad, an unlock from Home Assistant) starts
-    the same clock from the moment of the unlock. Motion does not count as
-    activity, so a pet cannot hold guest mode open. Service is held while a
-    Service calendar event runs or a service sensor is on, and ends with it.
-    The calendar and the sensors add up: either one is enough.
+    The house mode is presence only. Precedence is override, family, guest,
+    service, vacant. Family lingers thirty minutes after the last resident
+    leaves. Guest is held while a guest's device tracker is home and for
+    thirty minutes after, while a Guest calendar event runs or a guest sensor
+    is on, and afterwards until two hours past its end and sixty quiet
+    minutes have both elapsed; letting someone in (a code at the keypad, an
+    unlock from Home Assistant) starts the same clock from the moment of the
+    unlock. Motion does not count as activity, so a pet cannot hold guest
+    mode open. Service is held while a Service calendar event runs or a
+    service sensor is on, and ends with it; it never holds inside the night
+    window, when nobody works in the house, so the house is vacant then. The
+    calendar and the sensors add up: either one is enough.
+
+    Bedtime adjusts the family and guest modes: anyone home and in bed. With
+    the family home it follows the bedtime sources (the panel armed night, a
+    bedtime sensor, or the night window standing in, as the coordinator
+    decides); with only guests home the night window counts as well, since
+    nothing says when guests go to bed. A forced mode says who is home, so a
+    forced family or guest still goes to bed.
     """
 
     def __init__(self, now: float) -> None:
         """Start vacant at ``now``."""
         self.override: str | None = None
         self._anyone_home = False
-        self._asleep = False
+        self._in_bed = False
+        self._night_window = False
         self._last_home_seen: float | None = None
         self._guest_here = False
         self._last_guest_seen: float | None = None
@@ -58,9 +66,13 @@ class HouseModeMachine:
             self._last_guest_seen = now
         self._guest_here = anyone_here
 
-    def set_asleep(self, asleep: bool) -> None:
-        """Record whether the household is in bed, which turns family into night."""
-        self._asleep = asleep
+    def set_bedtime_sources(self, in_bed: bool) -> None:
+        """Record whether the bedtime sources say the household is in bed."""
+        self._in_bed = in_bed
+
+    def set_night_window(self, inside: bool) -> None:
+        """Record whether the clock is inside the night window."""
+        self._night_window = inside
 
     def note_activity(self, now: float) -> None:
         """Record something only a person does (a door, a switch, a tap), which keeps guest mode alive."""
@@ -99,7 +111,7 @@ class HouseModeMachine:
         """Force ``mode``; ``None`` or ``auto`` returns to automatic."""
         if mode in (None, MODE_AUTO):
             self.override = None
-        elif mode in MODES:
+        elif mode in HOUSE_MODES:
             self.override = mode
         else:
             raise ValueError(f"unknown house mode {mode!r}")
@@ -122,6 +134,8 @@ class HouseModeMachine:
         return False
 
     def _service(self, now: float) -> bool:
+        if self._night_window:
+            return False
         return self._service_sensor or bool(self._service_window and self._service_window[0] <= now < self._service_window[1])
 
     def mode(self, now: float) -> str:
@@ -129,9 +143,18 @@ class HouseModeMachine:
         if self.override:
             return self.override
         if self._family(now):
-            return MODE_NIGHT if self._asleep else MODE_FAMILY
+            return MODE_FAMILY
         if self._guest(now):
             return MODE_GUEST
         if self._service(now):
             return MODE_SERVICE
         return MODE_VACANT
+
+    def bedtime(self, now: float) -> bool:
+        """Return True while anyone home is in bed: the family by the bedtime sources, guests by those or the clock."""
+        mode = self.mode(now)
+        if mode == MODE_FAMILY:
+            return self._in_bed
+        if mode == MODE_GUEST:
+            return self._in_bed or self._night_window
+        return False

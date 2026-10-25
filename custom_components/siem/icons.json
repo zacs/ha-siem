@@ -21,8 +21,7 @@
           "vacant": "mdi:home-outline",
           "guest": "mdi:account-key",
           "service": "mdi:tools",
-          "family": "mdi:home-heart",
-          "night": "mdi:bed"
+          "family": "mdi:home-heart"
         }
       },
       "recommended_alarm_mode": {
@@ -32,6 +31,12 @@
     "binary_sensor": {
       "night": {
         "default": "mdi:weather-night"
+      },
+      "bedtime": {
+        "default": "mdi:bed",
+        "state": {
+          "off": "mdi:bed-empty"
+        }
       },
       "alarm_trigger": {
         "default": "mdi:bell-ring"

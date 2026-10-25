@@ -9,13 +9,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core.house_mode import MODE_AUTO
-from .core.rules import MODES
+from .core.rules import HOUSE_MODES
 from .core.weights import LABELS
 from .entity import SiemEntity
 
 LABEL_NONE = "none"
 OVERRIDE, LABEL = "house_mode_override", "label_last_incident"
-OPTIONS = {OVERRIDE: [MODE_AUTO, *MODES], LABEL: [LABEL_NONE, *LABELS]}
+OPTIONS = {OVERRIDE: [MODE_AUTO, *HOUSE_MODES], LABEL: [LABEL_NONE, *LABELS]}
 
 
 PARALLEL_UPDATES = 0

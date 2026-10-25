@@ -11,7 +11,7 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | A business trip: you away, your partner home using Apple Home, the kids home | Family: your partner's person entity follows their phone and watch | Nothing |
 | The same trip with your partner not among the residents | Vacant | Alerts, until you set the mode to family |
 | Kids in the yard and through the gate | Family | Nothing |
-| Someone tries codes until the keypad locks out, 2 a.m. | Night | Verify and break glass |
+| Someone tries codes until the keypad locks out, 2 a.m. | Family, in bed | Verify and break glass |
 | A kid comes home with their code | Family | Nothing |
 | The mail carrier rings the doorbell | Vacant | Nothing (18) |
 | A parcel at the door at 11 p.m. | Vacant | Verify (27) |
@@ -29,7 +29,7 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | The friend comes in with a key before their phone joins the Wi-Fi | Vacant, then guest | Break glass and alarm alerts, then the score drops to 0; the trigger never turns on |
 | The cleaner's code and three hours of cleaning | Guest | Nothing; vacant again an hour after they leave |
 | A neighbor on the calendar as `Guest:` | Guest | Nothing |
-| The cleaners' day on a Workday sensor: a key, every room, the water | Service, all day | Nothing; vacant again when the sensor turns off at midnight |
+| The cleaners' day on a Workday sensor: a key, every room, the water | Service from 6 a.m. | Nothing; the night before, still vacant, a back door at 1 a.m. is a deter |
 | Friends staying, on a helper and a `Guest:` event | Guest | Nothing; vacant again two hours after the helper turns off and the house goes quiet |
 | Unlocking for the plumber from the app | Guest | Nothing |
 | Opening the garage from the app for a delivery | Guest | Nothing |
@@ -41,19 +41,22 @@ window is 10 p.m. to 6 a.m., and the numbers in brackets are scores.
 | A light switched by its own app, such as a Hue schedule | Vacant | Verify; see below |
 | Z-Wave JS restarts | Vacant | Nothing |
 | The Z-Wave stick dies on vacation | Vacant | Verify after two minutes, break glass after an hour |
-| Someone lingers in the backyard at 1 a.m. while you sleep | Night | Verify, once |
-| Someone comes through the side gate at 1 a.m. while you sleep | Night | Deter (64) |
-| Gate, back door, kitchen, at 3 a.m. | Night | Alarm; the trigger a minute later |
-| A window opens at 2:30 a.m. with nobody up, then motion in that room | Night | Deter, then alarm |
-| Letting the dog out at 2 a.m. | Night | Nothing |
-| Ten minutes in the kitchen, then out the back door | Night | Nothing |
-| A kid up for water | Night | Nothing |
-| Your partner home at 1 a.m., their phone on time | Night | Nothing |
-| A teenager home at 11:45 p.m. with a code | Night | Verify for someone at the door in the dark, then nothing |
-| A teenager sneaking out | Night | Nothing; see below |
-| A burglar at the back door a minute after someone walked down the hall | Night | Nothing; see below |
-| The panel armed night at 11:30 p.m. | Family, then night | Bedtime comes from the panel, not the clock |
-| Your own bedtime sensor and the panel, both picked | Night when either says bed | The clock only stands in for one that is unavailable |
+| Someone lingers in the backyard at 1 a.m. while you sleep | Family, in bed | Verify, once |
+| Someone comes through the side gate at 1 a.m. while you sleep | Family, in bed | Deter (64) |
+| Gate, back door, kitchen, at 3 a.m. | Family, in bed | Alarm; the trigger a minute later |
+| A window opens at 2:30 a.m. with nobody up, then motion in that room | Family, in bed | Deter, then alarm |
+| Letting the dog out at 2 a.m. | Family, in bed | Nothing |
+| Ten minutes in the kitchen, then out the back door | Family, in bed | Nothing |
+| A kid up for water | Family, in bed | Nothing |
+| Your partner home at 1 a.m., their phone on time | Family, in bed | Nothing |
+| A teenager home at 11:45 p.m. with a code | Family, in bed | Verify for someone at the door in the dark, then nothing |
+| A teenager sneaking out | Family, in bed | Nothing; see below |
+| A burglar at the back door a minute after someone walked down the hall | Family, in bed | Nothing; see below |
+| The panel armed night at 11:30 p.m. | Family, then in bed | Bedtime comes from the panel, not the clock |
+| Your own bedtime sensor and the panel, both picked | In bed when either says so | The clock only stands in for one that is unavailable |
+| Someone through the gate and at the back door at 3 a.m. while a house-sitter sleeps | Guest, in bed | Verify, deter, alarm: guests go to bed with the night window |
+| The house-sitter lets the dog out at 2 a.m. | Guest, in bed | Nothing |
+| A window and then motion at 2:30 a.m., with guest mode forced and forgotten | Guest, in bed | Deter, then alarm: a forced guest still goes to bed |
 
 The rows marked *see below* are the judgment calls described under
 [Known limits](../README.md#known-limits): a light switched outside Home

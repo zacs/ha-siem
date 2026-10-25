@@ -31,8 +31,9 @@ should take to reach each one in an empty house:
   around for a quarter of an hour, or coming through the gate, should.
 
 Points are given per house mode, in the order vacant, guest, service,
-family, night. Most rules score only when the house is vacant or the family
-is asleep; see [the other modes](#why-the-other-modes-score-almost-nothing).
+family, and a fifth column for bedtime: anyone home, family or guests, and in
+bed. Most rules score only when the house is vacant or at bedtime; see
+[the other modes](#why-the-other-modes-score-almost-nothing).
 Rules tagged *exterior* (doors, gates, the Wi-Fi motion at a door, someone
 outside) count 1.5 times at night: someone at your back door at 3 a.m. is
 more unusual than at 3 p.m. Rules about the inside of the house don't get the
@@ -307,12 +308,13 @@ template:
 
 ### Bedtime: the alarm panel and a bedtime sensor
 
-These decide when the family is in bed, which turns family mode into night
-mode. Both are read only; SIEM never arms or disarms anything.
+These decide when the family is in bed. Bedtime isn't a house mode: the house
+stays family (or guest), and SIEM watches it the way described in
+[How bedtime reads the house](#how-bedtime-reads-the-house). Both are read
+only; SIEM never arms or disarms anything.
 
 - **Alarm panel:** armed night means everyone is in bed. Pending or triggered
-  keeps whatever it was, so a break-in in progress doesn't wake the house up
-  out of night mode.
+  keeps whatever it was, so a break-in in progress doesn't end bedtime.
 - **Bedtime sensor:** any binary sensor or helper of your own that is on when
   everyone is in bed, for example one that weighs bedroom presence, the time
   and the lights.
@@ -321,22 +323,34 @@ mode. Both are read only; SIEM never arms or disarms anything.
 either one saying bed is enough. The night window decides bedtime only when
 you pick neither, or in place of one that is unavailable until it's back. It
 never adds to a source that can tell: with a bedtime sensor that says
-everyone is up at 1 a.m., it isn't night mode, whatever the clock says.
+everyone is up at 1 a.m., it isn't bedtime, whatever the clock says.
+
+**Guests go to bed with the clock as well.** With only guests home, the night
+window counts as bedtime alongside these, since your bedtime sensor probably
+follows your own household and nothing says when guests go to bed. Watching
+the house at bedtime still lets people move about inside, so a house-sitter
+up at 3 a.m. for water isn't an intruder; someone coming in from outside with
+nobody up first is.
 
 ### Night window
 
 Midnight to 5:30 unless you change it. It does three things:
 
-- Exterior rules count 1.5 times inside it. They also do in night mode,
+- Exterior rules count 1.5 times inside it. They also do at bedtime,
   whatever the time.
 - It sets the recommended alarm mode: armed night inside it when someone is
   home.
-- It is bedtime, but only as the fallback described above.
+- It is bedtime for the family only as the fallback described above, and
+  for guests always.
+- Service mode doesn't hold inside it: nobody works in the house at night, so
+  a calendar event or a service sensor that is still on (a Workday sensor
+  turns on at midnight) leaves the house vacant until the window ends.
 
-## How night mode reads the house
+## How bedtime reads the house
 
-With the family in bed, SIEM watches the yard, the doors and the windows the
-way it watches an empty house, and ignores the inside, where the family is.
+With the family or guests in bed, SIEM watches the yard, the doors and the
+windows the way it watches an empty house, and ignores the inside, where they
+are.
 It tells one of you from an intruder by the order of events:
 
 - **Someone moving inside, then a door or gate, is one of you going out.**
@@ -350,8 +364,8 @@ It tells one of you from an intruder by the order of events:
   coming in,** and it counts in full.
 - **The inside counts only in the five minutes after an entry that counted:**
   the intruder moving in.
-- A resident arriving home, or someone let in, makes the doors and the yard
-  theirs for ten minutes.
+- A resident or guest arriving home, or someone let in, makes the doors and
+  the yard theirs for ten minutes.
 
 Put a motion sensor on the way to each outside door. Without one, one of you
 letting the dog out looks like someone coming in.
@@ -377,8 +391,10 @@ house is supposed to be busy. Doors open, lights go on, the fridge gets
 raided. Scoring that would only teach you to ignore SIEM, so in those modes
 only lock trouble scores: a disabled code, a keypad lockout. Guest and
 service modes are how you tell SIEM that the activity is expected even with
-everyone away. Night mode is the exception, described above, because the
-family is home but not watching.
+everyone away. Bedtime is the exception, described above, because whoever is
+home is no longer watching: the family or guests in bed are watched for like
+an empty house. Service mode never lasts into the night, so a house with only
+a contractor's day on the calendar is vacant, and watched, after dark.
 
 ## Seeing it happen
 
@@ -393,6 +409,8 @@ binary_sensor.back_door scored exterior_door_opened +40.0 (opened)
 binary_sensor.back_door not scored as exterior_door_opened: already counted in the last 5 minutes
 light.kitchen not scored: Home Assistant made the change
 binary_sensor.fridge_door not scored as interior_door_opened: guest mode gives it 0 points
-binary_sensor.back_door not scored as exterior_door_opened: night mode, and someone was up inside first: someone going out
+binary_sensor.back_door not scored as exterior_door_opened: bedtime, and someone was up inside first: someone going out
+binary_sensor.kitchen_presence not scored as interior_occupied: bedtime, and the inside only counts right after an entry
 House mode vacant -> guest
+Bedtime starts (guest mode)
 ```

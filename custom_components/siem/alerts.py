@@ -83,6 +83,7 @@ class Alerts:
             "room": c.room_name(incident.room),
             "area_id": incident.room,
             "mode": incident.mode,
+            "bedtime": incident.bedtime,
             "house_mode": c.house_mode,
             "person": incident.person,
             "started": c.iso(incident.started),
@@ -120,7 +121,7 @@ class Alerts:
         score = c.engine.score(c.now()) if incident is c.engine.current else incident.peak_score
         incident.notified_score = score
         snapshot = await self.async_snapshot(incident, tier)
-        message = alert_message(score, c.house_mode, self.timeline_lines(incident), again=again)
+        message = alert_message(score, c.house_text, self.timeline_lines(incident), again=again)
         self.fire(
             tier, alert_title(tier, c.room_name(incident.room)), message, incident=self.incident_payload(incident), snapshot=snapshot, again=again, label_url=c.label_url
         )
@@ -132,7 +133,7 @@ class Alerts:
         self.fire(
             CATEGORY_BREAK_GLASS,
             "SIEM break glass",
-            f"{message}. House {c.house_mode}.",
+            f"{message}. House {c.house_text}.",
             incident=self.incident_payload(incident) if incident else None,
             label_url=c.label_url if incident else None,
         )

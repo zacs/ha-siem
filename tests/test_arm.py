@@ -12,8 +12,6 @@ from custom_components.siem.core.arm import ARM_MODES, recommend_arm_mode
         ("vacant", True, "armed_away"),
         ("family", False, "disarmed"),
         ("family", True, "armed_night"),
-        ("night", True, "armed_night"),
-        ("night", False, "disarmed"),
         ("guest", False, "disarmed"),
         ("guest", True, "armed_night"),
         ("service", False, "disarmed"),

@@ -86,7 +86,8 @@ UI. Its attributes are `event_type` (the `kind`), `incident_id`, `tier`,
 | `peak_score` | number | The highest score it reached |
 | `room` | string or null | The room it started in |
 | `area_id` | string or null | That room's Home Assistant area id, for `area_entities()` and area targets |
-| `mode` | string | The house mode when it opened |
+| `mode` | string | The house mode when it opened: who was home |
+| `bedtime` | boolean | Whether whoever was home was in bed when it opened |
 | `house_mode` | string | The house mode now |
 | `person` | string or null | The Lock Code Manager slot name, when a code it manages was used |
 | `started` | string | When it opened, as local ISO 8601 time |

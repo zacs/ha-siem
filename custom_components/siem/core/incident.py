@@ -27,6 +27,8 @@ class Incident:
     started: float
     mode: str
     room: str | None = None
+    # Whoever was home was in bed when it opened.
+    bedtime: bool = False
     person: str | None = None
     contributions: list[Contribution] = field(default_factory=list)
     timeline: list[dict[str, Any]] = field(default_factory=list)
@@ -50,14 +52,14 @@ class Incident:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Incident:
         """Rebuild a stored incident, without its contributions, for labelling and describing it after a restart."""
-        fields = ("id", "started", "mode", "room", "person", "closed", "tier", "peak_tier", "peak_score")
+        fields = ("id", "started", "mode", "bedtime", "room", "person", "closed", "tier", "peak_tier", "peak_score")
         incident = cls(**{k: data[k] for k in fields if data.get(k) is not None})
         incident.labels, incident.timeline = list(data.get("labels") or []), list(data.get("timeline") or [])
         return incident
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly summary for storage and the digest."""
-        data = {k: getattr(self, k) for k in ("id", "started", "closed", "mode", "room", "person", "tier", "peak_tier")}
+        data = {k: getattr(self, k) for k in ("id", "started", "closed", "mode", "bedtime", "room", "person", "tier", "peak_tier")}
         data.update(labels=list(self.labels), timeline=list(self.timeline), rules=self.rule_ids(), entities=self.entity_ids(), peak_score=round(self.peak_score, 1))
         return data
 
@@ -115,7 +117,7 @@ class IncidentEngine:
             return []
         return top_contributors(self.current.contributions, self.weights, now, self.settings.half_life_min, limit)
 
-    def _incident_for(self, now: float, mode: str, room: str | None, allow_open: bool) -> Incident | None:
+    def _incident_for(self, now: float, mode: str, bedtime: bool, room: str | None, allow_open: bool) -> Incident | None:
         current = self.current
         if current is not None:
             if now - current.last_event <= self.settings.join_window_s or self.score(now) >= self.settings.close_below:
@@ -123,7 +125,7 @@ class IncidentEngine:
             self._close(current, now)
         if not allow_open:
             return None
-        incident = Incident(self._new_id(), now, mode, room, last_event=now)
+        incident = Incident(self._new_id(), now, mode, room, bedtime=bedtime, last_event=now)
         self.current = incident
         self._pending.append(IncidentEvent(EVENT_OPENED, incident, TIER_NONE))
         return incident
@@ -142,6 +144,7 @@ class IncidentEngine:
         mode: str,
         now: float,
         night: bool = False,
+        bedtime: bool = False,
         entity_id: str | None = None,
         room: str | None = None,
         detail: str = "",
@@ -151,16 +154,17 @@ class IncidentEngine:
         """Score ``rule_id`` against the open incident, opening one if needed.
 
         ``points`` overrides the per-mode selection when a caller has already
-        shaped them (room corroboration does). Chain multipliers apply when an
+        shaped them (room corroboration does). ``bedtime`` scores the rule's
+        bedtime points instead of the mode's. Chain multipliers apply when an
         earlier rule of the chain fired inside the chain window. Returns None
         when the rule scores nothing in this mode or no incident may open.
         """
         if rule_id not in self.rules:
             raise ValueError(f"unknown rule {rule_id!r}")
-        base = self.rules[rule_id].points_for(mode, night) if points is None else points
+        base = self.rules[rule_id].points_for(mode, night, bedtime) if points is None else points
         if base <= 0:
             return None
-        incident = self._incident_for(now, mode, room, allow_open)
+        incident = self._incident_for(now, mode, bedtime, room, allow_open)
         if incident is None:
             return None
         previous = [

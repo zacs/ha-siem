@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core.arm import ARM_MODES
-from .core.rules import MODES
+from .core.rules import HOUSE_MODES
 from .core.scoring import TIERS
 from .entity import SiemEntity
 
@@ -28,12 +28,13 @@ class SiemSensorDescription(SensorEntityDescription):
 def _incident_attrs(coordinator: SiemCoordinator) -> dict[str, Any]:
     incident = coordinator.engine.current
     if incident is None:
-        return {"started": None, "room": None, "mode": None, "person": None, "entities": [], "timeline": []}
+        return {"started": None, "room": None, "mode": None, "bedtime": None, "person": None, "entities": [], "timeline": []}
     timeline = [{**e, "at": coordinator.iso(e["at"])} for e in incident.timeline]
     return {
         "started": coordinator.iso(incident.started),
         "room": coordinator.room_name(incident.room),
         "mode": incident.mode,
+        "bedtime": incident.bedtime,
         "person": incident.person,
         "entities": incident.entity_ids(),
         "timeline": timeline,
@@ -46,7 +47,7 @@ DESCRIPTIONS: tuple[SiemSensorDescription, ...] = (
     ),
     SiemSensorDescription(key="tier", device_class=SensorDeviceClass.ENUM, options=list(TIERS), value_fn=lambda c: c.tier),
     SiemSensorDescription(key="incident", value_fn=lambda c: c.incident_id or "none", attrs_fn=_incident_attrs),
-    SiemSensorDescription(key="house_mode", device_class=SensorDeviceClass.ENUM, options=list(MODES), value_fn=lambda c: c.house_mode),
+    SiemSensorDescription(key="house_mode", device_class=SensorDeviceClass.ENUM, options=list(HOUSE_MODES), value_fn=lambda c: c.house_mode),
     SiemSensorDescription(
         key="recommended_alarm_mode", device_class=SensorDeviceClass.ENUM, options=list(ARM_MODES), value_fn=lambda c: c.recommended_arm
     ),

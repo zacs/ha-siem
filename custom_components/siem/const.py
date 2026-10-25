@@ -80,6 +80,9 @@ OPT_ENGINE = "engine"
 # Renamed before the first release; stored options and weights are migrated to the new names.
 RENAMED_RULES = {"tv_power": "appliance_on"}
 RENAMED_MODES = {"sitter": "guest"}
+# Night was a house mode until bedtime became an adjustment to one; a forced night is the family, who still go to bed.
+# Not in RENAMED_MODES, which also renames points columns, where "night" is still the bedtime column.
+RETIRED_OVERRIDES = {"night": "family"}
 
 DEFAULT_POWER_THRESHOLD = 30
 DEFAULT_WATER_THRESHOLD = 1.0
@@ -142,7 +145,7 @@ ARRIVAL_EXPLAINS_S = 600
 LET_IN_DEDUPE_S = 60
 # The alarm trigger turns on once an incident has held the alarm tier this long.
 ALARM_GRACE_S = 60
-# Night mode: the household is in bed while the picked panel is armed night. While it is arming, pending or triggered
+# Bedtime: the household is in bed while the picked panel is armed night. While it is arming, pending or triggered
 # it keeps what it was; any other armed or disarmed state means it is not. A bedtime source that is unavailable or
 # unknown cannot tell, and the night window stands in for it until it can.
 PANEL_ASLEEP = "armed_night"

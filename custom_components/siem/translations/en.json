@@ -30,7 +30,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity. With residents home, the house is in night mode while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window decides bedtime only when neither is picked. [Why each setting is here]({docs_url}).",
+        "description": "Each resident's device trackers are read from their person entity. With residents home, it is bedtime while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window decides bedtime only when neither is picked, and with only guests home it counts as well. [Why each setting is here]({docs_url}).",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -103,13 +103,13 @@
       },
       "rule_points": {
         "title": "{rule}",
-        "description": "{description}. Points per house mode.",
+        "description": "{description}. Points per house mode, and at bedtime.",
         "data": {
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
           "family": "Family",
-          "night": "Night (family in bed)"
+          "night": "At bedtime (family or guests home, in bed)"
         }
       },
       "engine": {
@@ -167,7 +167,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity. With residents home, the house is in night mode while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window decides bedtime only when neither is picked. [Why each setting is here]({docs_url}).",
+        "description": "Each resident's device trackers are read from their person entity. With residents home, it is bedtime while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window decides bedtime only when neither is picked, and with only guests home it counts as well. [Why each setting is here]({docs_url}).",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -254,8 +254,7 @@
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
-          "family": "Family",
-          "night": "Night"
+          "family": "Family"
         }
       },
       "recommended_alarm_mode": {
@@ -272,6 +271,9 @@
       "night": {
         "name": "Night"
       },
+      "bedtime": {
+        "name": "Bedtime"
+      },
       "alarm_trigger": {
         "name": "Alarm trigger"
       }
@@ -284,8 +286,7 @@
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
-          "family": "Family",
-          "night": "Night"
+          "family": "Family"
         }
       },
       "label_last_incident": {
@@ -388,8 +389,7 @@
         "vacant": "Vacant",
         "guest": "Guest",
         "service": "Service",
-        "family": "Family",
-        "night": "Night"
+        "family": "Family"
       }
     }
   }

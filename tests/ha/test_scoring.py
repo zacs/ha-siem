@@ -27,7 +27,7 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert incident_events[1]["tier"] == "verify" and incident_events[1]["room"] == "Kitchen"
     assert incident_events[1]["timeline"][0]["name"] == "Back Door"
     # The fields the README documents, no more and no fewer.
-    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "house_mode", "person", "started", "closed", "labels", "entities", "top_contributors", "timeline"}
+    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "bedtime", "house_mode", "person", "started", "closed", "labels", "entities", "top_contributors", "timeline"}
     assert set(incident_events[1]) == incident_fields | {"kind", "previous_tier"}
     assert set(incident_events[1]["timeline"][0]) == {"at", "rule", "points", "entity_id", "name", "room", "description", "detail"}
     assert incident_events[1]["timeline"][0]["room"] == "Kitchen"
@@ -226,3 +226,12 @@ async def test_label_errors_are_validation_errors(hass, freezer):
     await setup_siem(hass)
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call("siem", "label_incident", {"label": "real"}, blocking=True)
+
+
+async def test_a_forced_night_from_before_bedtime_became_an_adjustment_is_the_family(hass, hass_storage):
+    """Night was a house mode once; a house forced to it is the family, who still go to bed."""
+    hass_storage["siem.storage"] = {"version": 1, "minor_version": 1, "key": "siem.storage", "data": {"override": "night", "override_since": "2026-10-20T23:00:00-07:00"}}
+    await setup_siem(hass)
+    assert hass.states.get("sensor.siem_house_mode").state == "family"
+    assert hass.states.get("select.siem_house_mode_override").state == "family"
+    assert "night" not in hass.states.get("select.siem_house_mode_override").attributes["options"]

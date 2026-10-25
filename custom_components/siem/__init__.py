@@ -16,7 +16,7 @@ from . import const as c
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core import entities as ent
 from .core.house_mode import MODE_AUTO
-from .core.rules import DEFAULT_RULES, MODE_NIGHT, MODES, RuleConfigError
+from .core.rules import BEDTIME, DEFAULT_RULES, HOUSE_MODES, RuleConfigError
 from .core.weights import LABELS
 from .store import SiemStore
 
@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(c.DOMAIN)
 
 LABEL_SCHEMA = vol.Schema({vol.Required(c.ATTR_LABEL): vol.In(LABELS), vol.Optional(c.ATTR_INCIDENT_ID): cv.string})
-MODE_SCHEMA = vol.Schema({vol.Required(c.ATTR_MODE): vol.In([MODE_AUTO, *MODES])})
+MODE_SCHEMA = vol.Schema({vol.Required(c.ATTR_MODE): vol.In([MODE_AUTO, *HOUSE_MODES])})
 DIGEST_SCHEMA = vol.Schema({vol.Optional(c.CONF_AI_TASK): cv.entity_domain("ai_task"), vol.Optional(c.ATTR_PREVIEW, default=False): cv.boolean})
 
 
@@ -131,9 +131,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
             points = value.get("points") if isinstance(value, dict) else None
             if isinstance(points, dict):
                 value["points"] = {c.RENAMED_MODES.get(mode, mode): pts for mode, pts in points.items()}
-                # Overrides from before the night mode take its default points.
+                # Overrides from before bedtime scored take its default points.
                 if rule_id in DEFAULT_RULES:
-                    value["points"].setdefault(MODE_NIGHT, DEFAULT_RULES[rule_id].points[MODE_NIGHT])
+                    value["points"].setdefault(BEDTIME, DEFAULT_RULES[rule_id].points[BEDTIME])
         if rules:
             options[c.OPT_RULES] = rules
         else:

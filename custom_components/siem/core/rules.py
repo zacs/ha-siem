@@ -6,8 +6,14 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY, MODE_NIGHT = "vacant", "guest", "service", "family", "night"
-MODES: tuple[str, ...] = (MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY, MODE_NIGHT)
+MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY = "vacant", "guest", "service", "family"
+# The house mode is who is home.
+HOUSE_MODES: tuple[str, ...] = (MODE_VACANT, MODE_GUEST, MODE_SERVICE, MODE_FAMILY)
+# Bedtime is not a house mode but an adjustment to one: anyone home (the family or guests) and in bed. It scores in a
+# column of its own, the points table's fifth, whose key is "night".
+BEDTIME = "night"
+# The points columns: one per house mode, and bedtime.
+MODES: tuple[str, ...] = (*HOUSE_MODES, BEDTIME)
 TAG_EXTERIOR, TAG_INTERIOR, TAG_PERIMETER, TAG_TAMPER = "exterior", "interior", "perimeter", "tamper"
 
 NIGHT_MULTIPLIER = 1.5
@@ -22,9 +28,9 @@ class Rule:
     points: Mapping[str, float]
     description: str = ""
 
-    def points_for(self, mode: str, night: bool = False) -> float:
-        """Return the points this rule scores in ``mode``; night only amplifies exterior rules."""
-        base = float(self.points[mode])
+    def points_for(self, mode: str, night: bool = False, bedtime: bool = False) -> float:
+        """Return the points this rule scores in ``mode``, or at bedtime; night only amplifies exterior rules."""
+        base = float(self.points[BEDTIME if bedtime else mode])
         if night and self.tag == TAG_EXTERIOR:
             base *= NIGHT_MULTIPLIER
         return base
@@ -37,11 +43,11 @@ def _rule(rule_id: str, tag: str, pts: tuple[float, ...], description: str) -> R
 DEFAULT_RULES: dict[str, Rule] = {
     r.id: r
     for r in (
-        # Points are (vacant, guest, service, family, night). With anyone trusted at home and awake, SIEM stays quiet
+        # Points are (vacant, guest, service, family, bedtime). With anyone trusted at home and awake, SIEM stays quiet
         # about what happens in the house, which is what the house is for, and only speaks up about lock trouble.
-        # Night (the family home and in bed) watches the yard, doors and windows like an empty house, but the
-        # coordinator lets a door or the yard count only when nobody was up first, and the inside only right after an
-        # entry that counted.
+        # Bedtime (the family or guests home and in bed) watches the yard, doors and windows like an empty house, but
+        # the coordinator lets a door or the yard count only when nobody was up first, and the inside only right after
+        # an entry that counted.
         _rule("exterior_door_opened", TAG_EXTERIOR, (40, 0, 0, 0, 40), "An exterior door or window opened"),
         _rule("gate_opened", TAG_EXTERIOR, (30, 0, 0, 0, 30), "A gate opened"),
         _rule("door_csi_motion", TAG_EXTERIOR, (5, 0, 0, 0, 5), "Someone was at a door that did not open"),

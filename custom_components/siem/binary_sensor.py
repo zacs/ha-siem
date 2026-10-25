@@ -1,4 +1,4 @@
-"""Binary sensors: night window and the alarm trigger."""
+"""Binary sensors: the night window, bedtime and the alarm trigger."""
 
 from __future__ import annotations
 
@@ -14,16 +14,17 @@ PARALLEL_UPDATES = 0
 
 async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     """Set up the binary sensors."""
-    async_add_entities([SiemBinarySensor(entry.runtime_data, "night"), SiemBinarySensor(entry.runtime_data, "alarm_trigger")])
+    async_add_entities([SiemBinarySensor(entry.runtime_data, key) for key in ("night", "bedtime", "alarm_trigger")])
 
 
 class SiemBinarySensor(SiemEntity, BinarySensorEntity):
-    """Night is on inside the configured window; the alarm trigger once the open incident has held the alarm tier for a minute.
+    """The night window, bedtime and the alarm trigger, as on/off.
 
-    Add the alarm trigger to your alarm panel (in Alarmo, as an always-on sensor) if you want SIEM to set it off.
+    Night is on inside the configured window; bedtime while whoever is home (family or guests) is in bed; the alarm
+    trigger once the open incident has held the alarm tier for a minute. Add the alarm trigger to your alarm panel (in Alarmo, as an always-on sensor) if you want SIEM to set it off.
     """
 
     @property
     def is_on(self) -> bool:
         """Return the flag from the coordinator."""
-        return self.coordinator.night if self.key == "night" else self.coordinator.alarm_trigger
+        return bool(getattr(self.coordinator, self.key))

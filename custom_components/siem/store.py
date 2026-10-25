@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, REMOVED_RULES, RENAMED_MODES, RENAMED_RULES
+from .const import DOMAIN, REMOVED_RULES, RENAMED_MODES, RENAMED_RULES, RETIRED_OVERRIDES
 
 STORAGE_KEY = f"{DOMAIN}.storage"
 STORAGE_VERSION = 1
@@ -40,7 +40,8 @@ class SiemStore:
         self.incidents = list(data.get("incidents") or [])[-MAX_INCIDENTS:]
         self.weight_changes = list(data.get("weight_changes") or [])[-MAX_WEIGHT_CHANGES:]
         self.last_digest = data.get("last_digest")
-        self.override = RENAMED_MODES.get(data.get("override"), data.get("override"))
+        override = RENAMED_MODES.get(data.get("override"), data.get("override"))
+        self.override = RETIRED_OVERRIDES.get(override, override)
         self.override_since = data.get("override_since") if self.override else None
         self.label_webhook = data.get("label_webhook")
 

@@ -28,14 +28,49 @@ def test_a_guest_tracker_is_guest_mode_and_lingers_half_an_hour():
     assert machine.mode(100 + GUEST_LINGER_S) == "vacant"
 
 
-def test_family_in_bed_is_night():
+def test_bedtime_is_the_family_in_bed_not_a_mode():
     machine = HouseModeMachine(0)
-    machine.set_asleep(True)
-    assert machine.mode(0) == "vacant", "an empty house is vacant, asleep or not"
+    machine.set_bedtime_sources(True)
+    assert machine.mode(0) == "vacant" and not machine.bedtime(0), "nobody home, nobody in bed"
     machine.set_presence(True, 10)
-    assert machine.mode(10) == "night"
-    machine.set_asleep(False)
-    assert machine.mode(10) == "family"
+    assert machine.mode(10) == "family" and machine.bedtime(10)
+    machine.set_bedtime_sources(False)
+    machine.set_night_window(True)
+    assert not machine.bedtime(10), "the family's bedtime comes from the bedtime sources, not the clock"
+
+
+def test_guests_go_to_bed_with_the_sources_or_the_clock():
+    machine = HouseModeMachine(0)
+    machine.set_guest_presence(True, 10)
+    assert machine.mode(10) == "guest" and not machine.bedtime(10)
+    machine.set_night_window(True)
+    assert machine.bedtime(10), "nothing says when guests go to bed, so the night window does"
+    machine.set_night_window(False)
+    machine.set_bedtime_sources(True)
+    assert machine.bedtime(10)
+
+
+def test_service_never_holds_at_night():
+    machine = HouseModeMachine(0)
+    machine.set_mode_sensors(False, True, 10)
+    machine.set_night_window(True)
+    assert machine.mode(10) == "vacant" and not machine.bedtime(10), "nobody works in the house at 2 a.m."
+    machine.set_night_window(False)
+    assert machine.mode(10) == "service"
+
+
+def test_a_forced_family_or_guest_still_goes_to_bed():
+    machine = HouseModeMachine(0)
+    machine.set_night_window(True)
+    machine.set_override("guest")
+    assert machine.mode(0) == "guest" and machine.bedtime(0)
+    machine.set_override("family")
+    machine.set_bedtime_sources(True)
+    assert machine.mode(0) == "family" and machine.bedtime(0)
+    machine.set_override("service")
+    assert machine.mode(0) == "service" and not machine.bedtime(0), "a forced service stays what you picked"
+    with pytest.raises(ValueError):
+        machine.set_override("night")
 
 
 def test_guest_from_calendar_leaves_after_end_plus_two_hours_and_quiet():
