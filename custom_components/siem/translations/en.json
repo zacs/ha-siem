@@ -30,7 +30,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity. With residents home, it is bedtime while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window decides bedtime only when neither is picked, and with only guests home it counts as well. [Why each setting is here]({docs_url}).",
+        "description": "Each resident's device trackers are read from their person entity. At night, outdoor rules count 1.5 times, and a house whose family or guests are in bed is watched much like an empty one. With residents home, it is night while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window stands in when neither is picked or one is unavailable. With only guests home the night window counts too, and with nobody home it decides alone. [Why each setting is here]({docs_url}).",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -49,13 +49,13 @@
           "service_sensors": "Service sensors: on means service mode",
           "alarm_panel": "Alarm panel: armed night means everyone is in bed",
           "asleep_sensor": "Bedtime sensor: on means everyone is in bed",
-          "night_start": "Night starts",
-          "night_end": "Night ends"
+          "night_start": "Night window starts",
+          "night_end": "Night window ends"
         },
         "data_description": {
           "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
           "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
-          "night_start": "Outdoor rules count 1.5 times inside the night window. It is also bedtime, but only when no bedtime sensor or alarm panel is picked."
+          "night_start": "Your household's usual night hours. They decide night with nobody home, count for guests, and stand in for the bedtime sensor and alarm panel when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
         }
       },
       "csi_map": {
@@ -103,13 +103,13 @@
       },
       "rule_points": {
         "title": "{rule}",
-        "description": "{description}. Points per house mode, and at bedtime.",
+        "description": "{description}. Points per house mode, and at night with family or guests home.",
         "data": {
           "vacant": "Vacant",
           "guest": "Guest",
           "service": "Service",
           "family": "Family",
-          "night": "At bedtime (family or guests home, in bed)"
+          "night": "At night, with family or guests home"
         }
       },
       "engine": {
@@ -167,7 +167,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity. With residents home, it is bedtime while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window decides bedtime only when neither is picked, and with only guests home it counts as well. [Why each setting is here]({docs_url}).",
+        "description": "Each resident's device trackers are read from their person entity. At night, outdoor rules count 1.5 times, and a house whose family or guests are in bed is watched much like an empty one. With residents home, it is night while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window stands in when neither is picked or one is unavailable. With only guests home the night window counts too, and with nobody home it decides alone. [Why each setting is here]({docs_url}).",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -186,13 +186,13 @@
           "service_sensors": "Service sensors: on means service mode",
           "alarm_panel": "Alarm panel: armed night means everyone is in bed",
           "asleep_sensor": "Bedtime sensor: on means everyone is in bed",
-          "night_start": "Night starts",
-          "night_end": "Night ends"
+          "night_start": "Night window starts",
+          "night_end": "Night window ends"
         },
         "data_description": {
           "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
           "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
-          "night_start": "Outdoor rules count 1.5 times inside the night window. It is also bedtime, but only when no bedtime sensor or alarm panel is picked."
+          "night_start": "Your household's usual night hours. They decide night with nobody home, count for guests, and stand in for the bedtime sensor and alarm panel when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
         }
       },
       "csi_map": {
@@ -270,9 +270,6 @@
     "binary_sensor": {
       "night": {
         "name": "Night"
-      },
-      "bedtime": {
-        "name": "Bedtime"
       },
       "alarm_trigger": {
         "name": "Alarm trigger"

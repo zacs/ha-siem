@@ -8,9 +8,10 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.siem.config_flow import build_entity_meta
 from custom_components.siem.const import DOMAIN
 
-from .conftest import set_house_states, setup_siem
+from .conftest import HOUSE, RESPONSES, ROOMS, set_house_states, setup_siem
 
 
 def suggested(result) -> dict:
@@ -56,7 +57,7 @@ async def test_full_flow_prefills_rooms(hass):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["08:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.minor_version == 7
+    assert entry.minor_version == 8
     assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True}
     assert entry.data["house"]["csi_map"] == {"binary_sensor.front_door_csi": "binary_sensor.front_door"}
     assert entry.data["house"]["night_start"] == "23:00:00"
@@ -113,7 +114,7 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 7
+    assert entry.minor_version == 8
     assert entry.data["responses"] == {}
     # The panel SIEM used to arm is kept, to be read for armed night; the second water flow field joins the first.
     assert entry.data["house"] == {"alarm_panel": "alarm_control_panel.house", "water_flow": ["sensor.water_main", "sensor.water_pulse"]}
@@ -145,10 +146,26 @@ async def test_migration_drops_notify_panel_deterrence_and_trust_settings(hass, 
     orphans = [registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry) for key in ("dry_run", "auto_arm", "auto_alarm")]
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 7
+    assert entry.minor_version == 8
     assert entry.data["rooms"] == {"kitchen": {"name": "Kitchen", "power_threshold": 30, "outdoors": False}}
     assert entry.data["house"] == {"night_start": "22:00:00", "alarm_panel": "alarm_control_panel.house"}
     assert entry.data["responses"] == {"digest_times": ["08:00"]}
     assert "rules" not in entry.options
     assert all(registry.async_get(orphan.entity_id) is None for orphan in orphans)
     assert not hass.states.async_entity_ids("switch")
+
+
+async def test_the_bedtime_sensor_from_0_0_4_is_removed(hass):
+    """0.0.4 showed night with someone home as binary_sensor.siem_bedtime; binary_sensor.siem_night covers it now."""
+    set_house_states(hass)
+    data = {"rooms": ROOMS, "house": HOUSE, "responses": RESPONSES}
+    data["entities"] = build_entity_meta(hass, data)
+    entry = MockConfigEntry(domain=DOMAIN, title="SIEM", data=data, version=1, minor_version=7)
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    bedtime = registry.async_get_or_create("binary_sensor", DOMAIN, f"{entry.entry_id}_bedtime", config_entry=entry, suggested_object_id="siem_bedtime")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.minor_version == 8
+    assert registry.async_get(bedtime.entity_id) is None
+    assert hass.states.get("binary_sensor.siem_night") is not None

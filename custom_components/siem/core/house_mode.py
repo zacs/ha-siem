@@ -1,4 +1,4 @@
-"""House mode: who is home (family, guest, service or vacant), with an override; and whether they are in bed."""
+"""House mode: who is home (family, guest, service or vacant), with an override; and whether it is night."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ MODE_AUTO = "auto"
 
 
 class HouseModeMachine:
-    """Derive who is home (the house mode) and whether they are in bed (bedtime).
+    """Derive who is home (the house mode) and whether it is night.
 
     The house mode is presence only. Precedence is override, family, guest,
     service, vacant. Family lingers thirty minutes after the last resident
@@ -30,12 +30,13 @@ class HouseModeMachine:
     window, when nobody works in the house, so the house is vacant then. The
     calendar and the sensors add up: either one is enough.
 
-    Bedtime adjusts the family and guest modes: anyone home and in bed. With
-    the family home it follows the bedtime sources (the panel armed night, a
-    bedtime sensor, or the night window standing in, as the coordinator
-    decides); with only guests home the night window counts as well, since
-    nothing says when guests go to bed. A forced mode says who is home, so a
-    forced family or guest still goes to bed.
+    Night adjusts the house mode, and who is home decides where it comes
+    from. With the family home it is the bedtime sources: the panel armed
+    night or a bedtime sensor, with the night window standing in when neither
+    is picked or one can't tell, as the coordinator decides. With only
+    guests home it is those or the night window, since nothing says when
+    guests go to bed. With nobody home it is the night window. A forced mode
+    says who is home, so a forced family or guest still goes to bed.
     """
 
     def __init__(self, now: float) -> None:
@@ -66,8 +67,8 @@ class HouseModeMachine:
             self._last_guest_seen = now
         self._guest_here = anyone_here
 
-    def set_bedtime_sources(self, in_bed: bool) -> None:
-        """Record whether the bedtime sources say the household is in bed."""
+    def set_in_bed(self, in_bed: bool) -> None:
+        """Record whether the bedtime sources say the household is in bed, the night window standing in for them."""
         self._in_bed = in_bed
 
     def set_night_window(self, inside: bool) -> None:
@@ -150,11 +151,11 @@ class HouseModeMachine:
             return MODE_SERVICE
         return MODE_VACANT
 
-    def bedtime(self, now: float) -> bool:
-        """Return True while anyone home is in bed: the family by the bedtime sources, guests by those or the clock."""
+    def night(self, now: float) -> bool:
+        """Return True at night: the family's bedtime sources, guests' or the clock, or the clock in an empty house."""
         mode = self.mode(now)
         if mode == MODE_FAMILY:
             return self._in_bed
         if mode == MODE_GUEST:
             return self._in_bed or self._night_window
-        return False
+        return self._night_window

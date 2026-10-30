@@ -32,12 +32,6 @@
       "night": {
         "default": "mdi:weather-night"
       },
-      "bedtime": {
-        "default": "mdi:bed",
-        "state": {
-          "off": "mdi:bed-empty"
-        }
-      },
       "alarm_trigger": {
         "default": "mdi:bell-ring"
       }

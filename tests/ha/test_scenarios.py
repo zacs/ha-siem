@@ -171,9 +171,9 @@ class House:
         return self.hass.states.get("sensor.siem_house_mode").state
 
     @property
-    def in_bed(self) -> bool:
-        """Bedtime: whoever is home is in bed."""
-        return self.hass.states.get("binary_sensor.siem_bedtime").state == "on"
+    def night(self) -> bool:
+        """Night for this house: with someone home, they are in bed."""
+        return self.hass.states.get("binary_sensor.siem_night").state == "on"
 
     @property
     def score(self) -> float:
@@ -376,16 +376,17 @@ async def test_a_kid_comes_home_with_their_own_code(house, freezer):
 
 # --- Night: the family in bed ------------------------------------------------------------------------------------
 #
-# This house has no alarm panel picked, so the night window (22:00 to 06:00 here) is bedtime. At bedtime SIEM watches
-# the yard, doors and windows as it does an empty house, and tells one of the household from an intruder by the order
-# of events: someone up inside first is one of you going out; outside first, or nothing at all, is someone coming in.
+# This house has no alarm panel or bedtime sensor picked, so the night window (22:00 to 06:00 here) is night. At night
+# SIEM watches the yard, doors and windows as it does an empty house, and tells one of the household from an intruder
+# by the order of events: someone up inside first is one of you going out; outside first, or nothing at all, is
+# someone coming in.
 
 
 async def test_someone_lingering_in_the_yard_while_you_sleep(house, freezer):
     """1 a.m., everyone asleep, someone hangs around the backyard for forty minutes: a verify, as if you were away."""
     freezer.move_to("2026-10-21 01:00:00-07:00")
     home = await house()
-    assert home.mode == "family" and home.in_bed
+    assert home.mode == "family" and home.night
     for _ in range(40):
         await home.pulse("binary_sensor.backyard_motion", "binary_sensor.backyard_person")
         await home.wait(60)
@@ -473,7 +474,7 @@ async def test_your_partner_comes_home_while_you_sleep(house, freezer):
     await home.leave("partner")
     freezer.move_to("2026-10-21 01:00:00-07:00")
     await home.wait(30)
-    assert home.mode == "family" and home.in_bed
+    assert home.mode == "family" and home.night
     await home.arrive("partner")
     await home.pulse("binary_sensor.driveway_motion", "binary_sensor.porch_person")
     await home.physical("binary_sensor.garage_door")
@@ -514,47 +515,47 @@ async def test_a_break_in_just_after_someone_was_up(house, freezer):
     assert home.alerts == []
 
 
-async def test_the_alarm_panel_decides_bedtime(house, freezer):
-    """With a panel picked, bedtime is the panel armed night, whatever the clock says, and it holds while the
-    panel is pending or triggered. SIEM only reads the panel."""
+async def test_the_alarm_panel_decides_night(house, freezer):
+    """With the family home and a panel picked, night is the panel armed night, whatever the clock says, and it
+    holds while the panel is pending or triggered. SIEM only reads the panel."""
     freezer.move_to("2026-10-20 23:30:00-07:00")
     home = await house(panel=True)
-    assert home.mode == "family" and not home.in_bed, "inside the night window, but the panel is disarmed"
+    assert home.mode == "family" and not home.night, "inside the night window, but the panel is disarmed"
     await home.pulse("binary_sensor.side_gate", "binary_sensor.back_door")
     assert home.alerts == []
     await home.panel("armed_night")
-    assert home.mode == "family" and home.in_bed
+    assert home.mode == "family" and home.night
     await home.wait(600)
     await home.pulse("binary_sensor.side_gate", "binary_sensor.backyard_person", "binary_sensor.backyard_motion")
     assert home.alerts == ["verify", "deter"]
     for state in ("pending", "triggered"):
         await home.panel(state)
-        assert home.mode == "family" and home.in_bed
+        assert home.mode == "family" and home.night
     freezer.move_to("2026-10-21 06:30:00-07:00")
     await home.panel("disarmed")
-    assert home.mode == "family" and not home.in_bed
+    assert home.mode == "family" and not home.night
 
 
 async def test_a_bedtime_sensor_and_the_panel_either_one_counts(house, freezer):
-    """Your own bedtime sensor and the panel are both picked. Either one says bed and it is bedtime; the clock
+    """Your own bedtime sensor and the panel are both picked. Either one says bed and it is night; the clock
     plays no part while they can tell. A sensor that drops out can't, and the night window stands in for it."""
     freezer.move_to("2026-10-20 23:30:00-07:00")
     home = await house(panel=True, asleep_sensor=True)
-    assert home.mode == "family" and not home.in_bed, "inside the night window, but neither source says bed"
+    assert home.mode == "family" and not home.night, "inside the night window, but neither source says bed"
     await home.physical("binary_sensor.house_asleep", "on")
-    assert home.mode == "family" and home.in_bed
+    assert home.mode == "family" and home.night
     await home.physical("binary_sensor.house_asleep", "off")
-    assert home.mode == "family" and not home.in_bed
+    assert home.mode == "family" and not home.night
     await home.panel("armed_night")
-    assert home.mode == "family" and home.in_bed, "the panel alone is enough"
+    assert home.mode == "family" and home.night, "the panel alone is enough"
     await home.panel("disarmed")
     await home.physical("binary_sensor.house_asleep", "unavailable")
-    assert home.mode == "family" and home.in_bed, "the sensor can't tell, and it is inside the night window"
+    assert home.mode == "family" and home.night, "the sensor can't tell, and it is inside the night window"
     freezer.move_to("2026-10-21 14:00:00-07:00")
     await home.wait(30)
-    assert home.mode == "family" and not home.in_bed, "still unavailable, and the window says day"
+    assert home.mode == "family" and not home.night, "still unavailable, and the window says day"
     await home.physical("binary_sensor.house_asleep", "on")
-    assert home.mode == "family" and home.in_bed, "a bedtime source that can tell says bed even by day"
+    assert home.mode == "family" and home.night, "a bedtime source that can tell says bed even by day"
 
 
 # --- The house is empty ------------------------------------------------------------------------------------------
@@ -783,7 +784,7 @@ async def test_a_friends_phone_joins_the_wifi_after_they_walk_in(house, freezer)
 
 async def test_a_prowler_while_your_house_sitter_sleeps(house, freezer):
     """You're away and a friend is house-sitting, their phone on your Wi-Fi. Guest mode trusts them by day, but at
-    night they are in bed like anyone else, and nothing says when, so the night window is their bedtime. Someone
+    night they are in bed like anyone else, and nothing says when they go, so the night window decides. Someone
     through the side gate and at the back door at 3 a.m., with nobody up inside, is watched as if you were asleep
     there yourself."""
     home = await house()
@@ -791,12 +792,12 @@ async def test_a_prowler_while_your_house_sitter_sleeps(house, freezer):
     await home.physical("device_tracker.friend_phone", "home")
     freezer.move_to("2026-10-22 03:00:00-07:00")
     await home.wait(30)
-    assert home.mode == "guest" and home.in_bed
+    assert home.mode == "guest" and home.night
     await home.pulse("binary_sensor.side_gate", "binary_sensor.backyard_person")
     await home.wait(20)
     await home.physical("binary_sensor.back_door")
     assert home.alerts == ["verify", "deter", "alarm"]
-    assert home.coordinator.engine.current.bedtime and home.coordinator.engine.current.mode == "guest"
+    assert home.coordinator.engine.current.night and home.coordinator.engine.current.mode == "guest"
 
 
 async def test_your_house_sitter_lets_the_dog_out_at_night(house, freezer):
@@ -826,7 +827,7 @@ async def test_a_forced_guest_mode_still_goes_to_bed(house, freezer):
     await home.hass.services.async_call("siem", "set_house_mode", {"mode": "guest"}, blocking=True)
     freezer.move_to("2026-10-22 02:30:00-07:00")
     await home.wait(30)
-    assert home.mode == "guest" and home.in_bed
+    assert home.mode == "guest" and home.night
     await home.physical("binary_sensor.bedroom_window")
     assert home.alerts == ["deter"]
     await home.pulse("binary_sensor.bedroom_motion")
@@ -880,7 +881,7 @@ async def test_the_cleaners_day_on_a_workday_sensor(house, freezer):
     await home.vacation()
     freezer.move_to("2026-10-21 00:00:00-07:00")
     await home.physical("binary_sensor.cleaners_day", "on")
-    assert home.mode == "vacant", "service mode doesn't hold at night"
+    assert home.mode == "vacant" and home.night, "service mode doesn't hold at night, and an empty house goes by the clock"
     await home.wait(3600)
     await home.physical("binary_sensor.back_door")
     assert home.alerts == ["deter"]

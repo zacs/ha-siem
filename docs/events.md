@@ -31,7 +31,7 @@ guards.
 | --- | --- | --- |
 | `category` | string | `verify`, `deter`, `alarm`, `break_glass` or `digest` |
 | `title` | string | A short title, such as `SIEM verify: Kitchen` |
-| `message` | string | The alert as plain text: score, house mode and the latest events |
+| `message` | string | The alert as plain text: score, house mode (with *at night* when it is) and the latest events |
 | `incident` | object or null | The incident, described below. Set for verify, deter and alarm, and for break glass while an incident is open |
 | `snapshot` | string or null | The path of the room camera's snapshot, when the room has a camera |
 | `again` | boolean | True for a second verify alert, sent because the score doubled |
@@ -87,7 +87,7 @@ UI. Its attributes are `event_type` (the `kind`), `incident_id`, `tier`,
 | `room` | string or null | The room it started in |
 | `area_id` | string or null | That room's Home Assistant area id, for `area_entities()` and area targets |
 | `mode` | string | The house mode when it opened: who was home |
-| `bedtime` | boolean | Whether whoever was home was in bed when it opened |
+| `night` | boolean | Whether it was [night](scoring.md#night) when it opened: with someone home, they were in bed |
 | `house_mode` | string | The house mode now |
 | `person` | string or null | The Lock Code Manager slot name, when a code it manages was used |
 | `started` | string | When it opened, as local ISO 8601 time |

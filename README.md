@@ -28,11 +28,11 @@ alerts for a week before you let anything act on them.
 
 - **Three tiers.** Verify, deter and alarm, each one an event your automations
   can act on.
-- **Four house modes, and bedtime.** Family, guest, service and vacant, worked
+- **Four house modes, and night.** Family, guest, service and vacant, worked
   out from presence (yours and your guests'), a calendar or sensors, and lock
-  codes. Bedtime, from your alarm panel, a sensor or the clock, turns a busy
-  house into a watched one. The same open door means something different in
-  each.
+  codes. Night, from your alarm panel, a bedtime sensor or the clock, turns a
+  busy house into a watched one. The same open door means something different
+  in each.
 - **Plain Home Assistant state and events.** Sensors for the score, tier,
   incident and house mode, and an event for every alert.
 
@@ -78,8 +78,8 @@ The setup flow walks through:
   outside.
 - **Whole house.** Residents, extra trackers, guests' device trackers, the
   water and power sensors, locks, Lock Code Manager event entities, the
-  calendar and guest and service sensors, the alarm panel and a bedtime sensor
-  to read bedtime from, the night window, and Wi-Fi motion sensors with the
+  calendar and guest and service sensors, the alarm panel, bedtime sensor and
+  night window that decide when it's night, and Wi-Fi motion sensors with the
   door each one watches.
 - **Digest.** The AI task and the digest times.
 
@@ -137,16 +137,16 @@ count against you: SIEM sees that Home Assistant did it.
 
 ## How scoring works
 
-Every sensor event that physically happened adds points, which halve every
-15 minutes. The sum is the score: verify from 20, deter from 50, alarm from
-80. The points depend on the house mode, so a door opening scores 40 in an
-empty house and nothing while the family is home and awake. Some events count
-more after others (a door, then motion inside), and anything Home Assistant
-did itself counts for nothing. Labels nudge the weights of the rules involved
-up or down.
+Every sensor event that physically happened adds points, which halve every 15
+minutes. The sum is the score: verify from 20, deter from 50, alarm from 80.
+The points depend on the house mode and on whether it's night, so a door
+opening scores 40 in an empty house and nothing while the family is home and
+awake, but counts again once they're in bed. Some events count more after
+others (a door, then motion inside), and anything Home Assistant did itself
+counts for nothing. Labels nudge the weights of the rules involved up or down.
 
 - [How scoring works](docs/scoring.md): the rules and their points, chains,
-  suppressors, house modes and bedtime, in detail.
+  suppressors, house modes and night, in detail.
 - [Sensors, settings and scores](docs/sensors.md): why each rule scores what
   it does, and what each setting is for.
 - [In practice](docs/scenarios.md): about fifty end-to-end scenarios, from the
@@ -183,12 +183,11 @@ up or down.
 | --- | --- |
 | `sensor.siem_risk_score` | The live score, with `top_contributors` and `incident_id` |
 | `sensor.siem_tier` | `none`, `verify`, `deter` or `alarm` |
-| `sensor.siem_incident` | The open incident's id, with `started`, `room`, `mode`, `person`, `entities` (every entity that has added to the score, recorded in history) and the `timeline` (not recorded) |
+| `sensor.siem_incident` | The open incident's id, with `started`, `room`, `mode`, `night`, `person`, `entities` (every entity that has added to the score, recorded in history) and the `timeline` (not recorded) |
 | `sensor.siem_house_mode` | Who is home: `vacant`, `guest`, `service` or `family` |
 | `select.siem_house_mode_override` | Force a mode, or `auto` |
 | `sensor.siem_recommended_alarm_mode` | `armed_away`, `armed_night`, `armed_home` or `disarmed` |
-| `binary_sensor.siem_night` | On inside the night window |
-| `binary_sensor.siem_bedtime` | On while whoever is home, family or guests, is in bed |
+| `binary_sensor.siem_night` | On at night: with the family home, from your bedtime sensor or panel; with only guests, from those or the night window; with nobody home, the night window. See [Night](docs/scoring.md#night) |
 | `binary_sensor.siem_alarm_trigger` | On once an incident has held the alarm tier for a minute, until it drops |
 | `select.siem_label_last_incident` | Label the open or most recent incident; a notification's buttons label their own |
 | `event.siem_incident` | `opened`, `tier_changed`, `closed` and `labelled`, for automations built in the UI |

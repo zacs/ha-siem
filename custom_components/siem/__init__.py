@@ -16,7 +16,7 @@ from . import const as c
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core import entities as ent
 from .core.house_mode import MODE_AUTO
-from .core.rules import BEDTIME, DEFAULT_RULES, HOUSE_MODES, RuleConfigError
+from .core.rules import DEFAULT_RULES, HOUSE_MODES, NIGHT, RuleConfigError
 from .core.weights import LABELS
 from .store import SiemStore
 
@@ -101,10 +101,11 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate older 1.x entries to 1.7.
+    """Migrate older 1.x entries to 1.8.
 
-    Renamed modes and rules, the settings and rules removed, outdoor rooms, night points and one water flow field.
-    Every step is safe to run again, so one pass covers any older minor version.
+    Renamed modes and rules, the settings and rules removed, outdoor rooms, night points and one water flow field;
+    then the bedtime sensor, which night replaced. Every step is safe to run again, so one pass covers any older
+    minor version.
     """
     if entry.version > 1:
         return False
@@ -131,9 +132,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
             points = value.get("points") if isinstance(value, dict) else None
             if isinstance(points, dict):
                 value["points"] = {c.RENAMED_MODES.get(mode, mode): pts for mode, pts in points.items()}
-                # Overrides from before bedtime scored take its default points.
+                # Overrides from before the night column take its default points.
                 if rule_id in DEFAULT_RULES:
-                    value["points"].setdefault(BEDTIME, DEFAULT_RULES[rule_id].points[BEDTIME])
+                    value["points"].setdefault(NIGHT, DEFAULT_RULES[rule_id].points[NIGHT])
         if rules:
             options[c.OPT_RULES] = rules
         else:
@@ -144,4 +145,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
                 registry.async_remove(entity_id)
         hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=7)
         _LOGGER.info("Migrated SIEM config entry to 1.7")
+    if entry.minor_version < 8:
+        # 0.0.4 showed night with someone home as a bedtime sensor of its own; binary_sensor.siem_night covers it now.
+        registry = er.async_get(hass)
+        if entity_id := registry.async_get_entity_id("binary_sensor", c.DOMAIN, f"{entry.entry_id}_bedtime"):
+            registry.async_remove(entity_id)
+        hass.config_entries.async_update_entry(entry, minor_version=8)
+        _LOGGER.info("Migrated SIEM config entry to 1.8")
     return True

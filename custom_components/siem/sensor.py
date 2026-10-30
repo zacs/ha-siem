@@ -28,13 +28,13 @@ class SiemSensorDescription(SensorEntityDescription):
 def _incident_attrs(coordinator: SiemCoordinator) -> dict[str, Any]:
     incident = coordinator.engine.current
     if incident is None:
-        return {"started": None, "room": None, "mode": None, "bedtime": None, "person": None, "entities": [], "timeline": []}
+        return {"started": None, "room": None, "mode": None, "night": None, "person": None, "entities": [], "timeline": []}
     timeline = [{**e, "at": coordinator.iso(e["at"])} for e in incident.timeline]
     return {
         "started": coordinator.iso(incident.started),
         "room": coordinator.room_name(incident.room),
         "mode": incident.mode,
-        "bedtime": incident.bedtime,
+        "night": incident.night,
         "person": incident.person,
         "entities": incident.entity_ids(),
         "timeline": timeline,

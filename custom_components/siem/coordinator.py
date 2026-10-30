@@ -55,6 +55,7 @@ from .core.origin import ContextLRU, is_physical
 from .core.residual import LoadResidualDetector
 from .core.rules import (
     MODE_VACANT,
+    OCCUPIED,
     SUPPRESSOR_FAMILY_ARRIVAL,
     SUPPRESSOR_LET_IN,
     TAG_EXTERIOR,
@@ -160,14 +161,16 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.tier = TIER_NONE
         self.top: list[dict[str, Any]] = []
         self.house_mode = MODE_VACANT
+        # Night for this house, which scoring follows; and the clock's night window, which the recommended alarm mode
+        # follows and which stands in for the bedtime sources.
         self.night = False
-        self.bedtime = False
+        self.night_window = False
         self.recommended_arm: str | None = None
         self.alarm_trigger = False
         self._alarm_held = False
         self._alarm_timer: Callable[[], None] | None = None
         self._last_let_in = -1e12
-        # Bedtime: whether the panel and the bedtime sensor say the household is in bed, and the order of events then.
+        # Night: whether the panel and the bedtime sensor say the household is in bed, and the order of events then.
         self._panel_asleep: bool | None = None
         self._sensor_asleep: bool | None = None
         self._last_inside = -1e12
@@ -257,7 +260,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._apply_asleep_sensor(self.hass.states.get(sensor))
         self._update_presence(now)
         self._refresh_mode(now)
-        self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
+        self.recommended_arm = recommend_arm_mode(self.house_mode, self.night_window)
         self.publish(now, force=True)
 
     async def async_stop(self) -> None:
@@ -288,31 +291,31 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         local = dt_util.now().time()
         start = _parse_time(self.house.get(c.CONF_NIGHT_START), c.DEFAULT_NIGHT_START)
         end = _parse_time(self.house.get(c.CONF_NIGHT_END), c.DEFAULT_NIGHT_END)
-        self.night = start <= local < end if start <= end else local >= start or local < end
+        self.night_window = start <= local < end if start <= end else local >= start or local < end
         # The household is in bed while any bedtime source picked says so: the panel armed night, or the bedtime sensor
         # on. The night window stands in when neither is picked, or for a source that is unavailable; it never adds to
-        # a source that can tell. With only guests home, the machine counts the night window as well.
+        # a source that can tell. Who is home decides how much that counts: see HouseModeMachine.night.
         sources = [(c.CONF_ALARM_PANEL, self._panel_asleep), (c.CONF_ASLEEP_SENSOR, self._sensor_asleep)]
-        picked = [self.night if asleep is None else asleep for key, asleep in sources if self.house.get(key)]
-        self.modes.set_bedtime_sources(any(picked) if picked else self.night)
-        self.modes.set_night_window(self.night)
+        picked = [self.night_window if asleep is None else asleep for key, asleep in sources if self.house.get(key)]
+        self.modes.set_in_bed(any(picked) if picked else self.night_window)
+        self.modes.set_night_window(self.night_window)
         self.house_mode = self.modes.mode(now)
-        self.bedtime = self.modes.bedtime(now)
+        self.night = self.modes.night(now)
 
     @property
-    def dark(self) -> bool:
-        """Inside the night window or with whoever is home in bed: exterior rules count 1.5 times."""
-        return self.night or self.bedtime
+    def asleep(self) -> bool:
+        """Night with the family or guests home: they are in bed, and the order of events decides what counts."""
+        return self.night and self.house_mode in OCCUPIED
 
     @property
     def house_text(self) -> str:
-        """The house mode in words for alerts, with whether whoever is home is in bed."""
-        return f"{self.house_mode}, in bed" if self.bedtime else self.house_mode
+        """The house mode in words for alerts, and whether it is night."""
+        return f"{self.house_mode} at night" if self.night else self.house_mode
 
     @property
     def scoring(self) -> str:
-        """What decides the points, for the debug log: the house mode, at bedtime or not."""
-        return f"{self.house_mode} mode at bedtime" if self.bedtime else f"{self.house_mode} mode"
+        """What decides the points, for the debug log: the house mode, by day or at night."""
+        return f"{self.house_mode} mode at night" if self.night else f"{self.house_mode} mode"
 
     def _apply_panel(self, state: State | None) -> None:
         """Armed night means the household is in bed; pending or triggered keeps whatever it was; unavailable can't tell."""
@@ -365,14 +368,14 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "alarm_trigger": self.alarm_trigger,
                 "mode": self.house_mode,
                 "night": self.night,
-                "bedtime": self.bedtime,
+                "night_window": self.night_window,
                 "incident_id": self.incident_id,
             }
         )
 
     def _process(self, now: float, force: bool = False) -> None:
         """Advance the engine, publish, and announce transitions and alerts as events."""
-        previous = (self.house_mode, self.night, self.bedtime)
+        previous = (self.house_mode, self.night, self.night_window)
         self._refresh_mode(now)
         events = self.engine.evaluate(now)
         trigger = self._track_alarm()
@@ -384,14 +387,14 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.hass.bus.async_fire(c.EVENT_INCIDENT, payload, context=self.alerts.context())
             light = {key: payload[key] for key in (c.ATTR_INCIDENT_ID, "tier", "previous_tier", "score", "room", "mode")}
             async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, light)
-        changed = previous != (self.house_mode, self.night, self.bedtime)
+        changed = previous != (self.house_mode, self.night, self.night_window)
         if previous[0] != self.house_mode:
             _LOGGER.debug("House mode %s -> %s", previous[0], self.house_mode)
-        if previous[2] != self.bedtime:
-            _LOGGER.debug("Bedtime %s (%s mode)", "starts" if self.bedtime else "ends", self.house_mode)
+        if previous[1] != self.night:
+            _LOGGER.debug("Night %s (%s mode)", "starts" if self.night else "ends", self.house_mode)
         if changed:
             # Published as a sensor only; acting on it, or not, is up to the user's own automations.
-            self.recommended_arm = recommend_arm_mode(self.house_mode, self.night)
+            self.recommended_arm = recommend_arm_mode(self.house_mode, self.night_window)
         self.publish(now, force=force or bool(events) or changed or trigger)
         incident = self.engine.current
         renotify = incident is not None and incident.tier == TIER_VERIFY and incident.notified_score and score >= 2 * incident.notified_score
@@ -427,10 +430,10 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._skip(entity_id, rule_id, held)
             return
         contribution = self.engine.add(
-            rule_id, mode=self.house_mode, night=self.dark, bedtime=self.bedtime, now=now, entity_id=entity_id, room=room, detail=detail, points=points, allow_open=allow_open
+            rule_id, mode=self.house_mode, night=self.night, now=now, entity_id=entity_id, room=room, detail=detail, points=points, allow_open=allow_open
         )
         if contribution is None:
-            base = self.rules[rule_id].points_for(self.house_mode, self.dark, self.bedtime) if points is None else points
+            base = self.rules[rule_id].points_for(self.house_mode, self.night) if points is None else points
             self._skip(entity_id, rule_id, f"{self.scoring} gives it 0 points" if base <= 0 else "a weak source alone can't open an incident")
             return
         if rule_id == "exterior_door_opened":
@@ -448,7 +451,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("%s not scored%s: %s", entity_id or "house", f" as {rule_id}" if rule_id else "", why)
 
     def _night_hold(self, rule_id: str, now: float) -> str | None:
-        """Return why ``rule_id`` doesn't count now, or None when it does; only bedtime holds anything back.
+        """Return why ``rule_id`` doesn't count now, or None when it does; only night with someone home holds anything back.
 
         With whoever is home in bed (the family or guests) the order of events tells one of them from an intruder:
         one of them is up inside before a door opens, while an intruder is outside first, or nothing moves before
@@ -456,24 +459,24 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         yard are theirs while they are out there; the same goes for a resident or guest who just arrived or
         someone just let in. Inside counts only right after an entry that counted: the intruder moving in.
         """
-        if not self.bedtime:
+        if not self.asleep:
             return None
         tag = self.rules[rule_id].tag
         if tag == TAG_INTERIOR:
-            return None if now - self._entry_at <= c.NIGHT_AFTER_ENTRY_S else "bedtime, and the inside only counts right after an entry"
+            return None if now - self._entry_at <= c.NIGHT_AFTER_ENTRY_S else "night, and the inside only counts right after an entry"
         if tag != TAG_EXTERIOR:
             return None
         expected = max(self._last_arrival, self._last_let_in) + c.NIGHT_EXPECTED_S
         if now < max(self._family_out_until, expected):
             self._family_out_until = max(self._family_out_until, now + c.NIGHT_FAMILY_OUTSIDE_S)
-            return "bedtime, and the doors and yard are the household's: someone went out, came home or was let in"
+            return "night, and the doors and yard are the household's: someone went out, came home or was let in"
         inside_first = self._someone_up(now)
         if inside_first and rule_id in ("exterior_door_opened", "gate_opened"):
             self._family_out_until = now + c.NIGHT_FAMILY_OUTSIDE_S
-            return "bedtime, and someone was up inside first: someone going out"
+            return "night, and someone was up inside first: someone going out"
         # A Wi-Fi motion sensor at a door also sees someone walking past it inside.
         if inside_first and rule_id == "door_csi_motion":
-            return "bedtime, and someone is up inside, which the sensor also sees"
+            return "night, and someone is up inside, which the sensor also sees"
         return None
 
     def _someone_up(self, now: float) -> bool:
@@ -629,7 +632,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._refresh_mode(now)
         outdoors = room in self.outdoor_rooms
         if not outdoors and role in (ent.ROLE_INTERIOR_DOOR, ent.ROLE_LIGHT, ent.ROLE_OCCUPANCY) and _turned_on(old, new):
-            # Someone up and about inside, for bedtime. A weak source may be the dog; a light may be a slow report
+            # Someone up and about inside, for the night. A weak source may be the dog; a light may be a slow report
             # of something Home Assistant switched.
             weak = role == ent.ROLE_OCCUPANCY and ent.effective_strength(meta) == STRENGTH_WEAK
             if not weak and not (role == ent.ROLE_LIGHT and self._commanded_within(entity_id, now, c.COMMANDED_LIGHT_S)):
@@ -683,7 +686,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._skip(entity_id, "door_csi_motion", "its door is open or just opened")
 
     def _on_occupancy(self, entity_id: str, meta: dict[str, Any], room: str | None, now: float) -> None:
-        base = self.rules["interior_occupied"].points_for(self.house_mode, bedtime=self.bedtime)
+        base = self.rules["interior_occupied"].points_for(self.house_mode, self.night)
         if base <= 0:
             self._skip(entity_id, "interior_occupied", f"{self.scoring} gives it 0 points")
             return
@@ -694,14 +697,14 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if result.points <= 0:
             self._skip(entity_id, "interior_occupied", "the room already counted in the last 5 minutes")
             return
-        allow_open = not (result.weak_alone and (self.house_mode == MODE_VACANT or self.bedtime))
+        allow_open = not (result.weak_alone and (self.house_mode == MODE_VACANT or self.asleep))
         source = "person detected" if meta.get("person_detector") else f"{result.strength} source"
         detail = source + (", corroborated" if result.corroborated else "")
         self._score("interior_occupied", now, entity_id, room, detail, points=result.points, allow_open=allow_open, gated=True)
 
     def _on_outside(self, entity_id: str, strength: str, room: str | None, now: float, what: str) -> None:
         """Credit "someone is outside" once per window for the whole outdoors, at its strongest source."""
-        base = self.rules["exterior_occupied"].points_for(self.house_mode, self.dark, self.bedtime)
+        base = self.rules["exterior_occupied"].points_for(self.house_mode, self.night)
         if base <= 0:
             self._skip(entity_id, "exterior_occupied", f"{self.scoring} gives it 0 points")
             return

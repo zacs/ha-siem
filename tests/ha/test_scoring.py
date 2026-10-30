@@ -27,7 +27,7 @@ async def test_physical_door_opens_a_verify_incident(hass, freezer, service_call
     assert incident_events[1]["tier"] == "verify" and incident_events[1]["room"] == "Kitchen"
     assert incident_events[1]["timeline"][0]["name"] == "Back Door"
     # The fields the README documents, no more and no fewer.
-    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "bedtime", "house_mode", "person", "started", "closed", "labels", "entities", "top_contributors", "timeline"}
+    incident_fields = {"incident_id", "tier", "peak_tier", "score", "peak_score", "room", "area_id", "mode", "night", "house_mode", "person", "started", "closed", "labels", "entities", "top_contributors", "timeline"}
     assert set(incident_events[1]) == incident_fields | {"kind", "previous_tier"}
     assert set(incident_events[1]["timeline"][0]) == {"at", "rule", "points", "entity_id", "name", "room", "description", "detail"}
     assert incident_events[1]["timeline"][0]["room"] == "Kitchen"

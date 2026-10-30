@@ -83,7 +83,7 @@ class Alerts:
             "room": c.room_name(incident.room),
             "area_id": incident.room,
             "mode": incident.mode,
-            "bedtime": incident.bedtime,
+            "night": incident.night,
             "house_mode": c.house_mode,
             "person": incident.person,
             "started": c.iso(incident.started),

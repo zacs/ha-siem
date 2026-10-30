@@ -4,7 +4,7 @@ import itertools
 
 import pytest
 
-from custom_components.siem.core.incident import EVENT_CLOSED, EVENT_OPENED, EVENT_TIER_CHANGED, IncidentEngine
+from custom_components.siem.core.incident import EVENT_CLOSED, EVENT_OPENED, EVENT_TIER_CHANGED, Incident, IncidentEngine
 from custom_components.siem.core.rules import DEFAULT_RULES, SUPPRESSOR_FAMILY_ARRIVAL, SUPPRESSOR_LET_IN, EngineSettings
 
 
@@ -147,3 +147,16 @@ def test_publish_gating(engine):
 def test_unknown_rule_is_rejected(engine):
     with pytest.raises(ValueError):
         engine.add("nope", mode="vacant", now=0)
+
+
+def test_incidents_record_night_and_read_back_older_ones():
+    engine = IncidentEngine(DEFAULT_RULES, EngineSettings(), {}, id_factory=lambda: "inc1")
+    engine.add("exterior_door_opened", mode="guest", night=True, now=0)
+    assert engine.current.night and engine.current.as_dict()["night"] is True
+    assert engine.current.contributions[0].points == 60, "the night column, and 1.5 times outdoors"
+    # 0.0.3 stored night with the family home as a mode; 0.0.4 as bedtime.
+    old_mode = Incident.from_dict({"id": "a", "started": 0, "mode": "night"})
+    assert (old_mode.mode, old_mode.night) == ("family", True)
+    bedtime = Incident.from_dict({"id": "b", "started": 0, "mode": "guest", "bedtime": True})
+    assert (bedtime.mode, bedtime.night) == ("guest", True)
+    assert Incident.from_dict({"id": "c", "started": 0, "mode": "vacant", "night": False}).night is False
