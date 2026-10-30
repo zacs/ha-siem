@@ -79,7 +79,7 @@ UI. Its attributes are `event_type` (the `kind`), `incident_id`, `tier`,
 
 | Field | Type | What it holds |
 | --- | --- | --- |
-| `incident_id` | string | Eight hex characters, such as `3f9a1c2b` |
+| `incident_id` | string | Eight hex characters, such as `3f9a1c2b`, never all digits, so a template keeps it a string |
 | `tier` | string | `none`, `verify`, `deter` or `alarm` |
 | `peak_tier` | string | The highest tier it reached |
 | `score` | number | The live score; 0 once closed |

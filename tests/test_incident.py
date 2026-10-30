@@ -4,7 +4,8 @@ import itertools
 
 import pytest
 
-from custom_components.siem.core.incident import EVENT_CLOSED, EVENT_OPENED, EVENT_TIER_CHANGED, Incident, IncidentEngine
+from custom_components.siem.core import incident as incident_module
+from custom_components.siem.core.incident import EVENT_CLOSED, EVENT_OPENED, EVENT_TIER_CHANGED, Incident, IncidentEngine, new_incident_id
 from custom_components.siem.core.rules import DEFAULT_RULES, SUPPRESSOR_FAMILY_ARRIVAL, SUPPRESSOR_LET_IN, EngineSettings
 
 
@@ -160,3 +161,10 @@ def test_incidents_record_night_and_read_back_older_ones():
     bedtime = Incident.from_dict({"id": "b", "started": 0, "mode": "guest", "bedtime": True})
     assert (bedtime.mode, bedtime.night) == ("guest", True)
     assert Incident.from_dict({"id": "c", "started": 0, "mode": "vacant", "night": False}).night is False
+
+
+def test_incident_ids_are_never_all_digits(monkeypatch):
+    """A template would turn 56594040 into a number, and an automation matching it in event_data would never match."""
+    drawn = iter(["56594040", "5659404a"])
+    monkeypatch.setattr(incident_module.secrets, "token_hex", lambda _n: next(drawn))
+    assert new_incident_id() == "5659404a"

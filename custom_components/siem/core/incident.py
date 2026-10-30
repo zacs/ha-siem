@@ -19,6 +19,17 @@ EVENT_LABELLED = "labelled"
 INCIDENT_EVENT_TYPES: tuple[str, ...] = (EVENT_OPENED, EVENT_TIER_CHANGED, EVENT_CLOSED, EVENT_LABELLED)
 
 
+def new_incident_id() -> str:
+    """Return eight hex characters, never all digits.
+
+    Home Assistant templates turn a value that looks like a number into a number, so an automation matching an
+    all-digit id in event_data would compare 56594040 with SIEM's "56594040" and never match.
+    """
+    while (incident_id := secrets.token_hex(4)).isdigit():
+        pass
+    return incident_id
+
+
 @dataclass
 class Incident:
     """A cluster of correlated events and everything scored against it."""
@@ -93,7 +104,7 @@ class IncidentEngine:
         self.settings = settings
         self.weights = weights
         self._chains = settings.chains()
-        self._new_id = id_factory or (lambda: secrets.token_hex(4))
+        self._new_id = id_factory or new_incident_id
         self.current: Incident | None = None
         self.recent: deque[Incident] = deque(maxlen=20)
         self._pending: list[IncidentEvent] = []
