@@ -34,9 +34,10 @@ class HouseModeMachine:
     from. With the family home it is the bedtime sources: the panel armed
     night or a bedtime sensor, with the night window standing in when neither
     is picked or one can't tell, as the coordinator decides. With only
-    guests home it is those or the night window, since nothing says when
-    guests go to bed. With nobody home it is the night window. A forced mode
-    says who is home, so a forced family or guest still goes to bed.
+    guests home it is the night window, since guests rarely have a bedtime
+    sensor or arm the panel; one that says bed only makes it night sooner.
+    With nobody home it is the night window. A forced mode says who is home,
+    so a forced family or guest still goes to bed.
     """
 
     def __init__(self, now: float) -> None:

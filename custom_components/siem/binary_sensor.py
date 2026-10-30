@@ -20,8 +20,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SiemConfigEntry, async_a
 class SiemBinarySensor(SiemEntity, BinarySensorEntity):
     """Night and the alarm trigger, as on/off.
 
-    Night is on while it is night for this house: the family's bedtime sources, guests' or the night window, or the
-    night window with nobody home. The alarm trigger is on once the open incident has held the alarm tier for a
+    Night is on while it is night for this house: the family's bedtime sources, with the night window standing in;
+    with only guests home, the night window, which a source saying bed can start sooner; with nobody home, the night
+    window. The alarm trigger is on once the open incident has held the alarm tier for a
     minute. Add the alarm trigger to your alarm panel (in Alarmo, as an always-on sensor) if you want SIEM to set it off.
     """
 

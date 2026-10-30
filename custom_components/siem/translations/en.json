@@ -30,7 +30,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity. At night, outdoor rules count 1.5 times, and a house whose family or guests are in bed is watched much like an empty one. With residents home, it is night while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window stands in when neither is picked or one is unavailable. With only guests home the night window counts too, and with nobody home it decides alone. [Why each setting is here]({docs_url}).",
+        "description": "Each resident's device trackers are read from their person entity. At night, outdoor rules count 1.5 times, and a house whose family or guests are in bed is watched much like an empty one. With residents home, it is night while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window stands in when neither is picked or one is unavailable. With only guests home the night window decides, and the bedtime sensor or panel saying bed can only make it night sooner; with nobody home the night window decides alone. [Why each setting is here]({docs_url}).",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -55,7 +55,7 @@
         "data_description": {
           "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
           "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
-          "night_start": "Your household's usual night hours. They decide night with nobody home, count for guests, and stand in for the bedtime sensor and alarm panel when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
+          "night_start": "Your household's usual night hours. They decide night with only guests or nobody home, and stand in for the bedtime sensor and alarm panel with residents home when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
         }
       },
       "csi_map": {
@@ -167,7 +167,7 @@
       },
       "house": {
         "title": "Whole house",
-        "description": "Each resident's device trackers are read from their person entity. At night, outdoor rules count 1.5 times, and a house whose family or guests are in bed is watched much like an empty one. With residents home, it is night while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window stands in when neither is picked or one is unavailable. With only guests home the night window counts too, and with nobody home it decides alone. [Why each setting is here]({docs_url}).",
+        "description": "Each resident's device trackers are read from their person entity. At night, outdoor rules count 1.5 times, and a house whose family or guests are in bed is watched much like an empty one. With residents home, it is night while the bedtime sensor is on or the alarm panel is armed night; either one counts, and SIEM only reads them. The night window stands in when neither is picked or one is unavailable. With only guests home the night window decides, and the bedtime sensor or panel saying bed can only make it night sooner; with nobody home the night window decides alone. [Why each setting is here]({docs_url}).",
         "data": {
           "residents": "Residents (people)",
           "extra_trackers": "More device trackers that mean someone is home",
@@ -192,7 +192,7 @@
         "data_description": {
           "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
           "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
-          "night_start": "Your household's usual night hours. They decide night with nobody home, count for guests, and stand in for the bedtime sensor and alarm panel when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
+          "night_start": "Your household's usual night hours. They decide night with only guests or nobody home, and stand in for the bedtime sensor and alarm panel with residents home when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
         }
       },
       "csi_map": {

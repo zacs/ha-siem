@@ -187,7 +187,7 @@ counts for nothing. Labels nudge the weights of the rules involved up or down.
 | `sensor.siem_house_mode` | Who is home: `vacant`, `guest`, `service` or `family` |
 | `select.siem_house_mode_override` | Force a mode, or `auto` |
 | `sensor.siem_recommended_alarm_mode` | `armed_away`, `armed_night`, `armed_home` or `disarmed` |
-| `binary_sensor.siem_night` | On at night: with the family home, from your bedtime sensor or panel; with only guests, from those or the night window; with nobody home, the night window. See [Night](docs/scoring.md#night) |
+| `binary_sensor.siem_night` | On at night: with the family home, from your bedtime sensor or panel (the night window standing in); with only guests home, inside the night window, which your bedtime sensor or panel saying bed can only start sooner; with nobody home, inside the night window. See [Night](docs/scoring.md#night) |
 | `binary_sensor.siem_alarm_trigger` | On once an incident has held the alarm tier for a minute, until it drops |
 | `select.siem_label_last_incident` | Label the open or most recent incident; a notification's buttons label their own |
 | `event.siem_incident` | `opened`, `tier_changed`, `closed` and `labelled`, for automations built in the UI |

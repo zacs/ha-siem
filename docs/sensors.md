@@ -330,11 +330,14 @@ is unavailable until it's back. It never adds to a source that can tell: with
 a bedtime sensor that says everyone is up at 1 a.m., it isn't night, whatever
 the clock says.
 
-**With only guests home, the night window counts as well,** since your
-bedtime sensor probably follows your own household and nothing says when
-guests go to bed. Watching the house at night still lets people move about
-inside, so a house-sitter up at 3 a.m. for water isn't an intruder; someone
-coming in from outside with nobody up first is.
+**With only guests home, it's the other way round: the night window
+decides.** Guests almost never have a bedtime sensor or arm the panel, and
+yours probably follows your own household, so SIEM expects neither. If one
+does say bed (a house-sitter arms night at 10 p.m.), it is night from then
+on; but neither can end the night inside the window. Watching the house at
+night still lets people move about inside, so a house-sitter up at 3 a.m.
+for water isn't an intruder; someone coming in from outside with nobody up
+first is.
 
 **With nobody home, the night window decides alone.** Nobody is in bed, but
 someone at your back door at 3 a.m. is still more unusual than at 3 p.m.

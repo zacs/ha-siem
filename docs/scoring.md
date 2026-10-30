@@ -171,7 +171,7 @@ Night isn't a house mode: it adjusts whichever mode the house is in, and
 | Who is home | It is night while |
 | --- | --- |
 | The family | The bedtime sensor you picked is on, or the alarm panel you picked is armed night (either one counts; pending or triggered keeps the panel's). The night window stands in only when you picked neither, or for one that is unavailable. |
-| Only guests | The same, or inside the night window: your bedtime sensor probably follows your own household, and nothing says when guests go to bed. |
+| Only guests | Inside the night window. Guests rarely have a bedtime sensor or arm the panel, so the clock decides; if the sensor is on or the panel is armed night, that only makes it night sooner, and nothing ends it before the window does. |
 | Nobody, or a contractor | Inside the night window. Service mode never holds inside it, so the house is vacant then. |
 
 The night window is your household's usual night hours, midnight to 5:30

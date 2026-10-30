@@ -38,15 +38,18 @@ def test_night_with_the_family_home_is_their_bedtime_sources():
     assert not machine.night(10), "the bedtime sources say someone is up, whatever the clock says"
 
 
-def test_night_with_only_guests_home_is_the_sources_or_the_clock():
+def test_night_with_only_guests_home_is_the_clock_and_a_source_can_only_start_it_sooner():
     machine = HouseModeMachine(0)
     machine.set_guest_presence(True, 10)
     assert machine.mode(10) == "guest" and not machine.night(10)
     machine.set_night_window(True)
-    assert machine.night(10), "nothing says when guests go to bed, so the night window does"
+    assert machine.night(10), "guests rarely have a bedtime sensor or arm the panel: the night window decides"
     machine.set_night_window(False)
     machine.set_in_bed(True)
-    assert machine.night(10)
+    assert machine.night(10), "a house-sitter arming night at 10 p.m. starts it sooner"
+    machine.set_in_bed(False)
+    machine.set_night_window(True)
+    assert machine.night(10), "nothing ends it inside the window"
 
 
 def test_night_in_an_empty_house_is_the_clock():
