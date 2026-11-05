@@ -91,7 +91,7 @@ actions:
                       {'action': 'SIEM_LABEL_REAL|' ~ incident_id, 'title': 'Real'},
                       {'action': 'SIEM_LABEL_GUEST|' ~ incident_id, 'title': 'Guest'}]) %}
                 {%- endif %}
-                {%- if n.get('snapshot') %}{% set d = dict(d, image='/media/local/siem/' ~ (n.snapshot | regex_replace('^.*/', ''))) %}{% endif %}
+                {%- if n.snapshot %}{% set d = dict(d, image='/media/local/siem/' ~ (n.snapshot | regex_replace('^.*/', ''))) %}{% endif %}
                 {{ d }}
           - repeat:
               for_each: "{{ services }}"

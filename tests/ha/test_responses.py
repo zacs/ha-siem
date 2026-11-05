@@ -100,7 +100,7 @@ async def test_digest_falls_back_to_counts_without_an_ai_task(hass, freezer, sie
     assert digest["message"] == "1 incidents (1 verify), 0 weight changes\n\nHouse mode: vacant."
     assert digest["summary"]["incident_count"] == 1
     assert set(digest["summary"]) == {"since", "until", "incident_count", "labels", "weight_changes", "counts", "house_mode", "forced", "forced_since"}
-    assert digest["incident"] is None and "snapshot" not in digest
+    assert digest["incident"] is None and digest["snapshot"] is None
 
 
 async def test_digest_on_demand_with_another_ai_task_and_previews(hass, freezer, siem_events):

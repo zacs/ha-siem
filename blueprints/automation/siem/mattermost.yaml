@@ -111,7 +111,7 @@ actions:
                 {{ a }}
               payload: >-
                 {%- set d = {'attachments': [attachment]} %}
-                {%- if n.get('snapshot') %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
+                {%- if n.snapshot %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
                 {{ d }}
           # No text of its own: everything sits inside the attachment, whose fallback notifications show.
           - action: "{{ notify_action }}"

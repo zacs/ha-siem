@@ -25,8 +25,7 @@ count against you: SIEM sees that Home Assistant did it.
 ## `siem_notification`
 
 Fires for every alert. Every field is always present, so templates need no
-guards, except `snapshot`: it is there only when a snapshot was actually
-saved, so read it with `trigger.event.data.get('snapshot')`.
+guards.
 
 | Field | Type | What it holds |
 | --- | --- | --- |
@@ -34,7 +33,7 @@ saved, so read it with `trigger.event.data.get('snapshot')`.
 | `title` | string | A short title, such as `SIEM verify: Kitchen` |
 | `message` | string | The alert as plain text: score, house mode (with *at night* when it is) and the latest events |
 | `incident` | object or null | The incident, described below. Set for verify, deter and alarm, and for break glass while an incident is open |
-| `snapshot` | string, or no key at all | The path of the snapshot from the room's cameras. Present only when the file exists and isn't empty; left out when the room has no camera, every camera is unavailable, or the capture failed or wrote nothing |
+| `snapshot` | string or null | The path of the snapshot from the room's cameras, only when the file exists and isn't empty. Null when the room has no camera, every camera is unavailable, or the capture failed or wrote nothing |
 | `again` | boolean | True for a second verify alert, sent because the score doubled |
 | `label_url` | string or null | Where a chat button posts a label for this alert's incident; see [the label webhook](blueprints.md#the-label-webhook). Set when `incident` is, and Home Assistant knows its own address |
 | `summary` | object or null | Digest only: `since`, `until`, `incident_count`, `labels`, `weight_changes` (a count), `counts` (one line of totals), `house_mode`, `forced` (whether the mode was set by hand) and `forced_since` |

@@ -106,12 +106,12 @@ class Alerts:
         }
 
     def fire(self, category: str, title: str, message: str, **data: Any) -> None:
-        """Fire ``siem_notification``; every field is always present so automations need no guards, but ``snapshot``.
+        """Fire ``siem_notification``; every field is always present so automations need no guards.
 
-        ``snapshot`` is there only when its file is: an automation that attaches it can't name a file that was never
-        written.
+        ``snapshot`` is a path only when its file is there, and None otherwise, so an automation that attaches it
+        never names a file that was never written.
         """
-        payload = {"incident": None, "again": False, "summary": None, "label_url": None, **data}
+        payload = {"incident": None, "snapshot": None, "again": False, "summary": None, "label_url": None, **data}
         payload.update(category=category, title=title, message=message)
         self.hass.bus.async_fire(EVENT_NOTIFICATION, payload, context=self.context())
 
@@ -142,9 +142,9 @@ class Alerts:
             alert_title(tier, c.room_name(incident.room)),
             message,
             incident=self.incident_payload(incident),
+            snapshot=snapshot,
             again=again,
             label_url=c.label_url,
-            **({"snapshot": snapshot} if snapshot else {}),
         )
 
     def break_glass(self, message: str) -> None:
