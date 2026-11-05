@@ -25,7 +25,8 @@ count against you: SIEM sees that Home Assistant did it.
 ## `siem_notification`
 
 Fires for every alert. Every field is always present, so templates need no
-guards.
+guards, except `snapshot`: it is there only when a snapshot was actually
+saved, so read it with `trigger.event.data.get('snapshot')`.
 
 | Field | Type | What it holds |
 | --- | --- | --- |
@@ -33,7 +34,7 @@ guards.
 | `title` | string | A short title, such as `SIEM verify: Kitchen` |
 | `message` | string | The alert as plain text: score, house mode (with *at night* when it is) and the latest events |
 | `incident` | object or null | The incident, described below. Set for verify, deter and alarm, and for break glass while an incident is open |
-| `snapshot` | string or null | The path of the room camera's snapshot, when the room has a camera |
+| `snapshot` | string, or no key at all | The path of the snapshot from the room's cameras. Present only when the file exists and isn't empty; left out when the room has no camera, every camera is unavailable, or the capture failed or wrote nothing |
 | `again` | boolean | True for a second verify alert, sent because the score doubled |
 | `label_url` | string or null | Where a chat button posts a label for this alert's incident; see [the label webhook](blueprints.md#the-label-webhook). Set when `incident` is, and Home Assistant knows its own address |
 | `summary` | object or null | Digest only: `since`, `until`, `incident_count`, `labels`, `weight_changes` (a count), `counts` (one line of totals), `house_mode`, `forced` (whether the mode was set by hand) and `forced_since` |
@@ -50,7 +51,10 @@ When each category fires:
 
 Snapshots go to `siem/` in your media folder, newest 200 kept. You can see them
 in the media browser after you log in, and a phone notification can show one
-as `/media/local/siem/<file name>`.
+as `/media/local/siem/<file name>`. A room can have several cameras: SIEM skips
+the unavailable ones and tries the rest in the order you picked them, keeping
+the first picture that is actually saved. With debug logging on, it says why an
+alert has no snapshot.
 
 ## `siem_incident`
 

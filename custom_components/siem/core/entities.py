@@ -68,6 +68,14 @@ def is_exterior_area(name: str | None) -> bool:
     return _mentions(EXTERIOR_AREA_KEYWORDS, name)
 
 
+def room_cameras(room: Mapping[str, Any]) -> list[str]:
+    """Return a room's cameras, in the order they were picked; a room set up before rooms took several has one."""
+    cameras = room.get("camera")
+    if isinstance(cameras, str):
+        return [cameras]
+    return [c for c in cameras or [] if isinstance(c, str)]
+
+
 def derive_strength(device_class: str | None, platform: str | None) -> str:
     """Derive an occupancy source's strength from its class and platform."""
     if platform == BAYESIAN_PLATFORM:

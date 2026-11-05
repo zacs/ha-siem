@@ -104,7 +104,7 @@ automation:
                     {{ a }}
                   payload: >-
                     {%- set d = {'attachments': [attachment]} %}
-                    {%- if n.snapshot %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
+                    {%- if n.get('snapshot') %}{% set d = dict(d, file={'path': n.snapshot}) %}{% endif %}
                     {{ d }}
               - action: "{{ notify_action }}"
                 data:

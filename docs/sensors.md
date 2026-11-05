@@ -139,10 +139,12 @@ when Home Assistant switched anything in the same room in the two minutes
 before (a lamp's smart plug, a TV through its integration), the rise is
 Home Assistant's doing and doesn't count.
 
-### Camera
+### Cameras
 
-Only for snapshots: when an alert names a room with a camera, a snapshot goes
-with it. The camera entity itself never scores. Person detection comes from
+Only for snapshots: when an alert names a room with cameras, a snapshot goes
+with it, from the first camera in your order that is available and actually
+saves a picture. An alert whose cameras are all unavailable, or fail, simply
+has no snapshot. The camera entities themselves never score. Person detection comes from
 the person-detection sensor your camera integration provides, picked as an
 occupancy source.
 

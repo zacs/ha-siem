@@ -57,7 +57,7 @@ async def test_full_flow_prefills_rooms(hass):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["08:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.minor_version == 8
+    assert entry.minor_version == 9
     assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True}
     assert entry.data["house"]["csi_map"] == {"binary_sensor.front_door_csi": "binary_sensor.front_door"}
     assert entry.data["house"]["night_start"] == "23:00:00"
@@ -114,7 +114,7 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 8
+    assert entry.minor_version == 9
     assert entry.data["responses"] == {}
     # The panel SIEM used to arm is kept, to be read for armed night; the second water flow field joins the first.
     assert entry.data["house"] == {"alarm_panel": "alarm_control_panel.house", "water_flow": ["sensor.water_main", "sensor.water_pulse"]}
@@ -146,7 +146,7 @@ async def test_migration_drops_notify_panel_deterrence_and_trust_settings(hass, 
     orphans = [registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry) for key in ("dry_run", "auto_arm", "auto_alarm")]
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 8
+    assert entry.minor_version == 9
     assert entry.data["rooms"] == {"kitchen": {"name": "Kitchen", "power_threshold": 30, "outdoors": False}}
     assert entry.data["house"] == {"night_start": "22:00:00", "alarm_panel": "alarm_control_panel.house"}
     assert entry.data["responses"] == {"digest_times": ["08:00"]}
@@ -166,6 +166,22 @@ async def test_the_bedtime_sensor_from_0_0_4_is_removed(hass):
     bedtime = registry.async_get_or_create("binary_sensor", DOMAIN, f"{entry.entry_id}_bedtime", config_entry=entry, suggested_object_id="siem_bedtime")
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 8
+    assert entry.minor_version == 9
     assert registry.async_get(bedtime.entity_id) is None
     assert hass.states.get("binary_sensor.siem_night") is not None
+
+
+async def test_a_room_camera_becomes_a_list(hass):
+    """Rooms take several cameras now, tried in turn; one picked before stays, as the first."""
+    set_house_states(hass)
+    rooms = {**ROOMS, "kitchen": {**ROOMS["kitchen"], "camera": "camera.kitchen"}}
+    data = {"rooms": rooms, "house": HOUSE, "responses": RESPONSES}
+    data["entities"] = build_entity_meta(hass, data)
+    entry = MockConfigEntry(domain=DOMAIN, title="SIEM", data=data, version=1, minor_version=8)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.minor_version == 9
+    assert entry.data["rooms"]["kitchen"]["camera"] == ["camera.kitchen"]
+    assert "camera" not in entry.data["rooms"]["hall"]
+    assert entry.data["entities"]["camera.kitchen"] == {"role": "camera", "room": "kitchen"}

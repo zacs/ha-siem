@@ -56,7 +56,7 @@ Each of these adds something. None of them is required.
 | A calendar, such as [Local Calendar](https://www.home-assistant.io/integrations/local_calendar/) | `Guest:` and `Service:` on event names set the house mode. |
 | A [Workday](https://www.home-assistant.io/integrations/workday/) sensor, a schedule or a helper | Guest or service mode while it's on, such as on the cleaners' day. |
 | An [AI task](https://www.home-assistant.io/integrations/ai_task/) entity | A daily digest written in plain English instead of raw counts. OpenAI, Anthropic, Google and Ollama all provide one. |
-| Cameras | A snapshot from the room's camera with each alert. |
+| Cameras | A snapshot from the room's cameras with each alert, whenever one can be saved. |
 | Wi-Fi motion sensors | Someone at a door that never opened. These are CSI (channel state information) sensors: an ESP32 running [ESP-CSI](https://github.com/espressif/esp-csi) or [ESPectre](https://github.com/francescopace/espectre) senses motion from changes in the Wi-Fi signal. |
 
 ## Install
@@ -208,6 +208,7 @@ AI task, or preview without sending; see [the digest](docs/events.md#the-digest)
   [In practice](docs/scenarios.md).
 - [Development](docs/development.md): running the tests, a dry run with a fake
   house, and adding a rule.
+- [Changelog](CHANGELOG.md): what changed since the last release.
 
 ## License
 

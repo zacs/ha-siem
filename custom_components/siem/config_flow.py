@@ -77,7 +77,7 @@ def prefill_room(hass: HomeAssistant, area_id: str) -> dict[str, Any]:
         c.CONF_LIGHTS: [i.entity_id for i in infos if i.domain == "light"],
         c.CONF_POWER: [i.entity_id for i in infos if i.domain == "sensor" and i.device_class == "power"],
         c.CONF_POWER_THRESHOLD: c.DEFAULT_POWER_THRESHOLD,
-        **({c.CONF_CAMERA: cameras[0]} if cameras else {}),
+        **({c.CONF_CAMERA: cameras} if cameras else {}),
     }
 
 
@@ -95,7 +95,7 @@ ROOM_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_POWER): _entity("sensor", ["power"]),
         vol.Optional(c.CONF_POWER + c.ADDITIONAL): _entity(),
         vol.Optional(c.CONF_POWER_THRESHOLD, default=c.DEFAULT_POWER_THRESHOLD): _number(0, 5000, 1, "W"),
-        vol.Optional(c.CONF_CAMERA): _entity("camera", multiple=False),
+        vol.Optional(c.CONF_CAMERA): _entity("camera"),
     }
 )
 HOUSE_SCHEMA = vol.Schema(
@@ -165,7 +165,7 @@ def build_entity_meta(hass: HomeAssistant, data: Mapping[str, Any], existing: Ma
                 elif role == ent.ROLE_POWER:
                     item["threshold"] = room.get(c.CONF_POWER_THRESHOLD, c.DEFAULT_POWER_THRESHOLD)
                 meta[entity_id] = item
-        if camera := room.get(c.CONF_CAMERA):
+        for camera in ent.room_cameras(room):
             meta[camera] = {"role": ent.ROLE_CAMERA, "room": room_id}
     house = data.get(c.CONF_HOUSE, {})
     for key, role in HOUSE_ROLES:
@@ -274,7 +274,7 @@ class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN)
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 8
+    MINOR_VERSION = 9
 
     def __init__(self) -> None:
         """Start with empty sections."""

@@ -81,7 +81,7 @@ Pushes SIEM's alerts to phones running the Home Assistant companion app.
   `siem-<incident id>`.
 - Alarm and break-glass alerts are *time-sensitive* on iOS and break through
   Focus. The rest arrive normally.
-- When the room has a camera, the snapshot is attached.
+- When the room has a camera and a snapshot was saved, it is attached.
 - When the incident is labelled, from any phone, a chat button or the device
   page, the notification is replaced by one without buttons that says so.
 

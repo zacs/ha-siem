@@ -25,7 +25,7 @@
           "power": "Appliance power sensors",
           "power_additional": "More power sensors (any entity)",
           "power_threshold": "Appliance on above",
-          "camera": "Camera for snapshots"
+          "camera": "Cameras for snapshots, tried in this order"
         }
       },
       "house": {
@@ -156,7 +156,7 @@
           "power": "Appliance power sensors",
           "power_additional": "More power sensors (any entity)",
           "power_threshold": "Appliance on above",
-          "camera": "Camera for snapshots"
+          "camera": "Cameras for snapshots, tried in this order"
         }
       },
       "room_pick": {

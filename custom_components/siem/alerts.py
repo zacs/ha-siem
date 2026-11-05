@@ -7,10 +7,12 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import CATEGORY_BREAK_GLASS, CONF_CAMERA, EVENT_NOTIFICATION, SNAPSHOT_DIR, SNAPSHOT_KEEP, SNAPSHOT_TIMEOUT_S
+from .const import CATEGORY_BREAK_GLASS, EVENT_NOTIFICATION, SNAPSHOT_DIR, SNAPSHOT_KEEP, SNAPSHOT_TIMEOUT_S
+from .core.entities import room_cameras
 from .core.incident import EVENT_TIER_CHANGED, Incident, IncidentEvent
 from .core.messages import alert_message, alert_title, timeline_line
 from .core.rules import describe
@@ -22,12 +24,21 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-def _prune(directory: Path) -> None:
-    """Create the snapshot folder and keep only the newest snapshots."""
+def _prepare(directory: Path, path: Path) -> None:
+    """Create the snapshot folder, keep only the newest snapshots, and clear ``path`` so a stale file can't pass."""
     directory.mkdir(parents=True, exist_ok=True)
     files = sorted(directory.glob("*.jpg"), key=lambda f: f.stat().st_mtime, reverse=True)
     for old in files[SNAPSHOT_KEEP - 1 :]:
         old.unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
+
+
+def _written(path: Path) -> bool:
+    """Return True when ``path`` is a file with something in it."""
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
 
 
 class Alerts:
@@ -95,8 +106,12 @@ class Alerts:
         }
 
     def fire(self, category: str, title: str, message: str, **data: Any) -> None:
-        """Fire ``siem_notification``; every field is always present so automations need no guards."""
-        payload = {"incident": None, "snapshot": None, "again": False, "summary": None, "label_url": None, **data}
+        """Fire ``siem_notification``; every field is always present so automations need no guards, but ``snapshot``.
+
+        ``snapshot`` is there only when its file is: an automation that attaches it can't name a file that was never
+        written.
+        """
+        payload = {"incident": None, "again": False, "summary": None, "label_url": None, **data}
         payload.update(category=category, title=title, message=message)
         self.hass.bus.async_fire(EVENT_NOTIFICATION, payload, context=self.context())
 
@@ -123,7 +138,13 @@ class Alerts:
         snapshot = await self.async_snapshot(incident, tier)
         message = alert_message(score, c.house_text, self.timeline_lines(incident), again=again)
         self.fire(
-            tier, alert_title(tier, c.room_name(incident.room)), message, incident=self.incident_payload(incident), snapshot=snapshot, again=again, label_url=c.label_url
+            tier,
+            alert_title(tier, c.room_name(incident.room)),
+            message,
+            incident=self.incident_payload(incident),
+            again=again,
+            label_url=c.label_url,
+            **({"snapshot": snapshot} if snapshot else {}),
         )
 
     def break_glass(self, message: str) -> None:
@@ -145,17 +166,34 @@ class Alerts:
         return Path(root) / SNAPSHOT_DIR
 
     async def async_snapshot(self, incident: Incident, tier: str) -> str | None:
-        """Save a snapshot from the incident room's camera, if it has one; give up after a few seconds."""
-        camera = self.coordinator.rooms.get(incident.room or "", {}).get(CONF_CAMERA)
-        if not camera:
+        """Save a snapshot from the incident room's cameras and return its path, or None when there is none.
+
+        Each available camera is tried in turn, giving up on one after a few seconds, until one writes a file that
+        exists and isn't empty. A camera that is unavailable writes nothing and says nothing, so it isn't tried.
+        """
+        cameras = room_cameras(self.coordinator.rooms.get(incident.room or "", {}))
+        if not cameras:
+            _LOGGER.debug("No snapshot for incident %s: its room has no camera", incident.id)
+            return None
+        available = [cam for cam in cameras if (state := self.hass.states.get(cam)) is not None and state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)]
+        if not available:
+            _LOGGER.debug("No snapshot for incident %s: %s unavailable", incident.id, ", ".join(cameras))
             return None
         directory = self.snapshot_dir()
         path = directory / f"{incident.id}_{tier}.jpg"
         try:
-            await self.hass.async_add_executor_job(_prune, directory)
-            async with asyncio.timeout(SNAPSHOT_TIMEOUT_S):
-                await self.hass.services.async_call("camera", "snapshot", {"entity_id": camera, "filename": str(path)}, blocking=True, context=self.context())
-        except Exception as err:
-            _LOGGER.warning("Snapshot of %s failed: %s", camera, err)
+            await self.hass.async_add_executor_job(_prepare, directory, path)
+        except OSError as err:
+            _LOGGER.debug("No snapshot for incident %s: can't prepare %s: %s", incident.id, directory, err)
             return None
-        return str(path)
+        for camera in available:
+            try:
+                async with asyncio.timeout(SNAPSHOT_TIMEOUT_S):
+                    await self.hass.services.async_call("camera", "snapshot", {"entity_id": camera, "filename": str(path)}, blocking=True, context=self.context())
+            except Exception as err:  # Whatever went wrong, this camera gave no snapshot.
+                _LOGGER.debug("Snapshot of %s for incident %s failed: %s", camera, incident.id, err or type(err).__name__)
+                continue
+            if await self.hass.async_add_executor_job(_written, path):
+                return str(path)
+            _LOGGER.debug("Snapshot of %s for incident %s wrote nothing to %s", camera, incident.id, path)
+        return None

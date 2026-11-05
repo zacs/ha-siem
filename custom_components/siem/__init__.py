@@ -101,11 +101,11 @@ async def _async_update_listener(hass: HomeAssistant, entry: SiemConfigEntry) ->
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bool:
-    """Migrate older 1.x entries to 1.8.
+    """Migrate older 1.x entries to 1.9.
 
     Renamed modes and rules, the settings and rules removed, outdoor rooms, night points and one water flow field;
-    then the bedtime sensor, which night replaced. Every step is safe to run again, so one pass covers any older
-    minor version.
+    then the bedtime sensor, which night replaced; then a room's camera, which became a list. Every step is safe to
+    run again, so one pass covers any older minor version.
     """
     if entry.version > 1:
         return False
@@ -152,4 +152,12 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
             registry.async_remove(entity_id)
         hass.config_entries.async_update_entry(entry, minor_version=8)
         _LOGGER.info("Migrated SIEM config entry to 1.8")
+    if entry.minor_version < 9:
+        # A room takes several cameras now, tried in turn for a snapshot.
+        data = copy.deepcopy(dict(entry.data))
+        for room in data.get(c.CONF_ROOMS, {}).values():
+            if c.CONF_CAMERA in room:
+                room[c.CONF_CAMERA] = ent.room_cameras(room)
+        hass.config_entries.async_update_entry(entry, data=data, minor_version=9)
+        _LOGGER.info("Migrated SIEM config entry to 1.9")
     return True
