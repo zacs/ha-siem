@@ -5,7 +5,7 @@
 # Posts every SIEM alert, break-glass message and digest to a Mattermost
 # channel as one coloured attachment: the headline, the timeline, the room,
 # the house mode, the score and the top contributors, plus the camera snapshot
-# when the room has a camera. The post has no text of its own, so everything
+# when one was saved. The post has no text of its own, so everything
 # sits inside the attachment; its fallback is what notifications show.
 #
 # Each alert has buttons that label its own incident (False alarm, That's me,

@@ -152,7 +152,7 @@ doesn't light up the house at 3 a.m.
 
 Posts every alert, break glass and digest to a Mattermost channel as one
 coloured box: the headline, the timeline, the room, the house mode, the score
-and the top contributors, with the camera snapshot when the room has one.
+and the top contributors, with the camera snapshot when one was saved.
 Needs the [Mattermost component](https://github.com/cerebrate/ha-mattermost).
 
 | Input | Default | What it does |
