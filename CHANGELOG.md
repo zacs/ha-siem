@@ -1,9 +1,9 @@
 # Changelog
 
-Changes since the last release. Earlier releases are described on the
-[releases page](https://github.com/zacs/ha-siem/releases).
+Changes in each release, newest first. Releases before 0.0.5 are described on
+the [releases page](https://github.com/zacs/ha-siem/releases).
 
-## Unreleased
+## 0.0.5
 
 ### Changed
 
