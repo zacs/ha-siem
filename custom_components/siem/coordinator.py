@@ -39,7 +39,7 @@ from . import const as c
 from .alerts import Alerts
 from .core import entities as ent
 from .core.arm import recommend_arm_mode
-from .core.house_mode import HouseModeMachine
+from .core.house_mode import GUEST_LEFT_S, HouseModeMachine
 from .core.incident import EVENT_CLOSED, EVENT_LABELLED, Incident, IncidentEngine
 from .core.locks import (
     KIND_KEYPAD_LOCKOUT,
@@ -299,8 +299,14 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         picked = [self.night_window if asleep is None else asleep for key, asleep in sources if self.house.get(key)]
         self.modes.set_in_bed(any(picked) if picked else self.night_window)
         self.modes.set_night_window(self.night_window)
+        if self.modes.leaving and any((s := self.hass.states.get(e)) is not None and s.state == STATE_ON for e in self._inside_sources):
+            # A presence sensor that is still on: someone is inside, asleep or sitting still.
+            self._note_inside(now)
+        guests_inside = self.modes.guests_inside
         self.house_mode = self.modes.mode(now)
         self.night = self.modes.night(now)
+        if guests_inside and not self.modes.guests_inside:
+            _LOGGER.debug("Nobody moved inside for %d minutes after a door opened: guest mode no longer held", GUEST_LEFT_S // 60)
 
     @property
     def asleep(self) -> bool:
@@ -543,7 +549,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for room in rooms:
             self._commanded[room] = now
         if opened := self._opened_by(domain, service, entities):
-            self._let_in(now, f"{self.entity_name(opened)} opened from Home Assistant")
+            self._let_in(now, f"{self.entity_name(opened)} opened from Home Assistant", from_outside=opened in self.house_list(c.CONF_LOCKS))
 
     def _opened_by(self, domain: Any, service: Any, entities: list[str]) -> str | None:
         """Return the configured lock, or the garage door, gate or door cover, a service call is opening.
@@ -623,7 +629,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Locking and unlocking by hand are scored from the lock's notifications. An unlock Home Assistant made
             # (through an area or device target the service call did not name) lets someone in.
             if not physical and new.state == LockState.UNLOCKED and _known(old) and old.state != LockState.UNLOCKED:
-                self._let_in(now, f"{new.name} opened from Home Assistant")
+                self._let_in(now, f"{new.name} opened from Home Assistant", from_outside=True)
             return
         if not physical:
             if _turned_on(old, new):
@@ -637,6 +643,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             weak = role == ent.ROLE_OCCUPANCY and ent.effective_strength(meta) == STRENGTH_WEAK
             if not weak and not (role == ent.ROLE_LIGHT and self._commanded_within(entity_id, now, c.COMMANDED_LIGHT_S)):
                 self._last_inside = now
+                self._note_inside(now)
         if role == ent.ROLE_OCCUPANCY and _turned_on(old, new):
             if outdoors:
                 self._on_outside(entity_id, ent.effective_strength(meta), room, now, "seen" if meta.get("person_detector") else "motion")
@@ -645,6 +652,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif role == ent.ROLE_PERIMETER and _turned_on(old, new):
             self.modes.note_activity(now)
             self._contact_last_on[entity_id] = now
+            self._on_door_opened(entity_id, new, outdoors, now)
             self._score_once("gate_opened" if meta.get("gate") else "exterior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_INTERIOR_DOOR and _turned_on(old, new):
             # Outdoors, a shed or mailbox contact only says someone is outside.
@@ -672,9 +680,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._skip(entity_id, "appliance_on", "outdoor power isn't used" if outdoors else "Home Assistant switched something in the room moments ago")
                 return
             self.modes.note_activity(now)
+            self._note_inside(now)
             self._score_once("appliance_on", entity_id, now, entity_id, room, f"{new.state} W")
         elif role == ent.ROLE_WATER and _crossed_up(old, new, float(meta.get("threshold", c.DEFAULT_WATER_THRESHOLD))):
             self.modes.note_activity(now)
+            self._note_inside(now)
             self._score_once("water_flow", entity_id, now, entity_id, room, f"flow {new.state}")
         elif role == ent.ROLE_CSI and _turned_on(old, new):
             contact = (self.house.get(c.CONF_CSI_MAP) or {}).get(entity_id)
@@ -738,10 +748,35 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.engine.suppress(rule, SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home", explain_s=c.ARRIVAL_EXPLAINS_S)
         self._process(now)
 
-    def _let_in(self, now: float, detail: str, person: str | None = None) -> None:
-        """Someone was let in: a code the lock accepted, or an unlock from Home Assistant. Starts the guest clock."""
-        _LOGGER.debug("Someone was let in: %s", detail)
-        self.modes.let_in(now)
+    def _on_door_opened(self, entity_id: str, state: State, outdoors: bool, now: float) -> None:
+        """A door that opens other than to let someone in, while guests let in are inside, may be everyone leaving.
+
+        Windows and gates aren't ways out of the house, and the garage door only when people leave through it.
+        """
+        if not self.modes.guests_inside or outdoors or now - self._last_let_in <= c.LET_IN_ENTRY_S:
+            return
+        kind = ent.opening_kind(state.attributes.get("device_class"), entity_id, state.name)
+        if kind in (ent.OPENING_WINDOW, ent.OPENING_GATE) or (kind == ent.OPENING_GARAGE and not self.house.get(c.CONF_GARAGE_EXIT)):
+            return
+        self.modes.door_opened(now)
+        _LOGGER.debug("%s opened: guest mode ends in %d minutes unless someone moves inside", entity_id, GUEST_LEFT_S // 60)
+
+    def _note_inside(self, now: float) -> None:
+        """Someone moved inside: after a door opened, not everyone left."""
+        if self.modes.someone_inside(now):
+            _LOGGER.debug("Someone is still inside after the door opened: guest mode holds")
+
+    def _let_in(self, now: float, detail: str, person: str | None = None, from_outside: bool = False) -> None:
+        """Someone was let in: a code the lock accepted, or an unlock or garage door from Home Assistant.
+
+        A lock opened for someone outside, with the family away, means a guest is inside until a door opens; anything
+        else starts the guest clock.
+        """
+        self.modes.let_in(now, from_outside=from_outside)
+        if from_outside and self.modes.guests_inside:
+            _LOGGER.debug("Someone was let in: %s; guest mode holds until someone goes out", detail)
+        else:
+            _LOGGER.debug("Someone was let in: %s", detail)
         if now - self._last_let_in >= c.LET_IN_DEDUPE_S:
             self._last_let_in = now
             self.engine.suppress("let_in", SUPPRESSOR_LET_IN, now=now, detail=detail, person=person)
@@ -759,7 +794,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if new.attributes.get("operation") == "lock":
             return
         name = str(new.attributes.get("name") or "unknown user")
-        self._let_in(now, f"code used by {name}", person=name)
+        self._let_in(now, f"code used by {name}", person=name, from_outside=True)
 
     @callback
     @_safe
@@ -799,7 +834,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # The lock accepted the code, so whoever typed it was given it.
             self.modes.note_activity(now)
             known = self.lcm_slots.get(slot) if slot is not None else None
-            self._let_in(now, f"code at {self.entity_name(lock)}" + (f", slot {slot}" if slot is not None else ""), person=known.name if known else None)
+            self._let_in(now, f"code at {self.entity_name(lock)}" + (f", slot {slot}" if slot is not None else ""), person=known.name if known else None, from_outside=True)
         elif kind == KIND_KEYPAD_LOCKOUT:
             self._score("keypad_lockout", now, lock, None, label)
 

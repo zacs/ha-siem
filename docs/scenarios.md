@@ -29,12 +29,15 @@ in bed; with nobody home, it's inside the night window.
 | Home at 11:30 p.m. with a code, the phone late | Vacant, night, then guest | Verify for someone on the porch at night, then nothing |
 | A friend house-sits, their phone seen by your Wi-Fi | Guest | Nothing; vacant again half an hour after they leave |
 | The friend comes in with a key before their phone joins the Wi-Fi | Vacant, then guest | Break glass and alarm alerts, then the score drops to 0; the trigger never turns on |
-| The cleaner's code and three hours of cleaning | Guest | Nothing; vacant again an hour after they leave |
+| The cleaner's code and three hours of cleaning | Guest | Nothing; vacant again half an hour after they go out the door |
 | A neighbor on the calendar as `Guest:` | Guest | Nothing |
 | The cleaners' day on a Workday sensor: a key, every room, the water | Vacant, night, then service from 6 a.m. | Nothing from the cleaners; a back door at 1 a.m., before service mode starts, is a deter |
 | Friends staying, on a helper and a `Guest:` event | Guest | Nothing; vacant again two hours after the helper turns off and the house goes quiet |
-| Unlocking for the plumber from the app | Guest | Nothing |
-| Opening the garage from the app for a delivery | Guest | Nothing |
+| Unlocking for the plumber from the app | Guest | Nothing, however long the job; vacant again half an hour after they go out the door |
+| Opening the garage from the app for a delivery | Guest | Nothing; vacant again two hours later, since a garage door doesn't say anyone came in |
+| A house-sitter in with their code goes out the front door | Guest, then vacant | Nothing; vacant half an hour later, and the back door after that is a verify |
+| Two guests in with a code: one goes out, the other is in the kitchen | Guest | Nothing; guest mode holds, because someone moved inside after the door |
+| The house-sitter opens a detached garage | Guest | Nothing; with *leave through the garage door* on, vacant half an hour later |
 | The dog, on weak motion sensors, for six hours | Vacant | Nothing |
 | The pet sitter leaves, then a break-in that night | Vacant, night | Alarm: the dog didn't hold guest mode open |
 | Presence Simulation: lights, a smart plug, the TV | Vacant | Nothing |
@@ -58,6 +61,7 @@ in bed; with nobody home, it's inside the night window.
 | Your own bedtime sensor and the panel, both picked | Family, night when either says bed | The clock only stands in for one that is unavailable |
 | Someone through the gate and at the back door at 3 a.m. while a house-sitter sleeps | Guest, night | Verify, deter, alarm: with only guests home, the night window is night |
 | The house-sitter lets the dog out at 2 a.m. | Guest, night | Nothing |
+| A house-sitter in with their code, their phone off the Wi-Fi overnight, up for water at 3 a.m. | Guest, night | Nothing: someone let in with a code is inside until a door opens |
 | A window and then motion at 2:30 a.m., with guest mode forced and forgotten | Guest, night | Deter, then alarm: a forced guest mode still has its night |
 
 The rows marked *see below* are the judgment calls described under

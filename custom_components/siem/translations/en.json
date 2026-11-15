@@ -44,6 +44,7 @@
           "load_sustain_minutes": "Step must last (minutes)",
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
+          "garage_is_exit": "Residents or guests sometimes leave the house through the garage door",
           "calendar": "Calendar with 'Guest:' and 'Service:' events",
           "guest_sensors": "Guest sensors: on means guest mode",
           "service_sensors": "Service sensors: on means service mode",
@@ -53,6 +54,7 @@
           "night_end": "Night window ends"
         },
         "data_description": {
+          "garage_is_exit": "Leave this off for a detached garage, or one nobody walks through to get in or out of the house.",
           "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
           "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
           "night_start": "Your household's usual night hours. They decide night with only guests or nobody home, and stand in for the bedtime sensor and alarm panel with residents home when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."
@@ -181,6 +183,7 @@
           "load_sustain_minutes": "Step must last (minutes)",
           "locks": "Locks",
           "lcm_events": "Lock Code Manager 'credential used' event entities",
+          "garage_is_exit": "Residents or guests sometimes leave the house through the garage door",
           "calendar": "Calendar with 'Guest:' and 'Service:' events",
           "guest_sensors": "Guest sensors: on means guest mode",
           "service_sensors": "Service sensors: on means service mode",
@@ -190,6 +193,7 @@
           "night_end": "Night window ends"
         },
         "data_description": {
+          "garage_is_exit": "Leave this off for a detached garage, or one nobody walks through to get in or out of the house.",
           "guest_sensors": "Binary sensors, helpers or schedules. Any one on means guest mode, the same as a 'Guest:' event, and either the calendar or a sensor is enough. Guest mode lasts two hours after it turns off, and until the house has been quiet for an hour.",
           "service_sensors": "Binary sensors, helpers or schedules, such as a workday sensor for the cleaners' days. Any one on means service mode, the same as a 'Service:' event, and either the calendar or a sensor is enough. A workday sensor is on all day; a schedule can cover just their hours.",
           "night_start": "Your household's usual night hours. They decide night with only guests or nobody home, and stand in for the bedtime sensor and alarm panel with residents home when neither is picked or one is unavailable. The recommended alarm mode follows them. At night, outdoor rules count 1.5 times."

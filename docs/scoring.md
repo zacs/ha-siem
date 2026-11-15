@@ -112,6 +112,9 @@ the code but not hand unlocks. A code the lock accepts lets someone in:
 whoever typed it was given it, so SIEM doesn't need to know whose it is. The
 same goes for Home Assistant unlocking a lock, or opening a garage door, gate
 or door cover, from the app, a voice assistant, Apple Home or an automation.
+With the family away, someone let in with a code or an unlock is inside until
+a door opens; see
+[Someone let in is inside until they go out](#someone-let-in-is-inside-until-they-go-out).
 
 ## Chains
 
@@ -151,17 +154,50 @@ label made them, are kept (the last 200) and counted in the digest;
 
 The house mode is who is home. Family while any resident or tracker is home
 and for 30 minutes after. Guest while any guest's device tracker is home and
-for 30 minutes after, the same grace a resident gets. Also guest during a
-`Guest:` event or while a guest sensor is on, and after either one ends or
-someone was let in, until two hours have passed and the house has been quiet
-for an hour. Quiet means no doors, switches, water or appliances; motion
-doesn't count, so a pet can't hold guest mode open. Service during a
+for 30 minutes after, the same grace a resident gets. Guest while someone let
+in from outside is inside (below). Also guest during a `Guest:` event or
+while a guest sensor is on, and after either one ends or someone was let in
+some other way, until two hours have passed and the house has been quiet for
+an hour. Quiet means no doors, switches, water or appliances; motion doesn't
+count, so a pet can't hold guest mode open. Service during a
 `Service:` event or while a service sensor is on, but never inside the night
 window: nobody works in the house at 2 a.m., so the house is vacant then. The
 calendar and the sensors add up: either one is enough. Vacant otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
 restarts until you set it back to auto. Every digest ends with the house mode,
 and says so while a mode is forced, with the date it was set.
+
+### Someone let in is inside until they go out
+
+A code typed at the keypad, or Home Assistant unlocking a lock, opens the
+door for someone outside. With the family away, SIEM takes it that they are
+inside from then on, and holds guest mode however quiet the house is,
+whatever their phone does, and through the night: a house-sitter's phone
+dropping off the Wi-Fi at 1 a.m. doesn't leave an empty house.
+
+It lasts until an exterior door opens, other than to let them in (a door
+opening within two minutes of the code is them coming in). Then guest mode
+holds for 30 more minutes, in case whoever opened it is only taking the bins
+out. If someone moves inside after the first five minutes, not everyone
+left, and guest mode holds until the next door. Someone moving inside is
+motion or presence that isn't weak, a presence sensor that is still on, a
+light switched by hand, an inside door, the water or an appliance. If nobody does, the house
+is vacant 30 minutes after the door, unless a guest's tracker, the calendar
+or a guest sensor still says guests are home.
+
+- **A hand unlock isn't someone let in.** The thumb turn is someone already
+  inside, and on its own it starts nothing.
+- **Windows and gates aren't ways out.** The garage door is one only if you
+  said people leave the house through it; see
+  [the garage door](sensors.md#the-garage-door).
+- **A garage door, gate or door cover opened from Home Assistant** lets
+  someone in, but doesn't say anyone came inside, so it starts the guest
+  clock instead.
+- **With the family home,** a code only starts the guest clock, as before;
+  family mode comes first anyway.
+- **A pet counts as someone inside** if its motion sensors aren't set to
+  weak. Set them to weak, as you would anyway, and the dog can't keep guest
+  mode on after the house-sitter goes out.
 
 ## Night
 

@@ -105,6 +105,23 @@ within five minutes makes that door count 1.5 times.
 The same contact scores at most once every five minutes, so a door used to
 come in and to go out is one visit, and a bouncing contact is one opening.
 
+Doors also say when guests go out. Someone let in with a code is inside, and
+the house in guest mode, until an exterior door opens; see
+[Someone let in is inside until they go out](scoring.md#someone-let-in-is-inside-until-they-go-out).
+Windows and gates don't count for that. A contact with device class
+*window*, or *window* in its name, is a window; one with *gate* in its name
+is a gate; one with device class *garage door*, or *garage* in its name, is
+the garage door.
+
+#### The garage door
+
+The whole-house question *Residents or guests sometimes leave the house
+through the garage door* says whether the garage door is a way out of the
+house. Leave it off, the default, for a detached garage, or one nobody walks
+through: opening it to get the bike out isn't leaving the house. Turn it on
+for an attached garage people go in and out through, and it counts like any
+other door.
+
 ### Fridge, cabinet, drawer and closet contacts
 
 Contacts inside the house, recognised by name (fridge, freezer,
@@ -252,7 +269,10 @@ How each lock event scores:
   shouldn't have one. Everything in the next five minutes counts twice.
 - **A code the lock accepts** lets someone in: whoever typed it was given
   it, so SIEM doesn't need to know whose it is. The house goes to guest mode
-  and 40 points come off the open incident.
+  and 40 points come off the open incident. With the family away, whoever
+  typed it is inside, and the house stays in guest mode, until a door opens;
+  see
+  [Someone let in is inside until they go out](scoring.md#someone-let-in-is-inside-until-they-go-out).
 - **A keypad lockout** after repeated bad codes scores `keypad_lockout`, 40
   (30 with the family home), and sends a break-glass message. A single
   wrong code is a typo and doesn't count. Few locks report lockouts.

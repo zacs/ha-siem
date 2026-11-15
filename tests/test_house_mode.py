@@ -2,7 +2,15 @@
 
 import pytest
 
-from custom_components.siem.core.house_mode import FAMILY_LINGER_S, GUEST_AFTER_END_S, GUEST_LINGER_S, GUEST_QUIET_S, HouseModeMachine
+from custom_components.siem.core.house_mode import (
+    FAMILY_LINGER_S,
+    GUEST_AFTER_END_S,
+    GUEST_DOORWAY_S,
+    GUEST_LEFT_S,
+    GUEST_LINGER_S,
+    GUEST_QUIET_S,
+    HouseModeMachine,
+)
 
 
 def test_family_lingers_thirty_minutes():
@@ -99,6 +107,81 @@ def test_letting_someone_in_flips_to_guest():
     machine.let_in(50)
     assert machine.mode(51) == "guest"
     assert machine.mode(50 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
+
+
+DAY = 24 * 3600
+
+
+def test_a_guest_let_in_from_outside_is_inside_until_a_door_opens():
+    machine = HouseModeMachine(0)
+    machine.let_in(100, from_outside=True)
+    assert machine.guests_inside and not machine.leaving
+    machine.set_night_window(True)
+    assert machine.mode(100 + 3 * DAY) == "guest", "quiet days and nights: the house-sitter is still inside"
+    assert machine.night(100 + 3 * DAY), "and asleep at night"
+    machine.set_night_window(False)
+    machine.door_opened(5 * DAY)
+    assert machine.leaving
+    assert machine.mode(5 * DAY + GUEST_LEFT_S - 1) == "guest"
+    assert machine.mode(5 * DAY + GUEST_LEFT_S) == "vacant", "half an hour after the door, with nobody moving inside"
+    assert not machine.guests_inside and not machine.leaving
+
+
+def test_someone_moving_inside_after_the_doorway_keeps_the_guests_inside():
+    machine = HouseModeMachine(0)
+    machine.let_in(100, from_outside=True)
+    machine.door_opened(1000)
+    assert not machine.someone_inside(1000 + GUEST_DOORWAY_S - 1), "whoever opened the door, still in the hall"
+    assert machine.leaving
+    assert machine.someone_inside(1000 + GUEST_DOORWAY_S), "one guest went out, the others are inside"
+    assert not machine.leaving
+    assert machine.mode(1000 + GUEST_LEFT_S + DAY) == "guest"
+    assert not machine.someone_inside(1000 + DAY), "nothing to settle with no door open"
+
+
+def test_a_tracker_or_the_guest_clock_still_holds_after_the_door():
+    machine = HouseModeMachine(0)
+    machine.let_in(100, from_outside=True)
+    machine.set_guest_presence(True, 500)
+    machine.door_opened(1000)
+    assert machine.mode(1000 + GUEST_LEFT_S) == "guest", "a guest's phone is home"
+    machine.set_guest_presence(False, 2000)
+    assert machine.mode(2000 + GUEST_LINGER_S) == "vacant"
+
+
+def test_a_door_means_nothing_until_someone_was_let_in():
+    machine = HouseModeMachine(0)
+    machine.door_opened(100)
+    assert not machine.leaving and machine.mode(100) == "vacant"
+    machine.let_in(200, from_outside=True)
+    assert not machine.leaving, "the door before the code doesn't count"
+
+
+def test_a_new_code_lets_someone_in_again():
+    machine = HouseModeMachine(0)
+    machine.let_in(100, from_outside=True)
+    machine.door_opened(1000)
+    machine.let_in(1000 + GUEST_LEFT_S - 60, from_outside=True)
+    assert machine.mode(1000 + 2 * GUEST_LEFT_S) == "guest", "back before the half hour was up"
+    machine.door_opened(10_000)
+    assert machine.mode(10_000 + GUEST_LEFT_S) == "vacant"
+    machine.let_in(20_000, from_outside=True)
+    assert machine.mode(20_000 + DAY) == "guest", "and after it"
+
+
+def test_with_the_family_home_a_code_only_starts_the_guest_clock():
+    machine = HouseModeMachine(0)
+    machine.set_presence(True, 10)
+    machine.let_in(100, from_outside=True)
+    assert not machine.guests_inside
+    machine.set_presence(False, 200)
+    assert machine.mode(200 + FAMILY_LINGER_S) == "guest", "the clock: two hours, then a quiet hour"
+    assert machine.mode(100 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
+    # Letting someone in other than from outside (a garage door opened from Home Assistant) is the clock too.
+    away = HouseModeMachine(0)
+    away.let_in(100)
+    assert not away.guests_inside
+    assert away.mode(100 + GUEST_AFTER_END_S + GUEST_QUIET_S) == "vacant"
 
 
 def test_service_only_during_event_and_precedence():

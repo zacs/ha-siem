@@ -45,6 +45,8 @@ CONF_LOAD_STEP = "load_step_watts"
 CONF_LOAD_SUSTAIN = "load_sustain_minutes"
 CONF_LOCKS = "locks"
 CONF_LCM_EVENTS = "lcm_events"
+# Whether people leave the house through the garage door: an attached garage. A detached one is just another building.
+CONF_GARAGE_EXIT = "garage_is_exit"
 CONF_CALENDAR = "calendar"
 # Guest and service mode from entities that are on or off (a workday sensor, a schedule, a helper), alongside the
 # calendar: any one of them on means that mode, the same as a Guest: or Service: event running.
@@ -143,6 +145,8 @@ ENTRY_COVER_CLASSES = ("garage", "gate", "door")
 # A resident arriving home explains everything scored in the ten minutes before.
 ARRIVAL_EXPLAINS_S = 600
 LET_IN_DEDUPE_S = 60
+# A door that opens this soon after someone was let in is them coming through it, not someone leaving.
+LET_IN_ENTRY_S = 120
 # The alarm trigger turns on once an incident has held the alarm tier this long.
 ALARM_GRACE_S = 60
 # Night: the household is in bed while the picked panel is armed night. While it is arming, pending or triggered

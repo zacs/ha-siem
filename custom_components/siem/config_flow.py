@@ -112,6 +112,7 @@ HOUSE_SCHEMA = vol.Schema(
         vol.Optional(c.CONF_LOAD_SUSTAIN, default=c.DEFAULT_LOAD_SUSTAIN): _number(1, 120, 1, "min"),
         vol.Optional(c.CONF_LOCKS): _entity("lock"),
         vol.Optional(c.CONF_LCM_EVENTS): _entity("event"),
+        vol.Optional(c.CONF_GARAGE_EXIT, default=False): sel.BooleanSelector(),
         vol.Optional(c.CONF_CALENDAR): _entity("calendar", multiple=False),
         vol.Optional(c.CONF_GUEST_SENSORS): _entity(["binary_sensor", "input_boolean", "schedule"]),
         vol.Optional(c.CONF_SERVICE_SENSORS): _entity(["binary_sensor", "input_boolean", "schedule"]),

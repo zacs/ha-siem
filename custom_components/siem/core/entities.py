@@ -58,6 +58,20 @@ def is_gate(*names: str | None) -> bool:
     return _mentions(("gate",), *names)
 
 
+OPENING_DOOR, OPENING_WINDOW, OPENING_GARAGE, OPENING_GATE = "door", "window", "garage", "gate"
+
+
+def opening_kind(device_class: str | None, *names: str | None) -> str:
+    """Return what a perimeter contact is on: a door, a window, the garage door or a gate."""
+    if is_gate(*names):
+        return OPENING_GATE
+    if device_class == "garage_door" or _mentions(("garage",), *names):
+        return OPENING_GARAGE
+    if device_class == "window" or _mentions(("window",), *names):
+        return OPENING_WINDOW
+    return OPENING_DOOR
+
+
 def is_person_detector(*names: str | None) -> bool:
     """Return True for camera person-detection sensors."""
     return _mentions(("person",), *names)

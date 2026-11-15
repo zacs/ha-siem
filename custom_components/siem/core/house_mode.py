@@ -9,6 +9,10 @@ FAMILY_LINGER_S = 30 * 60
 GUEST_LINGER_S = FAMILY_LINGER_S
 GUEST_AFTER_END_S = 2 * 3600
 GUEST_QUIET_S = 60 * 60
+# Guests let in from outside are inside until a door opens. Then guest mode holds this long more, and holds on for good
+# once someone moves inside: whoever went out has left the doorway by then.
+GUEST_LEFT_S = 30 * 60
+GUEST_DOORWAY_S = 5 * 60
 GUEST_PREFIX = "Guest:"
 SERVICE_PREFIX = "Service:"
 MODE_AUTO = "auto"
@@ -22,10 +26,13 @@ class HouseModeMachine:
     leaves. Guest is held while a guest's device tracker is home and for
     thirty minutes after, while a Guest calendar event runs or a guest sensor
     is on, and afterwards until two hours past its end and sixty quiet
-    minutes have both elapsed; letting someone in (a code at the keypad, an
-    unlock from Home Assistant) starts the same clock from the moment of the
-    unlock. Motion does not count as activity, so a pet cannot hold guest
-    mode open. Service is held while a Service calendar event runs or a
+    minutes have both elapsed. Someone let in from outside with the family
+    away (a code at the keypad, a lock opened from Home Assistant) is inside,
+    and guest is held, until an exterior door opens; then for thirty minutes
+    more, and for good if someone moves inside after the doorway. Any other
+    letting in (a garage opened from Home Assistant) starts the guest clock
+    from the moment of it. Motion does not count as activity for the clock,
+    so a pet cannot hold guest mode open. Service is held while a Service calendar event runs or a
     service sensor is on, and ends with it; it never holds inside the night
     window, when nobody works in the house, so the house is vacant then. The
     calendar and the sensors add up: either one is enough.
@@ -55,6 +62,8 @@ class HouseModeMachine:
         self._guest_sensor = False
         self._service_sensor = False
         self._last_activity = now
+        self.guests_inside = False
+        self._door_opened: float | None = None
 
     def set_presence(self, anyone_home: bool, now: float) -> None:
         """Record whether any resident or resident tracker is home."""
@@ -104,10 +113,34 @@ class HouseModeMachine:
         self._guest_sensor = guest
         self._service_sensor = service
 
-    def let_in(self, now: float) -> None:
-        """Someone was let in, with a code or from Home Assistant: start (or extend) the guest clock."""
-        self._guest_end = max(self._guest_end or now, now)
+    def let_in(self, now: float, *, from_outside: bool = False) -> None:
+        """Someone was let in: start (or extend) the guest clock.
+
+        ``from_outside`` is a lock opened for someone outside (a code, or an unlock from Home Assistant). With the
+        family away that person is inside until a door opens, however quiet they are or whatever their phone does.
+        """
         self._last_activity = now
+        if from_outside and not self._family(now):
+            self.guests_inside, self._door_opened = True, None
+            return
+        self._guest_end = max(self._guest_end or now, now)
+
+    def door_opened(self, now: float) -> None:
+        """An exterior door opened, other than to let someone in: perhaps everyone is leaving."""
+        if self.guests_inside:
+            self._door_opened = now
+
+    def someone_inside(self, now: float) -> bool:
+        """Someone moved inside; after a door opened, that means not everyone left. Return True if that settles it."""
+        if self._door_opened is not None and now - self._door_opened >= GUEST_DOORWAY_S:
+            self._door_opened = None
+            return True
+        return False
+
+    @property
+    def leaving(self) -> bool:
+        """Return True while guests let in may have left: a door opened and nobody has moved inside since."""
+        return self.guests_inside and self._door_opened is not None
 
     def set_override(self, mode: str | None) -> None:
         """Force ``mode``; ``None`` or ``auto`` returns to automatic."""
@@ -124,6 +157,10 @@ class HouseModeMachine:
         return self._last_home_seen is not None and now - self._last_home_seen < FAMILY_LINGER_S
 
     def _guest(self, now: float) -> bool:
+        if self.guests_inside:
+            if self._door_opened is None or now - self._door_opened < GUEST_LEFT_S:
+                return True
+            self.guests_inside, self._door_opened = False, None
         if self._guest_here or (self._last_guest_seen is not None and now - self._last_guest_seen < GUEST_LINGER_S):
             return True
         if self._guest_sensor or (self._guest_window and self._guest_window[0] <= now < self._guest_window[1]):

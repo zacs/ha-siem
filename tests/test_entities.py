@@ -10,6 +10,7 @@ from custom_components.siem.core.entities import (
     is_interior_door_name,
     is_person_detector,
     occupancy_candidates,
+    opening_kind,
     split_openings,
 )
 
@@ -53,6 +54,16 @@ def test_gate_person_and_exterior_heuristics():
     assert is_person_detector("binary_sensor.driveway_person_occupancy")
     assert is_exterior_area("Back Yard") and is_exterior_area("Driveway")
     assert not is_exterior_area("Living Room")
+
+
+def test_opening_kind_tells_doors_from_windows_garages_and_gates():
+    assert opening_kind(None, "binary_sensor.front_door", "Front door") == "door"
+    assert opening_kind("door", "binary_sensor.contact_4", "Contact 4") == "door"
+    assert opening_kind("garage_door", "binary_sensor.contact_5", None) == "garage"
+    assert opening_kind("door", "binary_sensor.garage_entry", "Garage entry") == "garage"
+    assert opening_kind("window", "binary_sensor.contact_6", None) == "window"
+    assert opening_kind("opening", "binary_sensor.kitchen_window", None) == "window"
+    assert opening_kind("door", "binary_sensor.side_gate", "Side gate") == "gate"
 
 
 def test_resident_expansion_reads_person_attributes():

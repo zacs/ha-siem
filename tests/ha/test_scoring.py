@@ -165,16 +165,27 @@ async def test_appliance_and_water_cross_their_thresholds(hass, freezer):
     assert [r for r, _, _ in scored(entry)] == ["appliance_on", "water_flow"]
 
 
-async def test_guest_mode_from_a_pin_ends_even_with_busy_power_sensors(hass, freezer):
+async def test_guest_mode_from_a_pin_holds_until_a_door_and_busy_power_sensors_are_nobody(hass, freezer):
+    """A code lets Pat in: guest mode holds through four quiet hours. Then the front door opens, and a plug reporting
+    every minute isn't someone inside: half an hour later the house is vacant."""
     await setup_siem(hass)
     hass.states.async_set("event.lcm_pat", "2026-10-19T19:00:00+00:00", {"code_slot": 3, "name": "Pat", "operation": "unlock"})
     await hass.async_block_till_done()
     assert hass.states.get("sensor.siem_house_mode").state == "guest"
-    # A plug reporting every minute is not activity; only real events keep guest mode alive.
-    for minute in range(4 * 60):
-        hass.states.async_set("sensor.coffee_power", str(minute % 3))
-        hass.states.async_set("sensor.house_power", str(300 + minute % 7))
-        await tick(hass, freezer, 60)
+
+    async def busy_power(minutes: int) -> None:
+        for minute in range(minutes):
+            hass.states.async_set("sensor.coffee_power", str(minute % 3))
+            hass.states.async_set("sensor.house_power", str(300 + minute % 7))
+            await tick(hass, freezer, 60)
+
+    await busy_power(4 * 60)
+    assert hass.states.get("sensor.siem_house_mode").state == "guest"
+    flip(hass, "binary_sensor.front_door")
+    flip(hass, "binary_sensor.front_door", "off")
+    await busy_power(29)
+    assert hass.states.get("sensor.siem_house_mode").state == "guest"
+    await busy_power(2)
     assert hass.states.get("sensor.siem_house_mode").state == "vacant"
 
 

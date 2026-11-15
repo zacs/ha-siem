@@ -3,6 +3,26 @@
 Changes in each release, newest first. Releases before 0.0.5 are described on
 the [releases page](https://github.com/zacs/ha-siem/releases).
 
+## Unreleased
+
+### Changed
+
+- **Someone let in is inside until they go out.** With the family away, a
+  code typed at the keypad, or Home Assistant unlocking a lock, now holds
+  guest mode until an exterior door opens other than to let them in. Then it
+  holds for 30 minutes more, and for good if someone moves inside after the
+  first five. Guests' phones dropping off the Wi-Fi, a quiet day and the
+  night no longer end it. Before, a code started the guest clock: two hours,
+  and an hour of quiet. A garage door, gate or door cover opened from Home
+  Assistant, or a code with the family home, still starts the clock.
+
+### Added
+
+- **Do people leave through the garage door?** A whole-house setting, off by
+  default. When it's on, the garage door opening counts like any exterior
+  door when SIEM works out whether guests have gone out. Leave it off for a
+  detached garage.
+
 ## 0.0.5
 
 ### Changed

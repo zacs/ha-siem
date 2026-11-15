@@ -77,10 +77,11 @@ The setup flow walks through:
   (rooms named like one start ticked): anything there only means someone is
   outside.
 - **Whole house.** Residents, extra trackers, guests' device trackers, the
-  water and power sensors, locks, Lock Code Manager event entities, the
-  calendar and guest and service sensors, the alarm panel, bedtime sensor and
-  night window that decide when it's night, and Wi-Fi motion sensors with the
-  door each one watches.
+  water and power sensors, locks, Lock Code Manager event entities, whether
+  anyone leaves the house through the garage door, the calendar and guest and
+  service sensors, the alarm panel, bedtime sensor and night window that
+  decide when it's night, and Wi-Fi motion sensors with the door each one
+  watches.
 - **Digest.** The AI task and the digest times.
 
 You can change any of it later from the integration's **Configure** menu.
