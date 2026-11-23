@@ -55,10 +55,11 @@ trouble scores. At night it watches the house again; see below. Rules marked
 | --- | --- | --- |
 | `exterior_door_opened` | 40, 0, 0, 0, 40 | An exterior door or window opens (exterior) |
 | `gate_opened` | 30, 0, 0, 0, 30 | A perimeter contact with *gate* in its name opens (exterior) |
+| `outbuilding_opened` | 30, 0, 0, 0, 30 | A contact on a shed, storage box or the like, in an outdoor room, opens (exterior) |
 | `door_csi_motion` | 5, 0, 0, 0, 5 | A Wi-Fi motion sensor sees someone at a door that is closed and hasn't opened in the last 60 seconds (exterior) |
 | `exterior_occupied` | 10, 0, 0, 0, 10 | Someone is outside; see below (exterior) |
 | `interior_occupied` | 50, 0, 0, 0, 50 | Someone is in a room; see below |
-| `interior_door_opened` | 40, 0, 0, 0, 40 | A fridge, freezer, pantry, cabinet, cupboard, drawer or closet contact opens |
+| `interior_door_opened` | 40, 0, 0, 0, 40 | A fridge, freezer, pantry, cabinet, cupboard, drawer or closet contact opens indoors |
 | `light_physical` | 45, 0, 0, 0, 45 | A light is turned on at the switch |
 | `appliance_on` | 35, 0, 0, 0, 35 | A room's power sensor rises above its threshold (default 30 W) |
 | `water_flow` | 30, 0, 0, 0, 30 | Water flow rises above its threshold |
@@ -133,15 +134,19 @@ what they set off. A guest's tracker arriving does the same and switches the
 house to guest; a phone joining your Wi-Fi usually does so a little after its
 owner walks in.
 
-Only someone who was really away arrives. A phone that drops off the Wi-Fi
-and rejoins is not someone coming home, and at 3 a.m. it must not cancel an
-open incident. So a tracker counts as an arrival only when it had been away
-for ten minutes or more, and not when it comes back from unavailable (a
-router restarting). A resident's tracker doesn't count while their person
-entity stayed home (their watch kept them home), and a guest's phone doesn't
-count while someone let in is inside. Letting someone in (a code, an unlock or a garage opened from
-Home Assistant) takes 40 off, switches the house to guest and records the
-code's name, when Lock Code Manager knows it, as the incident's person.
+Every tracker at home counts for who is home, the moment it says so. Only
+the cancelling waits for a real arrival: someone who was away and walked
+in. A phone that drops off the Wi-Fi and rejoins while its owner was inside
+all along didn't set anything off, and at 3 a.m. it must not cancel what an
+intruder did. So the points come off only when the tracker had been away for
+ten minutes or more and isn't just back from unavailable (a router
+restarting); not for a resident's phone while their person entity stayed
+home (their watch kept them home); and not for a guest's phone while someone
+let in with a code is inside.
+
+Letting someone in (a code, an unlock or a garage opened from Home Assistant)
+takes 40 off, switches the house to guest and records the code's name, when
+Lock Code Manager knows it, as the incident's person.
 
 ## Labels
 

@@ -8,6 +8,7 @@ from custom_components.siem.core.entities import (
     is_exterior_area,
     is_gate,
     is_interior_door_name,
+    is_mailbox,
     is_person_detector,
     occupancy_candidates,
     opening_kind,
@@ -59,6 +60,21 @@ def test_gate_person_and_exterior_heuristics():
     assert is_person_detector("binary_sensor.driveway_person_occupancy")
     assert is_exterior_area("Back Yard") and is_exterior_area("Driveway")
     assert not is_exterior_area("Living Room")
+
+
+def test_things_you_open_outdoors_are_told_apart_by_name():
+    assert is_interior_door_name("binary_sensor.shed_door") and is_interior_door_name("binary_sensor.contact_9", "Storage Box")
+    assert is_interior_door_name("binary_sensor.mailbox") and not is_interior_door_name("binary_sensor.front_door")
+    perimeter, things = split_openings(
+        [
+            EntityInfo("binary_sensor.front_door", "binary_sensor", "door", "zha", "Front Door"),
+            EntityInfo("binary_sensor.contact_1", "binary_sensor", "door", "zha", "Garden Shed"),
+            EntityInfo("binary_sensor.contact_2", "binary_sensor", "opening", "zha", "Mail Box"),
+        ]
+    )
+    assert perimeter == ["binary_sensor.front_door"] and things == ["binary_sensor.contact_1", "binary_sensor.contact_2"]
+    assert is_mailbox("binary_sensor.mailbox") and is_mailbox("binary_sensor.contact_3", "Parcel Box") and is_mailbox(None, "Letterbox")
+    assert not is_mailbox("binary_sensor.shed_door", "Garden Shed")
 
 
 def test_opening_kind_tells_doors_from_windows_garages_and_gates():

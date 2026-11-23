@@ -55,9 +55,9 @@ deterrence package lights up.
 
 A tick for yards, porches, driveways and the like. Rooms named like one
 (yard, porch, patio, driveway, garden, deck, balcony, pool, outside) start
-ticked. In an outdoor room, motion, person detection, a light that turns
-itself on (a floodlight's own sensor) and contacts such as a shed door or a
-mailbox all mean one thing: someone is outside.
+ticked. In an outdoor room, motion, person detection and a light that turns
+itself on (a floodlight's own sensor) all mean one thing: someone is outside.
+Contacts on things you open out there are below.
 
 That is the `exterior_occupied` rule, 10 points, and it counts once per
 ten minutes for the whole outdoors, however many outdoor sensors fire,
@@ -128,14 +128,31 @@ through: opening it to get the bike out isn't leaving the house. Turn it on
 for an attached garage people go in and out through, and it counts like any
 other door.
 
-### Fridge, cabinet, drawer and closet contacts
+### Contacts on things you open: the fridge, a closet, a shed, the mailbox
 
-Contacts inside the house, recognised by name (fridge, freezer,
-refrigerator, pantry, cabinet, cupboard, drawer, closet). They score
-`interior_door_opened`, 40 points. Nobody opens your fridge or your bedroom
-closet while the house is empty, a pet can't, and a burglar going through
-drawers is exactly what this catches. After someone was seen in a room, these
-count 1.5 times.
+Indoors, contacts on the fridge, a cabinet, a drawer or a closet, recognised
+by name (fridge, freezer, refrigerator, pantry, cabinet, cupboard, drawer,
+closet). They score `interior_door_opened`, 40 points. Nobody opens your
+fridge or your bedroom closet while the house is empty, a pet can't, and a
+burglar going through drawers is exactly what this catches. After someone was
+seen in a room, these count 1.5 times.
+
+Outdoors, contacts on things outside the house, recognised by name the same
+way (shed, storage, barn, outbuilding, and mailbox, letterbox or parcel box):
+
+- **A shed, storage box or the like** scores `outbuilding_opened`, 30 points
+  in an empty house: someone in the yard going through your things is a
+  verify on its own. Nothing with the family, guests or a contractor home by
+  day, when it's them getting the lawnmower out.
+- **The mailbox** is opened by the mail carrier every day. In an empty
+  house, its first opening of the day outside the night window counts for
+  nothing; any other opening, a second one or one at night, is someone
+  outside, like a camera seeing them (see [Outdoors](#outdoors)). On its own
+  that stays below verify, and it adds to anyone hanging around.
+
+Put a contact on the house's own door in *Exterior doors, windows and gates*,
+whichever area it sits in: a front door in the porch's area is still the
+front door.
 
 ### Lights
 
@@ -200,10 +217,12 @@ least 60 points), because a phone often reports home a little after its
 owner walked in. A resident's or a guest's phone joining the Wi-Fi in the
 hallway explains the door and the hall motion that came just before.
 
-A phone that only dropped off the Wi-Fi and rejoined hasn't arrived, so it
-cancels nothing: a tracker must have been away for ten minutes, not come back
-from unavailable, and for a resident, their person entity must have left
-too. A guest's phone rejoining while someone let in with a code is inside
+Every tracker at home still counts for who is home, straight away. Only the
+cancelling waits for someone who was really away: a phone that only dropped
+off the Wi-Fi and rejoined, while its owner was inside all along, cancels
+nothing. The tracker must have been away for ten minutes and not just be back
+from unavailable; for a resident, their person entity must have left too;
+and a guest's phone rejoining while someone let in with a code is inside
 cancels nothing either.
 
 Everyone who lives there needs a tracker. If someone at home has none, the

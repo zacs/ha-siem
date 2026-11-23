@@ -53,6 +53,8 @@ ENTITIES: dict[str, tuple[str | None, str | None, str, str, str | None]] = {
     "binary_sensor.porch_person": ("front_porch", "occupancy", "Doorbell Person", "off", "occupancy"),
     "binary_sensor.porch_motion": ("front_porch", "motion", "Doorbell Motion", "off", "occupancy"),
     "light.porch_flood": ("front_porch", None, "Porch Floodlight", "off", "lights"),
+    "binary_sensor.mailbox": ("front_porch", "opening", "Mailbox", "off", "interior_doors"),
+    "binary_sensor.stairs_storage": ("front_porch", "door", "Storage Box Under the Stairs", "off", "interior_doors"),
     "binary_sensor.driveway_motion": ("driveway", "motion", "Driveway Motion", "off", "occupancy"),
     "binary_sensor.backyard_motion": ("backyard", "motion", "Backyard Motion", "off", "occupancy"),
     "binary_sensor.backyard_person": ("backyard", "occupancy", "Backyard Camera Person", "off", "occupancy"),
@@ -586,6 +588,36 @@ async def test_the_mail_carrier_rings_the_doorbell(house, freezer):
     await home.pulse("binary_sensor.porch_motion", "binary_sensor.driveway_motion")
     assert home.score < 18
     assert home.alerts == []
+
+
+async def test_the_mail_carrier_and_the_mailbox(house, freezer):
+    """The mail comes at 11: the mailbox's first opening of the day is the carrier, and nothing. Someone at it again at
+    3 p.m., with nobody home, is someone outside: a few points, below verify. At 1 a.m. it's the same, and more."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 11:00:00-07:00")
+    await home.pulse("binary_sensor.mailbox")
+    assert home.rules() == []
+    freezer.move_to("2026-10-21 15:00:00-07:00")
+    await home.pulse("binary_sensor.mailbox")
+    assert home.rules() == ["exterior_occupied"] and home.alerts == []
+    freezer.move_to("2026-10-22 01:00:00-07:00")
+    await home.wait(30)
+    await home.pulse("binary_sensor.mailbox")
+    assert home.rules() == ["exterior_occupied"] and home.score == pytest.approx(9, abs=0.5)
+
+
+async def test_someone_in_the_storage_box_under_the_stairs(house, freezer):
+    """With nobody home, the storage box under the front stairs opening is someone going through your things: a
+    verify on its own. With the family home it's one of them, and nothing."""
+    home = await house()
+    freezer.move_to("2026-10-21 10:00:00-07:00")
+    await home.wait(30)
+    await home.pulse("binary_sensor.stairs_storage")
+    assert home.rules() == [] and home.alerts == []
+    await home.vacation()
+    await home.pulse("binary_sensor.stairs_storage")
+    assert home.rules() == ["outbuilding_opened"] and home.alerts == ["verify"]
 
 
 async def test_a_package_at_the_door_late_at_night(house, freezer):

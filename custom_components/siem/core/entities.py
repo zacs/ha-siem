@@ -13,7 +13,11 @@ OCCUPANCY_CLASSES: tuple[str, ...] = ("occupancy", "presence", "motion", "sound"
 OPENING_CLASSES: tuple[str, ...] = ("door", "window", "opening", "garage_door")
 INTERIOR_DOOR_KEYWORDS: tuple[str, ...] = (
     "fridge", "freezer", "refrigerator", "pantry", "cabinet", "cupboard", "drawer", "closet",
+    # Outdoors: things outside the house that you open.
+    "shed", "storage", "mailbox", "mail box", "letterbox", "letter box", "postbox", "post box", "parcel", "barn", "outbuilding",
 )
+# A mailbox, letterbox or parcel box: the mail carrier opens it every day.
+MAIL_KEYWORDS: tuple[str, ...] = ("mail", "letterbox", "letter box", "postbox", "post box", "parcel")
 EXTERIOR_AREA_KEYWORDS: tuple[str, ...] = (
     "yard", "driveway", "porch", "patio", "outside", "outdoor", "exterior", "garden", "deck", "balcony", "pool",
 )
@@ -55,8 +59,13 @@ def _says(words: Iterable[str], *names: str | None) -> bool:
 
 
 def is_interior_door_name(*names: str | None) -> bool:
-    """Return True when a name reads as a fridge, cabinet, drawer or closet."""
+    """Return True when a name reads as something you open: a fridge, cabinet, drawer or closet; outdoors, a shed or mailbox."""
     return _mentions(INTERIOR_DOOR_KEYWORDS, *names)
+
+
+def is_mailbox(*names: str | None) -> bool:
+    """Return True for a mailbox, letterbox or parcel box contact."""
+    return _mentions(MAIL_KEYWORDS, *names)
 
 
 def is_gate(*names: str | None) -> bool:

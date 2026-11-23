@@ -17,6 +17,8 @@ in bed; with nobody home, it's inside the night window.
 | A kid comes home with their code | Family | Nothing |
 | The mail carrier rings the doorbell | Vacant | Nothing (18) |
 | A parcel at the door at 11 p.m. | Vacant, night | Verify (27) |
+| The mail carrier opens the mailbox, then someone at it again in the afternoon and at 1 a.m. | Vacant | Nothing for the carrier; a few points as someone outside after that |
+| The storage box under the front stairs opens | Vacant / family | Verify with nobody home; nothing with the family home |
 | A delivery through the side gate | Vacant | Verify (43) |
 | Someone lingers in the backyard for 40 minutes at 1 a.m. | Vacant, night | Verify after ten minutes, again once the score has doubled, never past verify |
 | Someone comes through the side gate at 1 a.m. | Vacant, night | Deter (64) |

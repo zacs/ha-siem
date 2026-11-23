@@ -20,7 +20,7 @@ def test_default_points_follow_the_design_table():
     assert DEFAULT_RULES["pin_not_allowed"].points == {"vacant": 30, "guest": 30, "service": 30, "family": 20, "night": 20}
     for removed in ("untrusted_user", "light_homekit", "person_interior_camera", "person_exterior_camera"):
         assert removed not in DEFAULT_RULES
-    assert len(DEFAULT_RULES) == 14
+    assert len(DEFAULT_RULES) == 15
 
 
 def test_only_lock_trouble_scores_with_someone_trusted_home():

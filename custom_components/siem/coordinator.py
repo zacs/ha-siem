@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 import functools
 import logging
 from typing import Any
@@ -191,6 +191,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cooldown: dict[tuple[str, str], float] = {}
         self._last_arrival = 0.0
         self._contact_last_on: dict[str, float] = {}
+        # The day each mailbox last had its free opening: the mail carrier's.
+        self._mail_day: dict[str, date] = {}
         self._lock_devices: dict[str, str] = {}
         self._lock_seen: dict[tuple[str | None, str, int | None], float] = {}
         self._unsubs: list[Callable[[], None]] = []
@@ -704,9 +706,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._on_door_opened(entity_id, new, now)
             self._score_once("gate_opened" if meta.get("gate") else "exterior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_INTERIOR_DOOR and _turned_on(old, new):
-            # Outdoors, a shed or mailbox contact only says someone is outside.
             if outdoors:
-                self._on_outside(entity_id, STRENGTH_MEDIUM, room, now, "opened")
+                self._on_outdoor_contact(entity_id, new, room, now)
                 return
             self.modes.note_activity(now)
             self._score_once("interior_door_opened", entity_id, now, entity_id, room, "opened")
@@ -779,6 +780,24 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         detail = what + (", corroborated" if result.corroborated else "")
         if not self._score("exterior_occupied", now, entity_id, room, detail, points=result.points, allow_open=not result.weak_alone, gated=True):
             self.outside.withdraw("outside", result.points)
+
+    def _on_outdoor_contact(self, entity_id: str, state: State, room: str | None, now: float) -> None:
+        """Something outside the house was opened: the mailbox is someone outside, a shed or storage box more than that.
+
+        The mail carrier opens the mailbox once a day, so in an empty house its first opening of the day outside the night
+        window counts for nothing; any other opening is someone outside, like a camera seeing them. A shed or storage
+        box opening is someone in the yard going through your things.
+        """
+        if ent.is_mailbox(entity_id, state.name):
+            today = dt_util.now().date()
+            if self.house_mode == MODE_VACANT and not self.night_window and self._mail_day.get(entity_id) != today:
+                self._mail_day[entity_id] = today
+                self._skip(entity_id, "exterior_occupied", "the mailbox's first opening of the day: the mail carrier")
+                return
+            self._on_outside(entity_id, STRENGTH_MEDIUM, room, now, "mailbox opened")
+            return
+        self.modes.note_activity(now)
+        self._score_once("outbuilding_opened", entity_id, now, entity_id, room, "opened")
 
     def _on_load(self, now: float) -> None:
         load = _number(self.hass.states.get(self.house[c.CONF_LOAD]))

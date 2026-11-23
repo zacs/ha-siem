@@ -18,12 +18,14 @@ the [releases page](https://github.com/zacs/ha-siem/releases).
   garage door, gate or door cover opened from Home Assistant, and a code with
   the family home start the guest clock, as before: two hours, and an hour of
   quiet.
-- **A phone rejoining the Wi-Fi is not someone coming home.** A tracker counts
-  as an arrival only when it had been away for ten minutes, not back from
-  unavailable. A resident's tracker doesn't count while their person entity
-  stayed home, nor a guest's phone while someone let in is inside. Before,
-  any phone rejoining took at least 60 points off the open incident and made
-  the doors the household's for ten minutes, even at 3 a.m.
+- **A phone rejoining the Wi-Fi no longer cancels an open incident.** Every
+  tracker at home still counts for who is home, straight away; only taking
+  the points off waits for a real arrival. That needs the tracker to have
+  been away for ten minutes and not be back from unavailable, a resident's
+  person entity to have left too, and, for a guest's phone, nobody let in
+  with a code inside. Before, any phone rejoining took at least 60 points off
+  the open incident and made the doors the household's for ten minutes, even
+  at 3 a.m. while its owner slept inside.
 - **Someone lingering outside builds to a verify by day too.** Outside is
   credited every ten minutes instead of fifteen, so about twenty minutes in
   the yard is a verify (about ten when a camera and a motion sensor agree).
@@ -45,6 +47,12 @@ the [releases page](https://github.com/zacs/ha-siem/releases).
 
 ### Added
 
+- **Sheds, storage boxes and the mailbox.** A contact on something outside
+  the house, in an outdoor room's *things you open*, is told apart by name. A
+  shed or storage box opening scores the new `outbuilding_opened`, 30 points
+  in an empty house. The mailbox's first opening of the day is the mail
+  carrier and counts for nothing; any other is someone outside. Before, both
+  only said someone was outside, and the setup form put them with the doors.
 - **Do people leave through the garage door?** A whole-house setting, off by
   default. When it's on, the garage door opening counts like any exterior
   door when SIEM works out whether guests have gone out. Leave it off for a

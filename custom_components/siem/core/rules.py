@@ -55,6 +55,7 @@ DEFAULT_RULES: dict[str, Rule] = {
         # right after an entry that counted.
         _rule("exterior_door_opened", TAG_EXTERIOR, (40, 0, 0, 0, 40), "An exterior door or window opened"),
         _rule("gate_opened", TAG_EXTERIOR, (30, 0, 0, 0, 30), "A gate opened"),
+        _rule("outbuilding_opened", TAG_EXTERIOR, (30, 0, 0, 0, 30), "A shed, storage box or the like outside the house opened"),
         _rule("door_csi_motion", TAG_EXTERIOR, (5, 0, 0, 0, 5), "Someone was at a door that did not open"),
         _rule("exterior_occupied", TAG_EXTERIOR, (10, 0, 0, 0, 10), "Someone is outside"),
         _rule("interior_occupied", TAG_INTERIOR, (50, 0, 0, 0, 50), "Someone is in a room"),
