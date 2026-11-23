@@ -1,4 +1,4 @@
-"""HA Store persistence: weights, incidents, digest timestamp, house mode override."""
+"""HA Store persistence: weights, incidents, digest timestamp, house mode override, and whoever was let in."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ STORAGE_VERSION = 1
 SAVE_DELAY = 5
 MAX_INCIDENTS = 200
 MAX_WEIGHT_CHANGES = 200
-KEYS = ("weights", "incidents", "weight_changes", "last_digest", "override", "override_since", "label_webhook")
+KEYS = ("weights", "incidents", "weight_changes", "last_digest", "override", "override_since", "label_webhook", "house_mode")
 
 
 class SiemStore:
@@ -31,6 +31,8 @@ class SiemStore:
         self.override: str | None = None
         self.override_since: str | None = None
         self.label_webhook: str | None = None
+        # The house mode machine's state that a restart must not forget: guests let in, the guest clock, the lingers.
+        self.house_mode: dict[str, Any] = {}
 
     async def async_load(self) -> None:
         """Load the file, tolerating a missing or partial one."""
@@ -44,6 +46,7 @@ class SiemStore:
         self.override = RETIRED_OVERRIDES.get(override, override)
         self.override_since = data.get("override_since") if self.override else None
         self.label_webhook = data.get("label_webhook")
+        self.house_mode = dict(data.get("house_mode") or {})
 
     def _data(self) -> dict[str, Any]:
         return {key: getattr(self, key) for key in KEYS}

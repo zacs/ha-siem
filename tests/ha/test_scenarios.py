@@ -10,6 +10,7 @@ alarm trigger for the panel turned on.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import Context, ServiceCall, callback
@@ -389,14 +390,15 @@ async def test_a_kid_comes_home_with_their_own_code(house, freezer):
 
 
 async def test_someone_lingering_in_the_yard_while_you_sleep(house, freezer):
-    """1 a.m., everyone asleep, someone hangs around the backyard for forty minutes: a verify, as if you were away."""
+    """1 a.m., everyone asleep, someone hangs around the backyard for forty minutes: a verify, as if you were away,
+    and another once the score has doubled, but never past verify."""
     freezer.move_to("2026-10-21 01:00:00-07:00")
     home = await house()
     assert home.mode == "family" and home.night
     for _ in range(40):
         await home.pulse("binary_sensor.backyard_motion", "binary_sensor.backyard_person")
         await home.wait(60)
-    assert home.alerts == ["verify"]
+    assert home.alerts == ["verify", "verify"]
     assert 20 <= home.score < 50
 
 
@@ -612,15 +614,15 @@ async def test_a_delivery_through_the_side_gate(house, freezer):
 
 async def test_someone_lingering_in_the_backyard_at_night(house, freezer):
     """1 a.m., someone hangs around the backyard for forty minutes without trying anything. Outside is credited
-    once per fifteen minutes (19.5 at night with the camera and the motion agreeing), so lingering builds to a
-    verify, announced once, and never past it."""
+    once per ten minutes (19.5 at night with the camera and the motion agreeing), so lingering builds to a
+    verify in ten minutes, announced again once the score has doubled, and never past it."""
     home = await house()
     await home.vacation()
     freezer.move_to("2026-10-21 01:00:00-07:00")
     for _ in range(40):
         await home.pulse("binary_sensor.backyard_motion", "binary_sensor.backyard_person")
         await home.wait(60)
-    assert home.alerts == ["verify"]
+    assert home.alerts == ["verify", "verify"]
     assert 20 <= home.score < 50
 
 
@@ -689,11 +691,44 @@ async def test_a_neighbor_with_a_key_nobody_told_siem_about(house, freezer):
     await home.lock_event("Manual unlock operation")
     await home.physical("binary_sensor.front_door")
     assert home.alerts[0] == "break_glass" and "alarm" in home.alerts
+    # The break-glass message comes after the incident it carries was announced, and with its tier.
+    kinds = [(kind, data.get("kind") or data.get("category")) for kind, data in home.events]
+    assert kinds.index(("siem_incident", "opened")) < kinds.index(("siem_notification", "break_glass"))
+    assert notifications(home.events, "break_glass")[0]["incident"]["tier"] == "deter"
     await home.wait(60)
     assert home.trigger
 
 
 # --- Coming home --------------------------------------------------------------------------------------------------
+
+
+async def test_a_phone_dropping_off_the_wifi_at_night_is_not_someone_coming_home(house, freezer):
+    """2:30 a.m., everyone asleep. The bedroom window opens with nobody up: a deter. Your partner's phone, off the
+    Wi-Fi since 1 a.m., rejoins just then; their watch kept them home all along. That's no arrival: the score
+    stands, and the back door two minutes later still counts. Nor is your own phone back a minute after it dropped,
+    or a tracker back from unavailable after the router restarts."""
+    freezer.move_to("2026-10-21 01:00:00-07:00")
+    home = await house()
+    await home.physical("device_tracker.partner_phone", "not_home")
+    freezer.move_to("2026-10-21 02:30:00-07:00")
+    await home.wait(30)
+    assert home.mode == "family" and home.night
+    await home.physical("binary_sensor.bedroom_window")
+    assert home.alerts == ["deter"]
+    score = home.score
+    await home.physical("device_tracker.partner_phone", "home")
+    await home.physical("device_tracker.resident_phone", "not_home")
+    await home.physical("person.resident", "not_home")
+    await home.wait(60)
+    await home.physical("device_tracker.resident_phone", "home")
+    await home.physical("person.resident", "home")
+    await home.physical("device_tracker.partner_watch", "unavailable")
+    await home.physical("device_tracker.partner_watch", "home")
+    assert home.score == pytest.approx(score * 0.5 ** (1 / 15), abs=1)
+    assert "family_arrival" not in home.rules()
+    await home.wait(60)
+    await home.physical("binary_sensor.back_door")
+    assert home.rules()[-1] == "exterior_door_opened"
 
 
 async def test_coming_home_with_the_phone_a_little_late(house, freezer):
@@ -861,9 +896,9 @@ async def test_the_house_sitter_heads_out_and_the_house_is_watched_again(house, 
     await home.wait(6 * 3600)
     await home.pulse("binary_sensor.kitchen_presence", "binary_sensor.hall_motion")
     await home.lock_event("Manual unlock operation")
-    await home.pulse("binary_sensor.front_door")
+    await home.pulse("binary_sensor.hall_motion", "binary_sensor.front_door", "binary_sensor.hall_motion")
     await home.wait(29 * 60)
-    assert home.mode == "guest" and home.alerts == []
+    assert home.mode == "guest" and home.alerts == [], "the hall right by the door was them going out, not someone staying"
     await home.wait(2 * 60)
     assert home.mode == "vacant"
     await home.physical("binary_sensor.back_door")
@@ -906,6 +941,125 @@ async def test_a_detached_garage_is_not_a_way_out(house, freezer, garage_exit, a
     await home.pulse("binary_sensor.garage_door")
     await home.wait(31 * 60)
     assert home.mode == after
+
+
+async def test_the_dog_walker_in_and_out(house, freezer):
+    """The dog walker's code, the front door, and out again a minute and a half later with the dog: only the first
+    opening was them coming in. Half an hour later the house is vacant and watched."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 12:00:00-07:00")
+    await home.code(slot=4)
+    await home.pulse("binary_sensor.front_door")
+    await home.wait(90)
+    await home.pulse("binary_sensor.front_door")
+    await home.wait(29 * 60)
+    assert home.mode == "guest"
+    await home.wait(2 * 60)
+    assert home.mode == "vacant"
+
+
+async def test_an_unlock_from_the_app_nobody_walks_through(house, freezer):
+    """You unlock the front door from the app for a plumber who never turns up. No door opened, so nobody is known to
+    be inside: it's the guest clock instead, and two hours later the house is vacant again."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 10:00:00-07:00")
+    await home.hass.services.async_call("lock", "unlock", {"entity_id": "lock.front_door"}, blocking=True, context=Context(user_id=RESIDENT))
+    await home.hass.async_block_till_done()
+    assert home.mode == "guest"
+    await home.wait(10 * 60)
+    assert home.mode == "guest" and not home.coordinator.modes.guests_inside
+    await home.wait(2 * 3600)
+    assert home.mode == "vacant"
+
+
+async def test_a_switched_off_code_lets_nobody_in(house, freezer):
+    """The old house-sitter's code is switched off in Lock Code Manager but still on the lock. It opens the door:
+    that scores, the house stays vacant, and the door and the hall after it are an intruder's."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 14:00:00-07:00")
+    await home.code(slot=6)
+    assert home.mode == "vacant"
+    assert "pin_not_allowed" in home.rules() and "let_in" not in home.rules()
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    assert "alarm" in home.alerts
+
+
+async def test_the_house_sitter_arrives_as_you_drive_off(house, freezer):
+    """You leave for a week at 9:00; the house-sitter lets themselves in at 9:10, while your half hour of grace is
+    still running. They are inside all the same: guest mode holds once your half hour is up, and all day."""
+    freezer.move_to("2026-10-21 09:00:00-07:00")
+    home = await house()
+    await home.leave("resident", "partner")
+    await home.wait(10 * 60)
+    await home.code(slot=4)
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    assert home.mode == "family"
+    await home.wait(6 * 3600)
+    assert home.mode == "guest"
+
+
+async def test_the_family_comes_home_and_the_house_sitter_is_forgotten(house, freezer):
+    """The house-sitter was let in with their code. You come home, they leave while you're there, and the next
+    morning you all drive off through the garage. Once your half hour is up the house is vacant, not guest."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 12:00:00-07:00")
+    await home.code(slot=4)
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    freezer.move_to("2026-10-24 17:00:00-07:00")
+    await home.wait(30)
+    await home.arrive("resident", "partner")
+    assert home.mode == "family" and not home.coordinator.modes.guests_inside
+    freezer.move_to("2026-10-25 08:00:00-07:00")
+    await home.wait(30)
+    await home.pulse("binary_sensor.garage_door")
+    await home.leave("resident", "partner")
+    await home.wait(31 * 60)
+    assert home.mode == "vacant"
+
+
+async def test_a_restart_with_the_house_sitter_inside(house, freezer):
+    """Home Assistant updates itself at 11 p.m. while the house-sitter is inside. They are still inside afterwards:
+    at 3 a.m. a glass of water is nothing."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 17:00:00-07:00")
+    await home.code(slot=4)
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    freezer.move_to("2026-10-21 23:00:00-07:00")
+    await home.wait(30)
+    assert await home.hass.config_entries.async_reload(home.entry.entry_id)
+    await home.hass.async_block_till_done()
+    freezer.move_to("2026-10-22 03:00:00-07:00")
+    await home.wait(30)
+    assert home.mode == "guest" and home.night
+    await home.pulse("binary_sensor.hall_motion", "binary_sensor.kitchen_presence")
+    await home.physical("sensor.water_flow", "3")
+    assert home.alerts == []
+
+
+async def test_a_house_sitters_phone_rejoining_at_night_explains_nothing(house, freezer):
+    """The house-sitter, let in with their code, is asleep; their phone dropped off the Wi-Fi hours ago. At 3 a.m.
+    someone comes through the side gate and the camera sees them in the yard, just as the phone rejoins. The
+    house-sitter was inside all along, so their phone explains nothing: the score stands."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 18:00:00-07:00")
+    await home.code(slot=4)
+    await home.pulse("binary_sensor.front_door", "binary_sensor.hall_motion")
+    await home.physical("device_tracker.friend_phone", "home")
+    await home.wait(3600)
+    await home.physical("device_tracker.friend_phone", "not_home")
+    freezer.move_to("2026-10-22 03:00:00-07:00")
+    await home.wait(30)
+    await home.pulse("binary_sensor.side_gate", "binary_sensor.backyard_person")
+    score = home.score
+    assert score > 20
+    await home.physical("device_tracker.friend_phone", "home")
+    assert home.score == pytest.approx(score, abs=1) and "guest_arrival" not in home.rules()
 
 
 async def test_a_forced_guest_mode_still_goes_to_bed(house, freezer):
@@ -1016,10 +1170,11 @@ async def test_guests_staying_on_a_helper_and_on_the_calendar(house, freezer):
     assert home.mode == "guest", "the helper holds it after the event"
     await home.pulse("binary_sensor.kitchen_presence", "binary_sensor.fridge_door")
     await home.physical("input_boolean.guests_staying", "off")
-    await home.wait(3600)
+    await home.wait(110 * 60)
     await home.pulse("binary_sensor.back_door")
-    assert home.mode == "guest" and home.alerts == []
-    await home.wait(2 * 3600)
+    await home.wait(40 * 60)
+    assert home.mode == "guest" and home.alerts == [], "two hours are up, but the back door was forty minutes ago"
+    await home.wait(21 * 60)
     assert home.mode == "vacant"
     await home.physical("binary_sensor.back_door")
     assert home.alerts == ["verify"]
@@ -1096,7 +1251,95 @@ async def test_the_pet_sitter_leaves_and_the_dog_cannot_hold_guest_mode(house, f
     assert home.alerts[-1] == "alarm"
 
 
+async def test_a_forced_service_mode_goes_by_the_night_window(house, freezer):
+    """You force service mode for a week of builders and forget it. Nobody works in the house at night: inside the
+    night window the house is vacant and watched, and the next morning it's service mode again."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 08:00:00-07:00")
+    await home.hass.services.async_call("siem", "set_house_mode", {"mode": "service"}, blocking=True)
+    await home.wait(30)
+    assert home.mode == "service"
+    freezer.move_to("2026-10-21 23:30:00-07:00")
+    await home.wait(30)
+    assert home.mode == "vacant" and home.night
+    await home.physical("binary_sensor.back_door")
+    assert home.alerts == ["deter"]
+    freezer.move_to("2026-10-22 07:00:00-07:00")
+    await home.wait(30)
+    assert home.mode == "service"
+    assert home.hass.states.get("select.siem_house_mode_override").state == "service"
+
+
+async def test_a_door_that_counted_for_nothing_leaves_the_next_one_free(house, freezer):
+    """On the cleaners' day they leave by the front door, worth nothing in service mode, and the Workday sensor is
+    switched off a minute later. Someone at the front door two minutes after that is in an empty house, and counts."""
+    home = await house()
+    await home.vacation()
+    freezer.move_to("2026-10-21 13:00:00-07:00")
+    await home.physical("binary_sensor.cleaners_day", "on")
+    await home.wait(30)
+    assert home.mode == "service"
+    await home.pulse("binary_sensor.front_door")
+    await home.wait(60)
+    await home.physical("binary_sensor.cleaners_day", "off")
+    await home.wait(120)
+    await home.pulse("binary_sensor.front_door")
+    assert home.rules() == ["exterior_door_opened"] and home.alerts == ["verify"]
+
+
+async def test_the_dogs_weak_sensor_doesnt_use_up_the_porch(house, freezer):
+    """The doorbell's motion sensor is set to weak because the dog trips it from the window. It fires alone, which
+    can't open an incident; half a minute later the doorbell camera sees a person. The porch counts in full, the two
+    sources agreeing."""
+    home = await house(weak=("binary_sensor.porch_motion",))
+    await home.vacation()
+    await home.pulse("binary_sensor.porch_motion")
+    assert home.coordinator.engine.current is None
+    await home.wait(30)
+    await home.pulse("binary_sensor.porch_person")
+    assert home.coordinator.engine.current.contributions[-1].points == pytest.approx(13)
+
+
+async def test_a_mode_change_first_noticed_by_a_sensor_is_still_published(house, freezer):
+    """Your half hour of grace runs out and, before the next tick, the TV's plug happens to report. The house is
+    vacant, and says so, with the alarm mode recommended for it."""
+    home = await house()
+    await home.leave("resident", "partner")
+    await home.wait(29 * 60)
+    assert home.mode == "family"
+    freezer.tick(timedelta(minutes=2))
+    await home.physical("sensor.tv_power", "3")
+    await home.wait(10 * 60)
+    assert home.mode == "vacant"
+    assert home.hass.states.get("sensor.siem_recommended_alarm_mode").state == "armed_away"
+
+
 # --- Home Assistant doing things ----------------------------------------------------------------------------------
+
+
+async def test_lights_switched_by_area_that_report_late_are_not_a_hand_on_the_switch(house, freezer):
+    """An automation turns on the bedroom by area, and the bulb reports twenty seconds later, its command's context
+    long gone. Home Assistant switched it, so nobody is at the switch; the same goes for "all"."""
+    home = await house()
+    await home.vacation()
+
+    @callback
+    def nothing(call: ServiceCall) -> None:
+        """A light integration that takes the command and reports the bulb later, on its own."""
+
+    home.hass.services.async_register("scenario", "turn_on", nothing)
+    await home.hass.services.async_call("scenario", "turn_on", {"area_id": "bedroom"}, blocking=True)
+    await home.wait(20)
+    await home.physical("light.bedroom")
+    await home.hass.services.async_call("scenario", "turn_on", {"entity_id": "all"}, blocking=True)
+    await home.wait(20)
+    await home.physical("light.kitchen")
+    assert home.rules() == [] and home.alerts == []
+    # By hand, a minute later, it counts.
+    await home.wait(60)
+    await home.physical("light.hallway")
+    assert home.rules() == ["light_physical"]
 
 
 async def test_presence_simulation_on_vacation(house, freezer):
@@ -1178,6 +1421,51 @@ async def test_a_zwave_restart(house, freezer):
         await home.physical(entity_id, "on" if entity_id == "binary_sensor.bedroom_window" else "off")
     await home.wait(300)
     assert home.alerts == [] and home.coordinator.engine.current is None
+
+
+async def test_sensors_dropping_out_one_by_one_count_once(house, freezer):
+    """The Zigbee stick dies and its sensors drop out a minute apart. That's one sensor going offline for the
+    incident, not five: a verify, never the alarm and the siren."""
+    home = await house()
+    await home.vacation()
+    for entity_id in ("binary_sensor.back_door", "binary_sensor.front_door", "binary_sensor.hall_motion", "binary_sensor.kitchen_presence", "binary_sensor.bedroom_motion"):
+        await home.physical(entity_id, "unavailable")
+        await home.wait(60)
+    await home.wait(10 * 60)
+    assert home.rules().count("sensor_offline") == 1
+    assert home.alerts == ["verify"] and not home.trigger_seen
+
+
+async def test_a_flaky_sensor_counts_once_an_hour(house, freezer):
+    """The bedroom window's sensor drops out for three minutes every ten. It counts once an hour, not every time,
+    so the score never builds past verify."""
+    home = await house()
+    await home.vacation()
+    for _ in range(12):
+        await home.physical("binary_sensor.bedroom_window", "unavailable")
+        await home.wait(3 * 60)
+        await home.physical("binary_sensor.bedroom_window", "off")
+        await home.wait(7 * 60)
+    assert set(home.alerts) == {"verify"} and len(home.alerts) <= 2
+
+
+async def test_a_sensor_that_died_before_a_restart_is_still_reported(house, freezer):
+    """On vacation, the back door's sensor dies while SIEM is reloading. It never goes from working to unavailable
+    while SIEM watches, but it's offline all the same: a couple of minutes on it counts, and after an hour of an
+    empty house it's a break-glass message."""
+    home = await house()
+    await home.vacation()
+    hass = home.hass
+    assert await hass.config_entries.async_unload(home.entry.entry_id)
+    hass.states.async_set("binary_sensor.back_door", "unavailable", {"friendly_name": "Back Door", "device_class": "door"})
+    assert await hass.config_entries.async_setup(home.entry.entry_id)
+    await hass.async_block_till_done()
+    await home.wait(60)
+    assert home.rules() == []
+    await home.wait(2 * 60)
+    assert home.rules() == ["sensor_offline"]
+    await home.wait(3600)
+    assert "break_glass" in home.alerts
 
 
 async def test_a_long_outage_on_vacation(house, freezer):

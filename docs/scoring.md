@@ -66,7 +66,7 @@ trouble scores. At night it watches the house again; see below. Rules marked
 | `manual_unlock` | 60, 0, 0, 0, 0 | A lock is unlocked by hand |
 | `pin_not_allowed` | 30, 30, 30, 20, 20 | A code Lock Code Manager has switched off still opens a lock |
 | `keypad_lockout` | 40, 40, 40, 30, 30 | A lock reports a keypad lockout after repeated bad codes; one wrong code does not count, and few locks send this |
-| `sensor_offline` | 20, 0, 0, 0, 0 | A door, window, motion or Wi-Fi motion sensor, or a lock, stays unavailable for two minutes; several at once count once |
+| `sensor_offline` | 20, 0, 0, 0, 0 | A door, window, motion or Wi-Fi motion sensor, or a lock, stays unavailable for two minutes, or is unavailable when Home Assistant starts. Once per incident however many go, and the same sensor at most once an hour |
 
 ## Someone in a room
 
@@ -82,7 +82,7 @@ to do with motion sensors a pet sets off.
 
 In an outdoor room, motion, person detection, a light that turns itself on (a
 floodlight's own sensor) and contacts such as a shed or mailbox all mean the
-same thing: someone is outside. The whole outdoors counts once per fifteen
+same thing: someone is outside. The whole outdoors counts once per ten
 minutes, at its strongest source, times 1.3 when two agree. A visit to the
 front door is a few points; someone hanging around builds up slowly; someone
 who also opens the gate or a door is another matter. Power sensors in outdoor
@@ -131,7 +131,15 @@ at least 60 points, or everything scored in the ten minutes before if that is
 more: a phone that reports home a little after its owner walked in explains
 what they set off. A guest's tracker arriving does the same and switches the
 house to guest; a phone joining your Wi-Fi usually does so a little after its
-owner walks in. Letting someone in (a code, an unlock or a garage opened from
+owner walks in.
+
+Only someone who was really away arrives. A phone that drops off the Wi-Fi
+and rejoins is not someone coming home, and at 3 a.m. it must not cancel an
+open incident. So a tracker counts as an arrival only when it had been away
+for ten minutes or more, and not when it comes back from unavailable (a
+router restarting). A resident's tracker doesn't count while their person
+entity stayed home (their watch kept them home), and a guest's phone doesn't
+count while someone let in is inside. Letting someone in (a code, an unlock or a garage opened from
 Home Assistant) takes 40 off, switches the house to guest and records the
 code's name, when Lock Code Manager knows it, as the incident's person.
 
@@ -159,26 +167,37 @@ in from outside is inside (below). Also guest during a `Guest:` event or
 while a guest sensor is on, and after either one ends or someone was let in
 some other way, until two hours have passed and the house has been quiet for
 an hour. Quiet means no doors, switches, water or appliances; motion doesn't
-count, so a pet can't hold guest mode open. Service during a
+count, so a pet can't hold guest mode open. With the family home, the guest
+clock ends at the two hours: their own comings and goings say nothing about
+guests. Service during a
 `Service:` event or while a service sensor is on, but never inside the night
 window: nobody works in the house at 2 a.m., so the house is vacant then. The
 calendar and the sensors add up: either one is enough. Vacant otherwise.
 `select.siem_house_mode_override` forces a mode, and the choice survives
-restarts until you set it back to auto. Every digest ends with the house mode,
+restarts until you set it back to auto. A forced service goes by the night
+window like an automatic one: vacant inside it, service again in the
+morning. Every digest ends with the house mode,
 and says so while a mode is forced, with the date it was set.
 
 ### Someone let in is inside until they go out
 
 A code typed at the keypad, or Home Assistant unlocking a lock, opens the
-door for someone outside. With the family away, SIEM takes it that they are
-inside from then on, and holds guest mode however quiet the house is,
-whatever their phone does, and through the night: a house-sitter's phone
+door for someone outside. With no resident home (or only lingering: the
+house-sitter arriving ten minutes after you drive off), the next exterior
+door to open is them coming in, and from then on SIEM takes it that they are
+inside. It holds guest mode however quiet the house is, whatever their phone
+does, through the night, and across restarts: a house-sitter's phone
 dropping off the Wi-Fi at 1 a.m. doesn't leave an empty house.
 
-It lasts until an exterior door opens, other than to let them in (a door
-opening within two minutes of the code is them coming in). Then guest mode
-holds for 30 more minutes, in case whoever opened it is only taking the bins
-out. If someone moves inside after the first five minutes, not everyone
+Coming in is the first door to open within five minutes of the code; the
+same door bouncing, or held open for the bags, within a minute of that is
+still coming in. If no door opens in those five minutes, perhaps nobody came
+in (the app unlock for a plumber who never turned up), and the guest clock
+runs from the code instead.
+
+It lasts until another exterior door opens: the dog walker leaving a minute
+and a half after coming in counts. Then guest mode holds for 30 more
+minutes, in case whoever opened it is only taking the bins out. If someone moves inside after the first five minutes, not everyone
 left, and guest mode holds until the next door. Someone moving inside is
 motion or presence that isn't weak, a presence sensor that is still on, a
 light switched by hand, an inside door, the water or an appliance. If nobody does, the house
@@ -195,6 +214,10 @@ or a guest sensor still says guests are home.
   clock instead.
 - **With the family home,** a code only starts the guest clock, as before;
   family mode comes first anyway.
+- **A resident coming home ends it.** Often it was their own code, their
+  phone a little late; either way the family is home to say who is. Once
+  they leave again, only guests' trackers, the calendar or a guest sensor
+  hold guest mode.
 - **A pet counts as someone inside** if its motion sensors aren't set to
   weak. Set them to weak, as you would anyway, and the dog can't keep guest
   mode on after the house-sitter goes out.
@@ -223,8 +246,9 @@ What night changes:
   house, so the dog padding about doesn't start one.
 
 A forced mode says who is home, not that SIEM should stop watching: a forced
-family or guest still has its night. A forced service or vacant stays exactly
-that, with the night window deciding night.
+family or guest still has its night. A forced vacant stays exactly that, with
+the night window deciding night. A forced service is vacant inside the night
+window, like an automatic one, and service again in the morning.
 
 ## Recommended alarm mode
 

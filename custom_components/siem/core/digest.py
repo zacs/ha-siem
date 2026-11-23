@@ -54,10 +54,14 @@ def summarize_window(
     since: datetime | None,
     until: datetime,
 ) -> dict[str, Any]:
-    """Collect incidents, labels and weight changes inside the window as JSON-ready data."""
+    """Collect incidents, labels and weight changes inside the window as JSON-ready data.
+
+    An incident belongs to the window it ended in, or, still open, the one it started in: one that was open at the
+    last digest comes back in the next with how it ended.
+    """
     since_ts = since.timestamp() if since else 0.0
     until_ts = until.timestamp()
-    window_incidents = [i for i in incidents if since_ts < float(i.get("started", 0)) <= until_ts]
+    window_incidents = [i for i in incidents if since_ts < float(i.get("closed") or i.get("started") or 0) <= until_ts]
     changes = [c for c in weight_changes if since_ts < float(c.get("at", 0)) <= until_ts]
     return {
         "since": since.isoformat() if since else None,
@@ -76,4 +80,8 @@ def fallback_text(summary: Mapping[str, Any]) -> str:
         tier = incident.get("peak_tier") or incident.get("tier") or "none"
         tiers[tier] = tiers.get(tier, 0) + 1
     parts = ", ".join(f"{count} {tier}" for tier, count in sorted(tiers.items())) or "no incidents"
-    return f"{summary.get('incident_count', 0)} incidents ({parts}), {len(summary.get('weight_changes', []))} weight changes"
+    return f"{_count(summary.get('incident_count', 0), 'incident')} ({parts}), {_count(len(summary.get('weight_changes', [])), 'weight change')}"
+
+
+def _count(n: int, noun: str) -> str:
+    return f"{n} {noun}" + ("" if n == 1 else "s")

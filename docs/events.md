@@ -44,7 +44,9 @@ When each category fires:
   with `again` set if its score doubles while it is still at verify.
 - `deter` and `alarm` every time an incident climbs to that tier.
 - `break_glass` whatever the score: a hand unlock while vacant, a keypad
-  lockout, or a sensor unavailable for over an hour while vacant.
+  lockout, or a sensor unavailable for over an hour while vacant. One about an
+  incident comes after that incident's `siem_incident` `opened`, and before
+  its `verify`, `deter` or `alarm`.
 - `digest` at each digest time, or when you run `siem.run_digest` (but not
   for a preview).
 
@@ -67,6 +69,9 @@ every field of the incident object below, plus:
 | `previous_tier` | string | The tier before it; the same as `tier` for `labelled` |
 | `label` | string | `labelled` only: `false_alarm`, `thats_me`, `guest` or `real` |
 | `by` | string or null | `labelled` only: who gave the label, when SIEM can tell. For a phone button, the name of the person entity linked to the user the app is logged in as; for a chat button, the chat user name |
+
+`closed` also fires for an incident still open when SIEM stops or reloads
+(Home Assistant restarting, or an options change), which closes it.
 
 `labelled` fires once per new label. A label the incident already has, from a
 second press or a second phone, fires nothing. It also fires for an incident

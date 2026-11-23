@@ -16,6 +16,8 @@ from homeassistant.const import (
     ATTR_DEVICE_ID,
     ATTR_DOMAIN,
     ATTR_ENTITY_ID,
+    ATTR_FLOOR_ID,
+    ATTR_LABEL_ID,
     ATTR_SERVICE,
     ATTR_SERVICE_DATA,
     ENTITY_MATCH_ALL,
@@ -32,6 +34,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError
+from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.target import TargetSelection, async_extract_referenced_entity_ids
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -39,8 +43,8 @@ from . import const as c
 from .alerts import Alerts
 from .core import entities as ent
 from .core.arm import recommend_arm_mode
-from .core.house_mode import GUEST_LEFT_S, HouseModeMachine
-from .core.incident import EVENT_CLOSED, EVENT_LABELLED, Incident, IncidentEngine
+from .core.house_mode import DOOR_ENTRY, DOOR_EXIT, GUEST_LEFT_S, HouseModeMachine
+from .core.incident import EVENT_CLOSED, EVENT_LABELLED, Incident, IncidentEngine, IncidentEvent
 from .core.locks import (
     KIND_KEYPAD_LOCKOUT,
     KIND_KEYPAD_UNLOCK,
@@ -146,6 +150,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             e for e, m in self.meta.items() if m.get("role") == ent.ROLE_OCCUPANCY and m.get("room") not in self.outdoor_rooms and ent.effective_strength(m) != STRENGTH_WEAK
         ]
         self.modes = HouseModeMachine(self.now())
+        self.modes.restore(store.house_mode)
+        self._saved_modes: dict[str, Any] | None = None
         try:
             self.modes.set_override(store.override)
         except ValueError:
@@ -166,6 +172,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.night = False
         self.night_window = False
         self.recommended_arm: str | None = None
+        # The house mode and night _process last announced, which a change first noticed elsewhere is compared with.
+        self._processed: tuple[str, bool, bool] | None = None
         self.alarm_trigger = False
         self._alarm_held = False
         self._alarm_timer: Callable[[], None] | None = None
@@ -176,9 +184,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_inside = -1e12
         self._family_out_until = -1e12
         self._entry_at = -1e12
-        self.last_label: str | None = None
         self._offline_since: dict[str, float] = {}
         self._offline_scored: set[str] = set()
+        self._offline_last: dict[str, float] = {}
         self._break_glass_sent: set[str] = set()
         self._cooldown: dict[tuple[str, str], float] = {}
         self._last_arrival = 0.0
@@ -245,7 +253,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self.store.label_webhook:
             self.store.label_webhook = webhook.async_generate_id()
             self.store.async_schedule_save()
-        webhook.async_register(self.hass, c.DOMAIN, "SIEM labels", self.store.label_webhook, async_handle_label, allowed_methods=["POST"])
+        # Chat servers reach it over the local network; nothing on the internet can label an incident.
+        webhook.async_register(self.hass, c.DOMAIN, "SIEM labels", self.store.label_webhook, async_handle_label, allowed_methods=["POST"], local_only=True)
         self._unsubs.append(lambda: webhook.async_unregister(self.hass, self.store.label_webhook))
         if self.store.last_digest is None:
             self.store.last_digest = dt_util.now().isoformat()
@@ -260,16 +269,28 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._apply_asleep_sensor(self.hass.states.get(sensor))
         self._update_presence(now)
         self._refresh_mode(now)
+        self._processed = (self.house_mode, self.night, self.night_window)
         self.recommended_arm = recommend_arm_mode(self.house_mode, self.night_window)
         self.publish(now, force=True)
+        # A sensor that died before a restart or reload never reports going offline; look once everything has loaded.
+        self._unsubs.append(async_at_started(self.hass, self._seed_offline))
+
+    @callback
+    def _seed_offline(self, _hass: HomeAssistant) -> None:
+        """Count sensors that are unavailable, or missing, once Home Assistant has started, from now."""
+        now = self.now()
+        for entity_id, meta in self.meta.items():
+            if meta.get("role") in ent.SENSING_ROLES and ((state := self.hass.states.get(entity_id)) is None or state.state == STATE_UNAVAILABLE):
+                self._offline_since.setdefault(entity_id, now)
+                _LOGGER.debug("%s unavailable at start; counts as offline if it lasts %d minutes", entity_id, c.OFFLINE_GRACE_S // 60)
 
     async def async_stop(self) -> None:
-        """Drop every subscription, keep an open incident in the history and flush the store."""
+        """Drop every subscription, close an open incident (announcing it) and flush the store."""
         for unsub in filter(None, [*self._unsubs, self._state_unsub, self._alarm_timer]):
             unsub()
         self._unsubs, self._state_unsub, self._alarm_timer = [], None, None
-        if (incident := self.engine.current) is not None:
-            self.store.add_incident({**incident.as_dict(), "closed": self.now()})
+        self._announce(self.engine.close_open(self.now()))
+        self.store.house_mode = self.modes.as_dict()
         await self.store.async_save()
 
     def _subscribe(self) -> None:
@@ -302,11 +323,21 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.modes.leaving and any((s := self.hass.states.get(e)) is not None and s.state == STATE_ON for e in self._inside_sources):
             # A presence sensor that is still on: someone is inside, asleep or sitting still.
             self._note_inside(now)
-        guests_inside = self.modes.guests_inside
         self.house_mode = self.modes.mode(now)
         self.night = self.modes.night(now)
-        if guests_inside and not self.modes.guests_inside:
-            _LOGGER.debug("Nobody moved inside for %d minutes after a door opened: guest mode no longer held", GUEST_LEFT_S // 60)
+        if note := self.modes.note:
+            self.modes.note = None
+            _LOGGER.debug("Guest mode from someone let in no longer held: %s", note)
+        self._save_modes()
+
+    def _save_modes(self) -> None:
+        """Keep whoever was let in and the guest clock across restarts; activity and lingers ride along with them."""
+        state = self.modes.as_dict()
+        key = {k: v for k, v in state.items() if k not in ("last_activity", "last_home_seen", "last_guest_seen")}
+        if key != self._saved_modes:
+            self._saved_modes = key
+            self.store.house_mode = state
+            self.store.async_schedule_save()
 
     @property
     def asleep(self) -> bool:
@@ -379,13 +410,8 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
         )
 
-    def _process(self, now: float, force: bool = False) -> None:
-        """Advance the engine, publish, and announce transitions and alerts as events."""
-        previous = (self.house_mode, self.night, self.night_window)
-        self._refresh_mode(now)
-        events = self.engine.evaluate(now)
-        trigger = self._track_alarm()
-        score = self.engine.score(now)
+    def _announce(self, events: list[IncidentEvent]) -> None:
+        """Fire ``siem_incident`` for each lifecycle event, keeping closed incidents in the history."""
         for event in events:
             if event.kind == EVENT_CLOSED:
                 self.store.add_incident(event.incident.as_dict())
@@ -393,7 +419,23 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.hass.bus.async_fire(c.EVENT_INCIDENT, payload, context=self.alerts.context())
             light = {key: payload[key] for key in (c.ATTR_INCIDENT_ID, "tier", "previous_tier", "score", "room", "mode")}
             async_dispatcher_send(self.hass, c.SIGNAL_INCIDENT_EVENT, event.kind, light)
-        changed = previous != (self.house_mode, self.night, self.night_window)
+
+    def _process(self, now: float, force: bool = False, break_glass: str | None = None) -> None:
+        """Advance the engine, publish, and announce transitions and alerts as events.
+
+        A ``break_glass`` message goes out once the incident it carries has been announced, ahead of its tier alerts.
+        """
+        self._refresh_mode(now)
+        # Compared with what was last announced: a sensor report or a score may have refreshed the mode first.
+        current = (self.house_mode, self.night, self.night_window)
+        previous, self._processed = self._processed or current, current
+        events = self.engine.evaluate(now)
+        trigger = self._track_alarm()
+        score = self.engine.score(now)
+        self._announce(events)
+        if break_glass:
+            self.alerts.break_glass(break_glass)
+        changed = previous != current
         if previous[0] != self.house_mode:
             _LOGGER.debug("House mode %s -> %s", previous[0], self.house_mode)
         if previous[1] != self.night:
@@ -430,27 +472,29 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _score(
         self, rule_id: str, now: float, entity_id: str | None, room: str | None, detail: str, points: float | None = None, allow_open: bool = True, gated: bool = False
-    ) -> None:
+    ) -> bool:
+        """Add ``rule_id`` to the incident; return False when it counted for nothing (held, 0 points, or weak alone)."""
         self._refresh_mode(now)
         if not gated and (held := self._night_hold(rule_id, now)):
             self._skip(entity_id, rule_id, held)
-            return
+            return False
         contribution = self.engine.add(
             rule_id, mode=self.house_mode, night=self.night, now=now, entity_id=entity_id, room=room, detail=detail, points=points, allow_open=allow_open
         )
         if contribution is None:
             base = self.rules[rule_id].points_for(self.house_mode, self.night) if points is None else points
             self._skip(entity_id, rule_id, f"{self.scoring} gives it 0 points" if base <= 0 else "a weak source alone can't open an incident")
-            return
+            return False
         if rule_id == "exterior_door_opened":
             self._entry_at = now
         _LOGGER.debug("%s scored %s %+.1f (%s)", entity_id or "house", rule_id, contribution.points, detail)
+        message = None
         if (rule_id == "manual_unlock" and self.house_mode == MODE_VACANT) or rule_id == "keypad_lockout":
             message = f"{self.entity_name(entity_id)}: {self.rules[rule_id].description.lower()} ({detail})"
-            self.alerts.break_glass(message)
         # An entity new to the incident is published now, not after the rate limit, so the incident's entities are current.
         earlier = self.engine.current.contributions[:-1] if self.engine.current else []
-        self._process(now, force=entity_id is not None and all(c.entity_id != entity_id for c in earlier))
+        self._process(now, force=entity_id is not None and all(c.entity_id != entity_id for c in earlier), break_glass=message)
+        return True
 
     def _skip(self, entity_id: str | None, rule_id: str | None, why: str) -> None:
         """Say at debug level why something SIEM looked at scored nothing."""
@@ -492,19 +536,16 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         states = (self.hass.states.get(e) for e in self._inside_sources)
         return any(s is not None and s.state == STATE_ON and now - s.last_changed.timestamp() <= c.NIGHT_UP_S for s in states)
 
-    def _cooldown_ok(self, rule_id: str, key: str, now: float) -> bool:
-        """Let the same entity (or room) score a rule once per cooldown: contact bounce, groups of bulbs."""
-        last = self._cooldown.get((rule_id, key))
-        if last is not None and now - last < c.COOLDOWN_S:
-            return False
-        self._cooldown[(rule_id, key)] = now
-        return True
-
     def _score_once(self, rule_id: str, key: str, now: float, entity_id: str, room: str | None, detail: str) -> None:
-        if self._cooldown_ok(rule_id, key, now):
-            self._score(rule_id, now, entity_id, room, detail)
-        else:
+        """Let the same entity (or room) score a rule once per cooldown: contact bounce, groups of bulbs.
+
+        Only a score that counted starts the cooldown: a door held at night or worth 0 in service mode leaves the next
+        opening free to count.
+        """
+        if now - self._cooldown.get((rule_id, key), -1e12) < c.COOLDOWN_S:
             self._skip(entity_id, rule_id, f"already counted in the last {c.COOLDOWN_S // 60} minutes")
+        elif self._score(rule_id, now, entity_id, room, detail):
+            self._cooldown[(rule_id, key)] = now
 
     def _commanded_within(self, key: str | None, now: float, window_s: float) -> bool:
         return key is not None and now - self._commanded.get(key, -1e12) < window_s
@@ -535,9 +576,17 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.caused.add(event.context.id, now)
         target = data.get(ATTR_SERVICE_DATA) or {}
         entities, rooms = _ids(target.get(ATTR_ENTITY_ID)), set(_ids(target.get(ATTR_AREA_ID))) & set(self.rooms)
+        touched = {e for e in entities if e != ENTITY_MATCH_ALL}
         if ENTITY_MATCH_ALL in entities:
             rooms |= set(self.rooms)
-        for entity_id in entities:
+            touched |= set(self.meta)
+        if any(target.get(key) for key in (ATTR_AREA_ID, ATTR_DEVICE_ID, ATTR_FLOOR_ID, ATTR_LABEL_ID)):
+            # An area, device, floor or label names no entity, but a light it switches can still report late on its own.
+            try:
+                touched |= async_extract_referenced_entity_ids(self.hass, TargetSelection(target)).indirectly_referenced
+            except Exception:  # A target Home Assistant itself would refuse must not cost the letting in below.
+                _LOGGER.debug("Could not resolve the target of %s.%s: %s", domain, service, target, exc_info=True)
+        for entity_id in touched:
             if entity_id in self.meta:
                 self._commanded[entity_id] = now
             if room := self._room_of(entity_id):
@@ -652,7 +701,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif role == ent.ROLE_PERIMETER and _turned_on(old, new):
             self.modes.note_activity(now)
             self._contact_last_on[entity_id] = now
-            self._on_door_opened(entity_id, new, outdoors, now)
+            self._on_door_opened(entity_id, new, now)
             self._score_once("gate_opened" if meta.get("gate") else "exterior_door_opened", entity_id, now, entity_id, room, "opened")
         elif role == ent.ROLE_INTERIOR_DOOR and _turned_on(old, new):
             # Outdoors, a shed or mailbox contact only says someone is outside.
@@ -710,7 +759,9 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         allow_open = not (result.weak_alone and (self.house_mode == MODE_VACANT or self.asleep))
         source = "person detected" if meta.get("person_detector") else f"{result.strength} source"
         detail = source + (", corroborated" if result.corroborated else "")
-        self._score("interior_occupied", now, entity_id, room, detail, points=result.points, allow_open=allow_open, gated=True)
+        if not self._score("interior_occupied", now, entity_id, room, detail, points=result.points, allow_open=allow_open, gated=True):
+            # Nothing counted (the dog alone, with no incident to add to): the room's credit is still there to give.
+            self.occupancy.withdraw(room or entity_id, result.points)
 
     def _on_outside(self, entity_id: str, strength: str, room: str | None, now: float, what: str) -> None:
         """Credit "someone is outside" once per window for the whole outdoors, at its strongest source."""
@@ -723,10 +774,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         result = self.outside.observe("outside", entity_id, strength, now, base)
         if result.points <= 0:
-            self._skip(entity_id, "exterior_occupied", "outside already counted in the last 15 minutes")
+            self._skip(entity_id, "exterior_occupied", f"outside already counted in the last {c.OUTSIDE_WINDOW_S // 60} minutes")
             return
         detail = what + (", corroborated" if result.corroborated else "")
-        self._score("exterior_occupied", now, entity_id, room, detail, points=result.points, allow_open=not result.weak_alone, gated=True)
+        if not self._score("exterior_occupied", now, entity_id, room, detail, points=result.points, allow_open=not result.weak_alone, gated=True):
+            self.outside.withdraw("outside", result.points)
 
     def _on_load(self, now: float) -> None:
         load = _number(self.hass.states.get(self.house[c.CONF_LOAD]))
@@ -741,25 +793,48 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # A person and its tracker arrive together; the suppressor applies once per arrival. A phone can report home a
         # little after its owner walked in (a guest's Wi-Fi tracker usually does), so the arrival explains whatever was
         # scored in the minutes before it, a guest's as much as a resident's.
-        if new.state == STATE_HOME and (old is None or old.state != STATE_HOME) and now - self._last_arrival >= 60:
+        if self._arrived(old, new, now, guest) and now - self._last_arrival >= 60:
             self._last_arrival = now
             rule = "guest_arrival" if guest else "family_arrival"
             _LOGGER.debug("%s arrived home (%s)", new.entity_id, rule)
             self.engine.suppress(rule, SUPPRESSOR_FAMILY_ARRIVAL, now=now, detail=f"{new.name} arrived home", explain_s=c.ARRIVAL_EXPLAINS_S)
         self._process(now)
 
-    def _on_door_opened(self, entity_id: str, state: State, outdoors: bool, now: float) -> None:
-        """A door that opens other than to let someone in, while guests let in are inside, may be everyone leaving.
+    def _arrived(self, old: State | None, new: State, now: float, guest: bool) -> bool:
+        """Return True for someone really coming home, not a phone that dropped off the Wi-Fi and rejoined.
 
-        Windows and gates aren't ways out of the house, and the garage door only when people leave through it.
+        They must have been away a while: a tracker back from unavailable, or one that left moments ago, is a phone
+        dropping out. So is a resident's tracker whose person never left (another of their trackers kept them home),
+        and a guest's phone while someone let in is inside.
         """
-        if not self.modes.guests_inside or outdoors or now - self._last_let_in <= c.LET_IN_ENTRY_S:
+        if new.state != STATE_HOME or not _known(old) or old.state == STATE_HOME:
+            return False
+        if now - old.last_changed.timestamp() < c.ARRIVAL_AWAY_S:
+            why = f"back within {c.ARRIVAL_AWAY_S // 60} minutes of leaving, a tracker dropping out"
+        elif guest and self.modes.guests_inside:
+            why = "someone let in is already inside"
+        elif (owner := self.residents.owners.get(new.entity_id)) and (person := self.hass.states.get(owner)) and person.state == STATE_HOME:
+            why = f"{person.name} never left"
+        else:
+            return True
+        _LOGGER.debug("%s home again, not an arrival: %s", new.entity_id, why)
+        return False
+
+    def _on_door_opened(self, entity_id: str, state: State, now: float) -> None:
+        """An exterior door that opens while guests let in are inside: them coming in, or perhaps everyone leaving.
+
+        Windows and gates aren't ways in or out of the house, and the garage door only when people leave through it.
+        """
+        if not self.modes.guests_inside:
             return
         kind = ent.opening_kind(state.attributes.get("device_class"), entity_id, state.name)
         if kind in (ent.OPENING_WINDOW, ent.OPENING_GATE) or (kind == ent.OPENING_GARAGE and not self.house.get(c.CONF_GARAGE_EXIT)):
             return
-        self.modes.door_opened(now)
-        _LOGGER.debug("%s opened: guest mode ends in %d minutes unless someone moves inside", entity_id, GUEST_LEFT_S // 60)
+        what = self.modes.door_opened(now)
+        if what == DOOR_ENTRY:
+            _LOGGER.debug("%s opened: whoever was let in coming in", entity_id)
+        elif what == DOOR_EXIT:
+            _LOGGER.debug("%s opened: guest mode ends in %d minutes unless someone moves inside", entity_id, GUEST_LEFT_S // 60)
 
     def _note_inside(self, now: float) -> None:
         """Someone moved inside: after a door opened, not everyone left."""
@@ -789,6 +864,10 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # A never-fired event entity is unknown, so unknown to a timestamp is a real use; unavailable to a
         # timestamp is the entity coming back after a restart or reload with its old value.
         if old is None or old.state in (new.state, STATE_UNAVAILABLE):
+            return
+        if pin_disabled(new.attributes.get("code_slot"), self.lcm_slots):
+            # The lock's own event scores it as pin_not_allowed; a code switched off lets nobody in.
+            _LOGGER.debug("%s: a switched-off code, so nobody was let in", new.entity_id)
             return
         self.modes.note_activity(now)
         if new.attributes.get("operation") == "lock":
@@ -850,12 +929,21 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.label(label, incident_id, by=person.name if person else None)
 
     def _check_offline(self, now: float) -> None:
-        """Score sensors that stayed unavailable past the grace period, all of them in one contribution."""
+        """Score sensors that stayed unavailable past the grace period: once per incident, however many and however spread.
+
+        A hub or Wi-Fi outage takes sensors down a minute apart, and a flaky one drops out again and again; neither is
+        more of a break-in for it. The same sensor counts at most once an hour.
+        """
         due = [e for e, since in self._offline_since.items() if e not in self._offline_scored and now - since >= c.OFFLINE_GRACE_S]
+        self._offline_scored.update(due)
+        due = [e for e in due if now - self._offline_last.get(e, -1e12) >= c.OFFLINE_RESCORE_S]
         if due:
-            self._offline_scored.update(due)
+            self._offline_last.update(dict.fromkeys(due, now))
             names = ", ".join(self.entity_name(e) for e in due)
-            if len(due) == 1:
+            current = self.engine.current
+            if current is not None and any(x.rule_id == "sensor_offline" for x in current.contributions):
+                self._skip(due[0] if len(due) == 1 else None, "sensor_offline", f"the open incident already counts a sensor going offline ({names})")
+            elif len(due) == 1:
                 self._score("sensor_offline", now, due[0], self.meta.get(due[0], {}).get("room"), "unavailable")
             else:
                 self._score("sensor_offline", now, None, None, f"{len(due)} sensors unavailable: {names}")
@@ -910,7 +998,6 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             incident.labels.append(label)
             changes = apply_label(self.engine.weights, stored.get("rules") or [], label)
-        self.last_label = label
         self.store.record_weight_changes(changes, self.now(), label, incident.id)
         if stored is not None:
             self.store.add_incident({**stored, "labels": list(incident.labels)})

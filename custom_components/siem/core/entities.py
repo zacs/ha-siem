@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+import re
 from typing import Any
 
 from .occupancy import STRENGTH_MEDIUM, STRENGTH_STRONG, STRENGTH_WEAK, STRENGTHS
@@ -48,6 +49,11 @@ def _mentions(keywords: Iterable[str], *names: str | None) -> bool:
     return any(k in haystack for k in keywords)
 
 
+def _says(words: Iterable[str], *names: str | None) -> bool:
+    """Return True when a name has one of ``words`` as a word of its own: "side_gate", not "gateway" or "tailgate"."""
+    return not set(words).isdisjoint(re.split(r"[\W_]+", " ".join(n for n in names if n).casefold()))
+
+
 def is_interior_door_name(*names: str | None) -> bool:
     """Return True when a name reads as a fridge, cabinet, drawer or closet."""
     return _mentions(INTERIOR_DOOR_KEYWORDS, *names)
@@ -55,7 +61,7 @@ def is_interior_door_name(*names: str | None) -> bool:
 
 def is_gate(*names: str | None) -> bool:
     """Return True when a perimeter contact is a gate."""
-    return _mentions(("gate",), *names)
+    return _says(("gate", "gates"), *names)
 
 
 OPENING_DOOR, OPENING_WINDOW, OPENING_GARAGE, OPENING_GATE = "door", "window", "garage", "gate"
@@ -74,7 +80,7 @@ def opening_kind(device_class: str | None, *names: str | None) -> str:
 
 def is_person_detector(*names: str | None) -> bool:
     """Return True for camera person-detection sensors."""
-    return _mentions(("person",), *names)
+    return _says(("person", "persons", "people"), *names)
 
 
 def is_exterior_area(name: str | None) -> bool:
@@ -130,15 +136,18 @@ class ResidentSet:
 
     trackers: list[str] = field(default_factory=list)
     user_ids: list[str] = field(default_factory=list)
+    # Each tracker's person entity.
+    owners: dict[str, str] = field(default_factory=dict)
 
 
 def expand_residents(person_attributes: Mapping[str, Mapping[str, Any]]) -> ResidentSet:
     """Read ``device_trackers`` and ``user_id`` from each person's attributes."""
     result = ResidentSet()
-    for attrs in person_attributes.values():
+    for person, attrs in person_attributes.items():
         for tracker in attrs.get("device_trackers") or []:
             if isinstance(tracker, str) and tracker not in result.trackers:
                 result.trackers.append(tracker)
+                result.owners[tracker] = person
         user_id = attrs.get("user_id")
         if isinstance(user_id, str) and user_id and user_id not in result.user_ids:
             result.user_ids.append(user_id)

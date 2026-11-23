@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
 from . import const as c
+from .config_flow import build_entity_meta
 from .coordinator import SiemConfigEntry, SiemCoordinator
 from .core import entities as ent
 from .core.house_mode import MODE_AUTO
@@ -160,4 +161,12 @@ async def async_migrate_entry(hass: HomeAssistant, entry: SiemConfigEntry) -> bo
                 room[c.CONF_CAMERA] = ent.room_cameras(room)
         hass.config_entries.async_update_entry(entry, data=data, minor_version=9)
         _LOGGER.info("Migrated SIEM config entry to 1.9")
+    if entry.minor_version < 10:
+        # 1.7 moved the alarm panel into the house settings without rebuilding the entity list, so the panel went
+        # unwatched until the house step was saved again. Rebuilding also picks up how gates and person detectors are
+        # told apart now; strength overrides are kept.
+        data = copy.deepcopy(dict(entry.data))
+        data[c.CONF_ENTITIES] = build_entity_meta(hass, data, data.get(c.CONF_ENTITIES))
+        hass.config_entries.async_update_entry(entry, data=data, minor_version=10)
+        _LOGGER.info("Migrated SIEM config entry to 1.10")
     return True

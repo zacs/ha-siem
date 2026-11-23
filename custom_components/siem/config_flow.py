@@ -275,7 +275,7 @@ class SiemConfigFlow(SiemStepsMixin, config_entries.ConfigFlow, domain=c.DOMAIN)
     """Initial setup: rooms, each room, the house, responses."""
 
     VERSION = 1
-    MINOR_VERSION = 9
+    MINOR_VERSION = 10
 
     def __init__(self) -> None:
         """Start with empty sections."""

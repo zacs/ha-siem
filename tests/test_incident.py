@@ -45,10 +45,19 @@ def test_still_hot_incident_keeps_joining_after_join_window(engine):
 
 
 def test_closes_after_thirty_minutes_below_five(engine):
-    engine.add("door_csi_motion", mode="vacant", now=0)  # 15 points
+    engine.add("exterior_door_opened", mode="vacant", now=0)  # 40 points, below 5 after three half-lives
     engine.evaluate(0)
-    assert engine.evaluate(30 * 60) == []
+    assert EVENT_CLOSED not in [e.kind for e in engine.evaluate(30 * 60)], "back below verify, but not closed"
     low = 30 * 60
+    while engine.score(low) >= 5:
+        low += 60
+    assert low > 45 * 60, "the loop really waited for the score to fall"
+    engine.evaluate(low)
+    # Climbing back above five starts the half hour over.
+    engine.add("exterior_occupied", mode="vacant", now=low + 10 * 60)
+    engine.evaluate(low + 10 * 60)
+    assert engine.current.low_since is None
+    low = low + 10 * 60
     while engine.score(low) >= 5:
         low += 60
     engine.evaluate(low)
@@ -57,6 +66,14 @@ def test_closes_after_thirty_minutes_below_five(engine):
     assert [e.kind for e in events] == [EVENT_CLOSED]
     assert engine.current is None
     assert engine.last_incident.closed == low + 30 * 60
+
+
+def test_closing_the_open_incident_at_shutdown(engine):
+    assert engine.close_open(0) == []
+    engine.add("exterior_door_opened", mode="vacant", now=0)
+    events = engine.close_open(60)
+    assert [e.kind for e in events] == ["opened", EVENT_CLOSED]
+    assert engine.current is None and engine.last_incident.closed == 60
 
 
 def test_timeline_keeps_first_ten_events(engine):

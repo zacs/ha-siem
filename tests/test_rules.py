@@ -37,9 +37,16 @@ def test_night_watches_like_an_empty_house_but_never_locks_by_hand_or_outages():
     assert DEFAULT_RULES["load_residual"].points["night"] == 0
 
 
-@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 0), ("service", 0), ("family", 0), ("night", 40)])
+@pytest.mark.parametrize("mode,expected", [("vacant", 40), ("guest", 0), ("service", 0), ("family", 0)])
 def test_per_mode_point_selection(mode, expected):
     assert DEFAULT_RULES["exterior_door_opened"].points_for(mode) == expected
+
+
+def test_the_night_column_is_for_the_family_or_guests_in_bed():
+    unlock = DEFAULT_RULES["manual_unlock"]
+    assert unlock.points_for("family", night=True) == unlock.points_for("guest", night=True) == 0
+    assert unlock.points_for("vacant", night=True) == 60, "an empty house keeps its own column at night"
+    assert DEFAULT_RULES["interior_occupied"].points_for("family", night=True) == 50
 
 
 def test_night_multiplies_exterior_only():

@@ -18,7 +18,7 @@ in bed; with nobody home, it's inside the night window.
 | The mail carrier rings the doorbell | Vacant | Nothing (18) |
 | A parcel at the door at 11 p.m. | Vacant, night | Verify (27) |
 | A delivery through the side gate | Vacant | Verify (43) |
-| Someone lingers in the backyard for 40 minutes at 1 a.m. | Vacant, night | Verify, once |
+| Someone lingers in the backyard for 40 minutes at 1 a.m. | Vacant, night | Verify after ten minutes, again once the score has doubled, never past verify |
 | Someone comes through the side gate at 1 a.m. | Vacant, night | Deter (64) |
 | Gate, back door, kitchen, by day | Vacant | Alarm; the trigger a minute later |
 | In through a window with no sensor: bedroom, hall, closet | Vacant | Verify, deter, alarm |
@@ -38,15 +38,29 @@ in bed; with nobody home, it's inside the night window.
 | A house-sitter in with their code goes out the front door | Guest, then vacant | Nothing; vacant half an hour later, and the back door after that is a verify |
 | Two guests in with a code: one goes out, the other is in the kitchen | Guest | Nothing; guest mode holds, because someone moved inside after the door |
 | The house-sitter opens a detached garage | Guest | Nothing; with *leave through the garage door* on, vacant half an hour later |
+| The dog walker's code, in and out again a minute and a half later | Guest, then vacant | Nothing; vacant half an hour after they go: only the first door was them coming in |
+| Unlocking from the app for a plumber who never comes | Guest, then vacant | Nothing; no door opened, so the guest clock runs, and the house is vacant two hours later |
+| The old house-sitter's switched-off code still opens the lock | Vacant | `pin_not_allowed`, and the door and the hall after it are an alarm: a switched-off code lets nobody in |
+| The house-sitter lets themselves in ten minutes after you drive off | Family, then guest | Nothing: your half hour of grace doesn't stop them being let in |
+| You come home while the house-sitter is there, then leave through the garage | Family, then vacant | Your coming home ends the house-sitter's guest mode |
+| Home Assistant restarts while the house-sitter is inside | Guest | Nothing: whoever was let in is remembered |
+| A forced service mode, forgotten overnight | Service, vacant at night, service again in the morning | A back door at 11:30 p.m. is a deter |
+| The cleaners leave in service mode and the front door opens again just after | Service, then vacant | Verify: the door that counted for nothing in service mode didn't use up the next |
+| The doorbell's weak motion fires alone, then its camera sees a person | Vacant | The porch counts in full, the two agreeing |
+| Your half hour of grace runs out just as a plug reports | Family, then vacant | The house mode and the recommended alarm mode both follow |
 | The dog, on weak motion sensors, for six hours | Vacant | Nothing |
 | The pet sitter leaves, then a break-in that night | Vacant, night | Alarm: the dog didn't hold guest mode open |
 | Presence Simulation: lights, a smart plug, the TV | Vacant | Nothing |
 | A sunset automation, a slow light, a scene by area | Vacant | Nothing |
+| A light switched by area or `all` reports twenty seconds late | Vacant | Nothing; by hand a minute later, it counts |
 | The app or Apple Home, from far away | Vacant | Nothing |
 | A light switched by its own app, such as a Hue schedule | Vacant | Verify; see below |
 | Z-Wave JS restarts | Vacant | Nothing |
 | The Z-Wave stick dies on vacation | Vacant | Verify after two minutes, break glass after an hour |
-| Someone lingers in the backyard at 1 a.m. while you sleep | Family, night | Verify, once |
+| A Zigbee stick dies and its sensors drop out a minute apart | Vacant | One verify; never the alarm |
+| A window sensor drops out for three minutes every ten | Vacant | At most a verify an hour |
+| The back door's sensor dies while SIEM is reloading | Vacant | Verify after two minutes, break glass after an hour, as if it had died while watched |
+| Someone lingers in the backyard at 1 a.m. while you sleep | Family, night | Verify, again once the score has doubled, never past verify |
 | Someone comes through the side gate at 1 a.m. while you sleep | Family, night | Deter (64) |
 | Gate, back door, kitchen, at 3 a.m. | Family, night | Alarm; the trigger a minute later |
 | A window opens at 2:30 a.m. with nobody up, then motion in that room | Family, night | Deter, then alarm |
@@ -62,6 +76,8 @@ in bed; with nobody home, it's inside the night window.
 | Someone through the gate and at the back door at 3 a.m. while a house-sitter sleeps | Guest, night | Verify, deter, alarm: with only guests home, the night window is night |
 | The house-sitter lets the dog out at 2 a.m. | Guest, night | Nothing |
 | A house-sitter in with their code, their phone off the Wi-Fi overnight, up for water at 3 a.m. | Guest, night | Nothing: someone let in with a code is inside until a door opens |
+| Someone at the side gate at 3 a.m. just as the house-sitter's phone rejoins the Wi-Fi | Guest, night | The score stands: the house-sitter was inside all along, so the phone explains nothing |
+| A window at 2:30 a.m. with the family asleep, as a phone rejoins the Wi-Fi | Family, night | Deter, and the score stands: a phone rejoining isn't someone coming home |
 | A window and then motion at 2:30 a.m., with guest mode forced and forgotten | Guest, night | Deter, then alarm: a forced guest mode still has its night |
 
 The rows marked *see below* are the judgment calls described under

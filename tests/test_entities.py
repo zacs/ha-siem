@@ -50,7 +50,12 @@ def test_interior_door_heuristic_and_perimeter_exclusion():
 
 def test_gate_person_and_exterior_heuristics():
     assert is_gate("binary_sensor.side_gate")
+    assert is_gate("binary_sensor.contact_7", "Back Gate")
     assert not is_gate("binary_sensor.front_door")
+    assert not is_gate("binary_sensor.zigbee_gateway_tamper", "Gateway")
+    assert not is_gate("binary_sensor.tailgate", "Truck Tailgate")
+    assert not is_person_detector("binary_sensor.personal_office_motion")
+    assert is_person_detector("binary_sensor.doorbell_people_detected")
     assert is_person_detector("binary_sensor.driveway_person_occupancy")
     assert is_exterior_area("Back Yard") and is_exterior_area("Driveway")
     assert not is_exterior_area("Living Room")
@@ -76,3 +81,5 @@ def test_resident_expansion_reads_person_attributes():
     )
     assert residents.trackers == ["device_tracker.alice_phone", "device_tracker.car"]
     assert residents.user_ids == ["u-alice"]
+    # Each tracker's person, the first to list it: a shared car belongs to whoever has it first.
+    assert residents.owners == {"device_tracker.alice_phone": "person.alice", "device_tracker.car": "person.alice"}

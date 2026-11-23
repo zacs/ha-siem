@@ -11,23 +11,29 @@ KIND_MANUAL_UNLOCK, KIND_KEYPAD_UNLOCK, KIND_KEYPAD_LOCKOUT = "manual_unlock", "
 # Z-Wave access-control labels that read as a lockout after repeated bad codes. A single wrong code is a
 # typo, not an attack, so labels like "invalid code" do not count. Locks rarely send these; the rule is
 # opportunistic and nothing depends on it.
-LOCKOUT_HINTS: tuple[str, ...] = ("keypad temporarily disabled", "keypad disabled", "code limit", "attempts", "too many")
+# Z-Wave JS says "Keypad temporary disabled".
+LOCKOUT_HINTS: tuple[str, ...] = ("keypad temporar", "keypad disabled", "code limit", "attempts", "too many")
 
 
 def classify_lock_notification(label: str | None, slot: Any) -> tuple[str | None, int | None]:
     """Map a lock event label and code slot to a lock event kind.
 
     Labels come from ``zwave_js_notification`` or Lock Code Manager's lock event: ZHA says "Manual unlock operation" like
-    Z-Wave, Zigbee2MQTT sends ``manual_unlock`` or ``unlock`` with a slot, and Matter only ``unlocked`` with a slot.
+    Z-Wave, Zigbee2MQTT sends ``manual_unlock`` or ``unlock`` with a slot, and Matter only ``unlocked`` with a slot. A
+    lockout is read first: "too many unlock attempts" with a slot is not a code the lock accepted. A slot may arrive as
+    a number or as digits.
     """
     label = (label or "").casefold().replace("_", " ")
-    slot = int(slot) if isinstance(slot, int) and not isinstance(slot, bool) and slot > 0 else None
-    if "manual unlock" in label:
-        return KIND_MANUAL_UNLOCK, slot
-    if "keypad unlock" in label or ("unlock" in label and slot):
-        return KIND_KEYPAD_UNLOCK, slot
+    if isinstance(slot, str) and slot.strip().isdigit():
+        slot = int(slot)
+    slot = slot if isinstance(slot, int) and not isinstance(slot, bool) and slot > 0 else None
     if any(hint in label for hint in LOCKOUT_HINTS):
         return KIND_KEYPAD_LOCKOUT, slot
+    if "manual unlock" in label:
+        return KIND_MANUAL_UNLOCK, slot
+    # "Unlock by RF with invalid user code" carries a slot too, but the lock turned it away.
+    if "keypad unlock" in label or ("unlock" in label and slot and "invalid" not in label):
+        return KIND_KEYPAD_UNLOCK, slot
     return None, slot
 
 

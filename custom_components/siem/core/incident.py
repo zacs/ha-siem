@@ -220,6 +220,13 @@ class IncidentEngine:
         self.current = None
         self._pending.append(IncidentEvent(EVENT_CLOSED, incident, incident.tier, incident.tier))
 
+    def close_open(self, now: float) -> list[IncidentEvent]:
+        """Close the open incident now, as Home Assistant stops or SIEM reloads, and return the events to announce."""
+        if self.current is not None:
+            self._close(self.current, now)
+        events, self._pending = self._pending, []
+        return events
+
     def evaluate(self, now: float) -> list[IncidentEvent]:
         """Advance time: emit opened/tier/closed events and close stale incidents."""
         events, self._pending = self._pending, []

@@ -184,9 +184,9 @@ Mattermost buttons work differently from phone buttons: when you press one,
    Developer** and add Home Assistant's host to *Allow untrusted internal
    connections to* (`ServiceSettings.AllowedUntrustedInternalConnections` in
    `config.json`), for example `192.168.1.10` or `homeassistant.local`.
-3. **Mattermost Cloud** can't reach a private address at all. Use an address
-   it can reach from the internet, such as your Nabu Casa or reverse-proxy
-   address, in *Home Assistant address for Mattermost*.
+3. **Mattermost must be on your network.** SIEM's label webhook only answers
+   the local network, so Mattermost Cloud, or a server elsewhere, can't press
+   the buttons; see [the label webhook](#the-label-webhook).
 
 If a button does nothing, or Mattermost says the action failed, look in
 Mattermost's server log for the request it tried to make. If the request
@@ -210,13 +210,13 @@ buttons send them, work too, and a `user_name` alongside is recorded as who
 pressed it. The answer is `{"ephemeral_text": "..."}`, a line about what
 happened.
 
-The webhook is not limited to your home network, so Mattermost Cloud, or a
-Mattermost server elsewhere, can reach it through Nabu Casa or your own
-proxy. That means anyone who has the address can label your incidents. All a
-label can do is nudge rule weights by 10% (never below 0.3 or above 1.5), and
-the same label on the same incident counts once; it can't arm, disarm or turn
-anything off. Treat the address like a password anyway: don't post it
-anywhere public. The address only changes if you remove the integration and
-add it again, which also clears SIEM's learned weights and incident history.
+The webhook only answers requests from your local network. A request from
+the internet, through Nabu Casa or your own proxy, labels nothing, so a link
+that leaks out of a chat is no use to anyone outside. All a label can do is
+nudge rule weights by 10% (never below 0.3 or above 1.5), and the same label
+on the same incident counts once; it can't arm, disarm or turn anything off.
+Treat the address like a password anyway: don't post it anywhere public. The
+address only changes if you remove the integration and add it again, which
+also clears SIEM's learned weights and incident history.
 
 If you only use phones, the webhook sits unused.

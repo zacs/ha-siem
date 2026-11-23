@@ -28,7 +28,7 @@ should take to reach each one in an empty house:
   someone in the next room (50, times 1.5 for following an entry) is 115.
 - **Outside on its own stays low.** People come to your door all the time.
   A visit from the mail carrier should not reach verify; someone hanging
-  around for a quarter of an hour, or coming through the gate, should.
+  around for twenty minutes or so, or coming through the gate, should.
 
 Points are given per house mode, in the order vacant, guest, service,
 family, and a fifth column for night with the family or guests home, when
@@ -60,12 +60,15 @@ itself on (a floodlight's own sensor) and contacts such as a shed door or a
 mailbox all mean one thing: someone is outside.
 
 That is the `exterior_occupied` rule, 10 points, and it counts once per
-fifteen minutes for the whole outdoors, however many outdoor sensors fire,
+ten minutes for the whole outdoors, however many outdoor sensors fire,
 at the level of the strongest one and times 1.3 when two agree. Treating the
 outdoors as one place is what keeps a delivery quiet: the driveway, the
 doorbell camera and the porch light are one visit, not three. Someone who
-stays outside keeps getting credited every fifteen minutes and builds up to a
-verify.
+stays outside keeps getting credited every ten minutes and builds up to a
+verify: in about ten minutes when a camera and a motion sensor agree, about
+twenty to thirty with one camera. At night it's half as much again, and someone
+lingering for half an hour gets a second verify once the score has doubled,
+but never a deter on its own.
 
 Power sensors in outdoor rooms are not used. Outdoor loads (pool pumps,
 fountains, heaters) run on their own.
@@ -104,14 +107,17 @@ within five minutes makes that door count 1.5 times.
 
 The same contact scores at most once every five minutes, so a door used to
 come in and to go out is one visit, and a bouncing contact is one opening.
+Only an opening that counted starts the five minutes: one worth nothing (in
+service mode, or held at night as the household's) leaves the next free to
+count.
 
 Doors also say when guests go out. Someone let in with a code is inside, and
 the house in guest mode, until an exterior door opens; see
 [Someone let in is inside until they go out](scoring.md#someone-let-in-is-inside-until-they-go-out).
 Windows and gates don't count for that. A contact with device class
-*window*, or *window* in its name, is a window; one with *gate* in its name
-is a gate; one with device class *garage door*, or *garage* in its name, is
-the garage door.
+*window*, or *window* in its name, is a window; one with the word *gate* in
+its name is a gate (not *gateway* or *tailgate*); one with device class
+*garage door*, or *garage* in its name, is the garage door.
 
 #### The garage door
 
@@ -140,7 +146,8 @@ never sees, such as a Hue or Lutron schedule or the vendor's app. One switch
 can light a whole group of bulbs, so lights count once per room.
 
 Anything Home Assistant switched never counts, including a light that reports
-back slowly after a command and lights in an outdoor room (those count as
+back slowly after a command, one switched through its area, device, floor or
+label or with `entity_id: all`, and lights in an outdoor room (those count as
 someone outside instead).
 
 ### Appliance power sensors
@@ -192,6 +199,12 @@ An arrival also cancels what was scored in the ten minutes before it (at
 least 60 points), because a phone often reports home a little after its
 owner walked in. A resident's or a guest's phone joining the Wi-Fi in the
 hallway explains the door and the hall motion that came just before.
+
+A phone that only dropped off the Wi-Fi and rejoined hasn't arrived, so it
+cancels nothing: a tracker must have been away for ten minutes, not come back
+from unavailable, and for a resident, their person entity must have left
+too. A guest's phone rejoining while someone let in with a code is inside
+cancels nothing either.
 
 Everyone who lives there needs a tracker. If someone at home has none, the
 house reads empty once everyone tracked has left, and their footsteps look
@@ -246,6 +259,11 @@ It scores low because it's indirect: a fridge's defrost cycle or a dryer you
 forgot to list can produce the same step. On its own it never alerts; it
 backs up other signs.
 
+A drop as big as a step must last as long before SIEM takes it as the new
+normal. An EV charger reporting 7 kW a moment before the house meter catches
+up is one odd reading, not a new baseline that would make the next normal
+reading look like a step.
+
 ### Locks
 
 Locks are whole-house settings for three reasons:
@@ -268,14 +286,16 @@ How each lock event scores:
   late, or someone with a key you didn't tell SIEM about, or someone who
   shouldn't have one. Everything in the next five minutes counts twice.
 - **A code the lock accepts** lets someone in: whoever typed it was given
-  it, so SIEM doesn't need to know whose it is. The house goes to guest mode
+  it, so SIEM doesn't need to know whose it is. A code the lock turned away
+  ("Unlock by RF with invalid user code") lets nobody in. The house goes to guest mode
   and 40 points come off the open incident. With the family away, whoever
   typed it is inside, and the house stays in guest mode, until a door opens;
   see
   [Someone let in is inside until they go out](scoring.md#someone-let-in-is-inside-until-they-go-out).
 - **A keypad lockout** after repeated bad codes scores `keypad_lockout`, 40
   (30 with the family home), and sends a break-glass message. A single
-  wrong code is a typo and doesn't count. Few locks report lockouts.
+  wrong code is a typo and doesn't count. Few locks report lockouts; Z-Wave
+  JS calls it *Keypad temporary disabled*.
 
 Lock state changes themselves don't score; the lock's own reports are more
 precise.
@@ -285,9 +305,10 @@ precise.
 Optional. Lock Code Manager's per-slot "credential used" entities give SIEM
 the name of whoever's code was used, for the incident's `person`, and they
 say when a slot has been switched off. A disabled code that still opens the
-lock scores `pin_not_allowed`, 30 points (20 with the family home): codes are
-usually removed from the lock when switched off, so this means the lock and
-Lock Code Manager disagree.
+lock scores `pin_not_allowed`, 30 points (20 with the family home), and lets
+nobody in: the house mode stays as it was. Codes are usually removed from the
+lock when switched off, so this means the lock and Lock Code Manager
+disagree.
 
 ### Calendar, guest sensors and service sensors
 
@@ -406,9 +427,12 @@ letting the dog out looks like someone coming in.
   state changes carry. Users only matter to SIEM for this one distinction.
 - **An entity coming back** after a restart or a reconnect, even if it comes
   back on, and a sensor unavailable for less than two minutes. A sensor that
-  stays unavailable longer scores `sensor_offline`, 20 points in an empty
-  house, all of them together as one, and if the house is still empty an hour
-  later, a break-glass message.
+  stays unavailable longer, or is already unavailable when Home Assistant has
+  started, scores `sensor_offline`, 20 points in an empty house, and if the
+  house is still empty an hour later, a break-glass message. It counts once
+  per incident, however many sensors go and however spread out (a hub
+  dying takes them a minute apart), and a sensor that keeps dropping out
+  counts at most once an hour.
 - **Lock state changes, cameras, and power sensors in outdoor rooms,** for
   the reasons above.
 

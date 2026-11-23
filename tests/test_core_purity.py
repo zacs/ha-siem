@@ -11,3 +11,5 @@ def test_core_has_no_homeassistant_imports():
             stripped = line.strip()
             if stripped.startswith(("import ", "from ")):
                 assert "homeassistant" not in stripped, f"{path.name}: {stripped}"
+                # The rest of the integration (const included) pulls Home Assistant in.
+                assert not stripped.startswith("from .."), f"{path.name}: {stripped}"

@@ -57,7 +57,7 @@ async def test_full_flow_prefills_rooms(hass):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"digest_times": ["08:00"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.minor_version == 9
+    assert entry.minor_version == 10
     assert entry.data["responses"] == {"digest_times": ["08:00"], "digest_post_when_empty": True}
     assert entry.data["house"]["csi_map"] == {"binary_sensor.front_door_csi": "binary_sensor.front_door"}
     assert entry.data["house"]["night_start"] == "23:00:00"
@@ -114,13 +114,17 @@ async def test_migration_from_1_1(hass, hass_storage, freezer):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 9
+    assert entry.minor_version == 10
     assert entry.data["responses"] == {}
     # The panel SIEM used to arm is kept, to be read for armed night; the second water flow field joins the first.
     assert entry.data["house"] == {"alarm_panel": "alarm_control_panel.house", "water_flow": ["sensor.water_main", "sensor.water_pulse"]}
     # Rooms named like the outdoors start out as outdoor rooms.
     assert entry.data["rooms"]["kitchen"]["outdoors"] is False and entry.data["rooms"]["porch"]["outdoors"] is True
     assert entry.runtime_data.outdoor_rooms == {"porch"}
+    # The panel is watched: it has its role, and arming it night puts the family to bed.
+    assert entry.data["entities"]["alarm_control_panel.house"]["role"] == "panel"
+    assert entry.data["entities"]["sensor.coffee_power"] == {"role": "power", "room": "kitchen", "threshold": 30}
+    assert "alarm_control_panel.house" in entry.runtime_data.meta
     assert entry.options["rules"] == {
         "appliance_on": {"points": {"vacant": 20, "guest": 0, "service": 0, "family": 0, "night": 35}},
         "gate_opened": {"points": {"vacant": 25, "guest": 5, "service": 5, "family": 0, "night": 30}},
@@ -146,7 +150,7 @@ async def test_migration_drops_notify_panel_deterrence_and_trust_settings(hass, 
     orphans = [registry.async_get_or_create("switch", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry) for key in ("dry_run", "auto_arm", "auto_alarm")]
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 9
+    assert entry.minor_version == 10
     assert entry.data["rooms"] == {"kitchen": {"name": "Kitchen", "power_threshold": 30, "outdoors": False}}
     assert entry.data["house"] == {"night_start": "22:00:00", "alarm_panel": "alarm_control_panel.house"}
     assert entry.data["responses"] == {"digest_times": ["08:00"]}
@@ -166,7 +170,7 @@ async def test_the_bedtime_sensor_from_0_0_4_is_removed(hass):
     bedtime = registry.async_get_or_create("binary_sensor", DOMAIN, f"{entry.entry_id}_bedtime", config_entry=entry, suggested_object_id="siem_bedtime")
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 9
+    assert entry.minor_version == 10
     assert registry.async_get(bedtime.entity_id) is None
     assert hass.states.get("binary_sensor.siem_night") is not None
 
@@ -181,7 +185,7 @@ async def test_a_room_camera_becomes_a_list(hass):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 9
+    assert entry.minor_version == 10
     assert entry.data["rooms"]["kitchen"]["camera"] == ["camera.kitchen"]
     assert "camera" not in entry.data["rooms"]["hall"]
     assert entry.data["entities"]["camera.kitchen"] == {"role": "camera", "room": "kitchen"}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from homeassistant.core import Context, callback
 import pytest
 
@@ -53,6 +55,37 @@ async def test_a_chat_button_labels_its_own_incident(hass, freezer, hass_client,
     assert await response.json() == {"ephemeral_text": "SIEM no longer knows incident deadbeef."}
     response = await client.post(f"/api/webhook/{hook}", json={"incident_id": first, "label": "maybe"})
     assert await response.json() == {"ephemeral_text": "SIEM doesn't know the label 'maybe'."}
+
+
+async def test_the_label_button_only_answers_the_local_network(hass, hass_client, labelled):
+    """Your chat server reaches Home Assistant on the local network. A request from the internet (here: through Home
+    Assistant Cloud) labels nothing, whoever holds the link."""
+    entry = await setup_siem(hass)
+    flip(hass, "binary_sensor.back_door")
+    await hass.async_block_till_done()
+    hook, incident = entry.runtime_data.store.label_webhook, entry.runtime_data.incident_id
+    client = await hass_client()
+    with patch("homeassistant.components.webhook.is_cloud_connection", return_value=True):
+        await client.post(f"/api/webhook/{hook}", json={"context": {"incident_id": incident, "label": "false_alarm"}})
+    assert labelled == [] and entry.runtime_data.store.weights == {}
+    response = await client.post(f"/api/webhook/{hook}", json={"context": {"incident_id": incident, "label": "false_alarm"}})
+    assert response.status == 200 and len(labelled) == 1
+
+
+async def test_the_label_select_shows_the_label_of_the_incident_it_would_label(hass, freezer):
+    entry = await setup_siem(hass)
+    select = "select.siem_label_last_incident"
+    flip(hass, "binary_sensor.back_door")
+    await hass.async_block_till_done()
+    await hass.services.async_call("select", "select_option", {"entity_id": select, "option": "false_alarm"}, blocking=True)
+    assert hass.states.get(select).state == "false_alarm"
+    # Hours later another incident opens: it has no label yet, and picking False alarm again labels it.
+    await tick(hass, freezer, 3 * 3600)
+    flip(hass, "binary_sensor.front_door")
+    await tick(hass, freezer, 30)
+    assert hass.states.get(select).state == "none"
+    await hass.services.async_call("select", "select_option", {"entity_id": select, "option": "false_alarm"}, blocking=True)
+    assert entry.runtime_data.engine.current.labels == ["false_alarm"]
 
 
 async def test_a_phone_button_after_a_restart(hass, freezer, labelled):

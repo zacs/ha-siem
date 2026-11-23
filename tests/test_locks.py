@@ -15,6 +15,11 @@ def test_classification():
     assert classify_lock_notification("Manual unlock operation", None) == (KIND_MANUAL_UNLOCK, None)
     assert classify_lock_notification("Keypad unlock operation", 3) == (KIND_KEYPAD_UNLOCK, 3)
     assert classify_lock_notification("Keypad temporarily disabled", 0) == (KIND_KEYPAD_LOCKOUT, None)
+    assert classify_lock_notification("Keypad temporary disabled", 0) == (KIND_KEYPAD_LOCKOUT, None), "Z-Wave JS's wording"
+    assert classify_lock_notification("Manually enter user access code exceeds code limit", None)[0] == KIND_KEYPAD_LOCKOUT
+    # A lockout that names a slot is still a lockout, and a code the lock turned away lets nobody in.
+    assert classify_lock_notification("Too many unlock attempts", 3) == (KIND_KEYPAD_LOCKOUT, 3)
+    assert classify_lock_notification("Unlock by RF with invalid user code", 3) == (None, 3)
     assert classify_lock_notification("Manual lock operation", 0) == (None, None)
     assert classify_lock_notification("Lock jammed", "x") == (None, None)
     # Zigbee2MQTT action names, with the slot in action_user
@@ -24,6 +29,8 @@ def test_classification():
     # Matter reports only the direction and the slot, so a manual unlock is not distinguishable
     assert classify_lock_notification("unlocked", 2) == (KIND_KEYPAD_UNLOCK, 2)
     assert classify_lock_notification("unlocked", 0) == (None, None)
+    assert classify_lock_notification("unlocked", "2") == (KIND_KEYPAD_UNLOCK, 2), "a slot sent as digits"
+    assert classify_lock_notification("unlocked", "two") == (None, None)
     assert classify_lock_notification(None, True) == (None, None)
 
 

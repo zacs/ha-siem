@@ -166,12 +166,16 @@ async def test_appliance_and_water_cross_their_thresholds(hass, freezer):
 
 
 async def test_guest_mode_from_a_pin_holds_until_a_door_and_busy_power_sensors_are_nobody(hass, freezer):
-    """A code lets Pat in: guest mode holds through four quiet hours. Then the front door opens, and a plug reporting
-    every minute isn't someone inside: half an hour later the house is vacant."""
+    """A code lets Pat in and the front door opens for them: guest mode holds through four quiet hours. Then the
+    front door opens again, and a plug reporting every minute isn't someone inside: half an hour later the house is
+    vacant."""
     await setup_siem(hass)
     hass.states.async_set("event.lcm_pat", "2026-10-19T19:00:00+00:00", {"code_slot": 3, "name": "Pat", "operation": "unlock"})
     await hass.async_block_till_done()
     assert hass.states.get("sensor.siem_house_mode").state == "guest"
+    flip(hass, "binary_sensor.front_door")
+    flip(hass, "binary_sensor.front_door", "off")
+    await hass.async_block_till_done()
 
     async def busy_power(minutes: int) -> None:
         for minute in range(minutes):
@@ -213,6 +217,8 @@ async def test_lock_events_only_for_configured_locks(hass, freezer, siem_events)
     glass = notifications(siem_events, "break_glass")
     assert len(glass) == 1 and glass[0]["message"].startswith("Front Door Lock: a lock was unlocked by hand")
     hass.bus.async_fire("lock_code_manager_lock_state_changed", {"entity_id": "lock.front_door", "action_text": "Keypad unlock operation", "code_slot": 4})
+    # Lock Code Manager's own entity for the slot reports the use too: a switched-off code still lets nobody in.
+    hass.states.async_set("event.lcm_old", "2026-10-19T19:05:00+00:00", {"code_slot": 4, "name": "Old cleaner", "active": False, "operation": "unlock"})
     await hass.async_block_till_done()
     assert [r for r, _, _ in scored(entry)] == ["manual_unlock", "pin_not_allowed"]
     assert hass.states.get("sensor.siem_house_mode").state == "vacant"
@@ -221,6 +227,69 @@ async def test_lock_events_only_for_configured_locks(hass, freezer, siem_events)
     await hass.async_block_till_done()
     assert [r for r, _, _ in scored(entry)][-1] == "let_in"
     assert hass.states.get("sensor.siem_house_mode").state == "guest"
+
+
+async def test_zwave_js_lock_notifications(hass, freezer, siem_events):
+    """Z-Wave JS reports straight from the lock: its own wording for a lockout, and the user id of a code."""
+    entry = await setup_siem(hass)
+
+    def notify(label: str, **parameters) -> None:
+        hass.bus.async_fire("zwave_js_notification", {"command_class_name": "Notification", "device_id": "lock-device", "event_label": label, "parameters": parameters})
+
+    notify("Keypad temporary disabled")
+    await hass.async_block_till_done()
+    assert [r for r, _, _ in scored(entry)] == ["keypad_lockout"]
+    assert len(notifications(siem_events, "break_glass")) == 1
+    notify("Unlock by RF with invalid user code", userId=7)
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.siem_house_mode").state == "vacant", "a code the lock turned away"
+    notify("Keypad unlock operation", userId=7)
+    await hass.async_block_till_done()
+    assert [r for r, _, _ in scored(entry)][-1] == "let_in"
+    assert hass.states.get("sensor.siem_house_mode").state == "guest"
+
+
+async def test_the_house_load_with_an_ev_charger(hass, freezer):
+    """The charger reports 7 kW a moment before the house meter catches up: that is no unexplained load. A kettle
+    nothing explains, left on for five minutes, is."""
+    hass.states.async_set("sensor.ev_power", "0", {"device_class": "power", "unit_of_measurement": "W"})
+    entry = await setup_siem(hass, house={"load_sensor": "sensor.house_power", "automated_loads": ["sensor.ev_power"]})
+    for _ in range(10):
+        await tick(hass, freezer, 30)
+    hass.states.async_set("sensor.ev_power", "7000")
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.house_power", "7300")
+    for _ in range(20):
+        await tick(hass, freezer, 30)
+    assert scored(entry) == []
+    hass.states.async_set("sensor.house_power", "9300")
+    for _ in range(12):
+        await tick(hass, freezer, 30)
+    assert [r for r, _, _ in scored(entry)] == ["load_residual"]
+
+
+async def test_an_alert_shows_the_latest_events(hass, freezer):
+    """The timeline keeps the first ten events; an alert in a long incident shows what just happened."""
+    entry = await setup_siem(hass)
+    coordinator = entry.runtime_data
+    for i in range(14):
+        coordinator.engine.add("interior_occupied", mode="vacant", now=coordinator.now() + i, points=5, entity_id=f"binary_sensor.m{i}")
+    incident = coordinator.engine.current
+    assert len(incident.timeline) == 10
+    lines = coordinator.alerts.timeline_lines(incident)
+    assert len(lines) == 14 and "binary_sensor.m13" in lines[-1]
+
+
+async def test_a_reload_closes_the_open_incident_and_says_so(hass, freezer, siem_events):
+    entry = await setup_siem(hass)
+    flip(hass, "binary_sensor.back_door")
+    await hass.async_block_till_done()
+    incident = entry.runtime_data.incident_id
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    closed = [data for kind, data in siem_events if kind == "siem_incident" and data["kind"] == "closed"]
+    assert [c["incident_id"] for c in closed] == [incident] and closed[0]["closed"] is not None
+    assert entry.runtime_data.store.incidents[-1]["id"] == incident
 
 
 async def test_override_survives_a_reload(hass, freezer):

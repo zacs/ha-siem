@@ -69,10 +69,13 @@ class Alerts:
         ]
 
     def timeline_lines(self, incident: Incident) -> list[str]:
-        """Render the timeline as plain lines; events without an entity read from their detail."""
+        """Render every scored event as plain lines, latest last; events without an entity read from their detail.
+
+        From the contributions, not the timeline, which keeps only the first ten: an alert shows what just happened.
+        """
         c = self.coordinator
         lines = []
-        for entry in incident.timeline:
+        for entry in [x.as_dict() for x in incident.contributions] or incident.timeline:
             at = dt_util.as_local(dt_util.utc_from_timestamp(entry["at"])).strftime("%H:%M")
             if entry.get("entity_id"):
                 lines.append(timeline_line(at, c.entity_name(entry["entity_id"]), describe(c.rules, entry["rule"]), entry["points"]))

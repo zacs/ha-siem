@@ -59,6 +59,11 @@ class RoomOccupancy:
         window.credited = max(window.credited, target)
         return OccupancyResult(points, strongest, corroborated, strongest == STRENGTH_WEAK)
 
+    def withdraw(self, room: str, points: float) -> None:
+        """Give back credit :meth:`observe` handed out that counted for nothing, so the next source can have it."""
+        if (window := self._rooms.get(room)) is not None:
+            window.credited = max(0.0, window.credited - points)
+
     def reset(self, room: str | None = None) -> None:
         """Forget the windows of one room, or of every room."""
         if room is None:

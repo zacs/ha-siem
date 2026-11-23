@@ -124,6 +124,8 @@ TICK_SECONDS = 30
 # A sensor must stay unavailable this long before it scores, so an integration reload or restart does not.
 OFFLINE_GRACE_S = 120
 OFFLINE_BREAK_GLASS_S = 3600
+# A sensor that keeps dropping out counts at most once this often.
+OFFLINE_RESCORE_S = 3600
 # The same entity (a light: the same room) scores the same rule at most once per cooldown: a door used to come in
 # and to go out is one visit, a contact bouncing is one opening, a group of bulbs is one switch.
 COOLDOWN_S = 300
@@ -138,15 +140,16 @@ READ_ONLY_SERVICES = frozenset(
 # switched something (a smart plug, a TV through its integration), whose power climbs a little later.
 COMMANDED_LIGHT_S = 30
 COMMANDED_POWER_S = 120
-# Everything seen outside counts as one "someone is outside" window, credited again every fifteen minutes.
-OUTSIDE_WINDOW_S = 900
+# Everything seen outside counts as one "someone is outside" window, credited again every ten minutes: someone who
+# stays out there reaches verify in about twenty, while a visit to the door stays below it.
+OUTSIDE_WINDOW_S = 600
 # Covers that let people in when Home Assistant opens them; blinds and shades do not.
 ENTRY_COVER_CLASSES = ("garage", "gate", "door")
 # A resident arriving home explains everything scored in the ten minutes before.
 ARRIVAL_EXPLAINS_S = 600
+# A tracker home again sooner than this after leaving is a phone dropping off the Wi-Fi, not someone arriving.
+ARRIVAL_AWAY_S = 600
 LET_IN_DEDUPE_S = 60
-# A door that opens this soon after someone was let in is them coming through it, not someone leaving.
-LET_IN_ENTRY_S = 120
 # The alarm trigger turns on once an incident has held the alarm tier this long.
 ALARM_GRACE_S = 60
 # Night: the household is in bed while the picked panel is armed night. While it is arming, pending or triggered

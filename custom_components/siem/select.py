@@ -38,17 +38,17 @@ class SiemSelect(SiemEntity, SelectEntity):
 
     @property
     def current_option(self) -> str:
-        """Return the forced mode, or the last label applied."""
+        """Return the forced mode, or the latest label of the incident a choice would label."""
         if self.key == OVERRIDE:
             return self.coordinator.modes.override or MODE_AUTO
-        return self.coordinator.last_label or LABEL_NONE
+        incident = self.coordinator.engine.find(None)
+        return incident.labels[-1] if incident is not None and incident.labels else LABEL_NONE
 
     async def async_select_option(self, option: str) -> None:
-        """Apply the override, or label the last incident unless ``none`` was chosen."""
+        """Apply the override, or label the open or most recent incident; ``none`` labels nothing."""
         if self.key == OVERRIDE:
             self.coordinator.set_house_mode(option)
         elif option == LABEL_NONE:
-            self.coordinator.last_label = None
             self.coordinator.publish(force=True)
         else:
             self.coordinator.label(option)

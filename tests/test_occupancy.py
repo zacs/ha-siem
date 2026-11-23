@@ -18,6 +18,17 @@ def test_strongest_source_credits_once_per_window():
     assert later.points == 30
 
 
+def test_credit_that_counted_for_nothing_can_be_given_back():
+    """The dog's weak sensor in an empty house can't open an incident; the intruder a minute later still gets the room."""
+    rooms = RoomOccupancy()
+    dog = rooms.observe("kitchen", "binary_sensor.kitchen_sound", "weak", 0, 50)
+    assert dog.points == 15
+    rooms.withdraw("kitchen", dog.points)
+    intruder = rooms.observe("kitchen", "binary_sensor.kitchen_presence", "strong", 60, 50)
+    assert intruder.points == 50 * 1.3, "the full room, corroborated by the dog's sensor"
+    rooms.withdraw("garage", 10)
+
+
 def test_two_independent_sources_within_sixty_seconds_corroborate():
     rooms = RoomOccupancy()
     rooms.observe("kitchen", "binary_sensor.motion", "medium", 0, 50)
