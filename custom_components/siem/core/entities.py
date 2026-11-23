@@ -11,13 +11,14 @@ from .occupancy import STRENGTH_MEDIUM, STRENGTH_STRONG, STRENGTH_WEAK, STRENGTH
 
 OCCUPANCY_CLASSES: tuple[str, ...] = ("occupancy", "presence", "motion", "sound")
 OPENING_CLASSES: tuple[str, ...] = ("door", "window", "opening", "garage_door")
+# Every name SIEM reads is listed for users in docs/sensors.md, "Names SIEM reads": keep the two in step.
 INTERIOR_DOOR_KEYWORDS: tuple[str, ...] = (
     "fridge", "freezer", "refrigerator", "pantry", "cabinet", "cupboard", "drawer", "closet",
-    # Outdoors: things outside the house that you open.
-    "shed", "storage", "mailbox", "mail box", "letterbox", "letter box", "postbox", "post box", "parcel", "barn", "outbuilding",
 )
-# A mailbox, letterbox or parcel box: the mail carrier opens it every day.
-MAIL_KEYWORDS: tuple[str, ...] = ("mail", "letterbox", "letter box", "postbox", "post box", "parcel")
+# A mailbox, letterbox or parcel box: the mail carrier opens it every day. Matched at the start of a word.
+MAIL_WORDS: tuple[str, ...] = ("mail", "letterbox", "letter box", "postbox", "post box", "parcel")
+# Things outside the house that you open, matched at the start of a word: "Garden Shed", not "Finished Basement".
+OUTDOOR_THING_WORDS: tuple[str, ...] = ("shed", "storage", "barn", "outbuilding", *MAIL_WORDS)
 EXTERIOR_AREA_KEYWORDS: tuple[str, ...] = (
     "yard", "driveway", "porch", "patio", "outside", "outdoor", "exterior", "garden", "deck", "balcony", "pool",
 )
@@ -53,19 +54,29 @@ def _mentions(keywords: Iterable[str], *names: str | None) -> bool:
     return any(k in haystack for k in keywords)
 
 
+def _words(*names: str | None) -> list[str]:
+    return [w for w in re.split(r"[\W_]+", " ".join(n for n in names if n).casefold()) if w]
+
+
 def _says(words: Iterable[str], *names: str | None) -> bool:
     """Return True when a name has one of ``words`` as a word of its own: "side_gate", not "gateway" or "tailgate"."""
-    return not set(words).isdisjoint(re.split(r"[\W_]+", " ".join(n for n in names if n).casefold()))
+    return not set(words).isdisjoint(_words(*names))
+
+
+def _starts_word(starts: Iterable[str], *names: str | None) -> bool:
+    """Return True when a word of the name (or a run of them, like "mail box") starts with one of ``starts``."""
+    text = " " + " ".join(_words(*names))
+    return any(f" {start}" in text for start in starts)
 
 
 def is_interior_door_name(*names: str | None) -> bool:
     """Return True when a name reads as something you open: a fridge, cabinet, drawer or closet; outdoors, a shed or mailbox."""
-    return _mentions(INTERIOR_DOOR_KEYWORDS, *names)
+    return _mentions(INTERIOR_DOOR_KEYWORDS, *names) or _starts_word(OUTDOOR_THING_WORDS, *names)
 
 
 def is_mailbox(*names: str | None) -> bool:
     """Return True for a mailbox, letterbox or parcel box contact."""
-    return _mentions(MAIL_KEYWORDS, *names)
+    return _starts_word(MAIL_WORDS, *names)
 
 
 def is_gate(*names: str | None) -> bool:

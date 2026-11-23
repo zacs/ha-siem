@@ -54,7 +54,7 @@ trouble scores. At night it watches the house again; see below. Rules marked
 | Rule | Points | Fires when |
 | --- | --- | --- |
 | `exterior_door_opened` | 40, 0, 0, 0, 40 | An exterior door or window opens (exterior) |
-| `gate_opened` | 30, 0, 0, 0, 30 | A perimeter contact with *gate* in its name opens (exterior) |
+| `gate_opened` | 30, 0, 0, 0, 30 | A perimeter contact with the word *gate* in its name opens (exterior) |
 | `outbuilding_opened` | 30, 0, 0, 0, 30 | A contact on a shed, storage box or the like, in an outdoor room, opens (exterior) |
 | `door_csi_motion` | 5, 0, 0, 0, 5 | A Wi-Fi motion sensor sees someone at a door that is closed and hasn't opened in the last 60 seconds (exterior) |
 | `exterior_occupied` | 10, 0, 0, 0, 10 | Someone is outside; see below (exterior) |
@@ -71,9 +71,10 @@ trouble scores. At night it watches the house again; see below. Rules marked
 
 ## Someone in a room
 
-Camera person detection (an occupancy sensor with *person* in its name),
-occupancy, presence and Bayesian sensors are strong, motion sensors medium
-(60% of the points), sound sensors weak (30%). You can change an entity's
+Camera person detection (an occupancy sensor with the word *person*,
+*persons* or *people* in its name), occupancy, presence and Bayesian sensors
+are strong, motion sensors medium (60% of the points), sound sensors weak
+(30%). You can change an entity's
 strength in **Configure**. A room scores once per five minutes at the level of
 its strongest sensor, times 1.3 when two sensors agree within a minute. A weak
 sensor alone never opens an incident while the house is vacant, which is what

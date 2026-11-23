@@ -11,7 +11,7 @@
       },
       "room": {
         "title": "Room: {room}",
-        "description": "Pre-filled from the areas of your entities and devices; check it. In an outdoor room, motion, person detection and lights only mean someone is outside, and so does the mailbox opening again after the mail came; a shed or storage box opening counts for more. Power sensors are not used there. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name is camera person detection, the strongest source. {remaining} room(s) to go.",
+        "description": "Pre-filled from the areas of your entities and devices; check it. In an outdoor room, motion, person detection and lights only mean someone is outside, and so does the mailbox opening again after the mail came; a shed or storage box opening counts for more. Power sensors are not used there. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with the word 'person', 'persons' or 'people' in its name is camera person detection, the strongest source. Setup reads a few names like this; the docs list every one. {remaining} room(s) to go.",
         "data": {
           "outdoors": "Outdoors (yard, porch, driveway)",
           "occupancy": "Occupancy sources (occupancy, presence, motion, sound)",
@@ -144,7 +144,7 @@
       },
       "room": {
         "title": "Room: {room}",
-        "description": "Pre-filled from the areas of your entities and devices; check it. In an outdoor room, motion, person detection and lights only mean someone is outside, and so does the mailbox opening again after the mail came; a shed or storage box opening counts for more. Power sensors are not used there. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with 'person' in its name is camera person detection, the strongest source. {remaining} room(s) to go.",
+        "description": "Pre-filled from the areas of your entities and devices; check it. In an outdoor room, motion, person detection and lights only mean someone is outside, and so does the mailbox opening again after the mail came; a shed or storage box opening counts for more. Power sensors are not used there. Occupancy strength comes from the device class (occupancy and presence are strong, motion medium, sound weak, Bayesian sensors strong) and can be changed later in Configure. An occupancy source with the word 'person', 'persons' or 'people' in its name is camera person detection, the strongest source. Setup reads a few names like this; the docs list every one. {remaining} room(s) to go.",
         "data": {
           "outdoors": "Outdoors (yard, porch, driveway)",
           "occupancy": "Occupancy sources (occupancy, presence, motion, sound)",

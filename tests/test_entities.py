@@ -74,7 +74,12 @@ def test_things_you_open_outdoors_are_told_apart_by_name():
     )
     assert perimeter == ["binary_sensor.front_door"] and things == ["binary_sensor.contact_1", "binary_sensor.contact_2"]
     assert is_mailbox("binary_sensor.mailbox") and is_mailbox("binary_sensor.contact_3", "Parcel Box") and is_mailbox(None, "Letterbox")
+    assert is_mailbox("binary_sensor.mail_box") and is_mailbox(None, "Post Box") and is_mailbox(None, "Mailboxes")
     assert not is_mailbox("binary_sensor.shed_door", "Garden Shed")
+    assert not is_mailbox("binary_sensor.email_alert"), "the start of a word: not email"
+    # Only at the start of a word, so a finished basement is no shed and the dishwasher no storage.
+    assert is_interior_door_name("binary_sensor.contact_8", "Sheds")
+    assert not is_interior_door_name("binary_sensor.finished_basement_door", "Finished Basement Door")
 
 
 def test_opening_kind_tells_doors_from_windows_garages_and_gates():

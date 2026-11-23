@@ -54,8 +54,8 @@ deterrence package lights up.
 ### Outdoors
 
 A tick for yards, porches, driveways and the like. Rooms named like one
-(yard, porch, patio, driveway, garden, deck, balcony, pool, outside) start
-ticked. In an outdoor room, motion, person detection and a light that turns
+(yard, driveway, porch, patio, outside, outdoor, exterior, garden, deck,
+balcony, pool; see [Names SIEM reads](#names-siem-reads)) start ticked. In an outdoor room, motion, person detection and a light that turns
 itself on (a floodlight's own sensor) all mean one thing: someone is outside.
 Contacts on things you open out there are below.
 
@@ -76,7 +76,8 @@ fountains, heaters) run on their own.
 ### Occupancy sources
 
 Motion, occupancy, presence and sound sensors, and camera person detection
-(any occupancy sensor with *person* in its name). They score
+(an occupancy sensor with the word *person*, *persons* or *people* in its
+name). They score
 `interior_occupied`, 50 points, scaled by the source's strength:
 
 | Strength | Share | Sources |
@@ -101,7 +102,7 @@ source's strength in **Configure**.
 
 Contacts on the outside of the house. A door or window scores
 `exterior_door_opened`, 40 points: a verify alone, and the start of most
-alarms. A contact with *gate* in its name scores `gate_opened`, 30 instead,
+alarms. A contact with the word *gate* in its name scores `gate_opened`, 30 instead,
 because a gate is outside the house itself, and a gate followed by a door
 within five minutes makes that door count 1.5 times.
 
@@ -119,7 +120,8 @@ until another one opens; see
 Window and gate contact sensors don't count for that. A contact sensor with
 device class *window*, or *window* in its name, is on a window; one with the
 word *gate* in its name is on a gate (not *gateway* or *tailgate*); one with
-device class *garage door*, or *garage* in its name, is on the garage door.
+device class *garage door*, or *garage* in its name, is on the garage door
+([every name SIEM reads](#names-siem-reads)).
 
 #### The garage door
 
@@ -139,14 +141,17 @@ fridge or your bedroom closet while the house is empty, a pet can't, and a
 burglar going through drawers is exactly what this catches. After someone was
 seen in a room, these count 1.5 times.
 
-Outdoors, contacts on things outside the house, recognised by name the same
-way (shed, storage, barn, outbuilding, and mailbox, letterbox or parcel box):
+Outdoors, contacts on things outside the house, recognised by a word in the
+name starting *shed*, *storage*, *barn* or *outbuilding*, or by the mailbox
+words (see [Names SIEM reads](#names-siem-reads)):
 
 - **A shed, storage box or the like** scores `outbuilding_opened`, 30 points
   in an empty house: someone in the yard going through your things is a
   verify on its own. Nothing with the family, guests or a contractor home by
   day, when it's them getting the lawnmower out.
-- **The mailbox** is opened by the mail carrier every day. In an empty
+- **The mailbox** (a word starting *mail*, *letterbox*, *postbox* or
+  *parcel*, or *letter box* or *post box*) is opened by the mail carrier
+  every day. In an empty
   house, its first opening of the day outside the night window counts for
   nothing; any other opening, a second one or one at night, is someone
   outside, like a camera seeing them (see [Outdoors](#outdoors)). On its own
@@ -441,6 +446,30 @@ the order of events:
 
 Put a motion sensor on the way to each outside door. Without one, one of you
 letting the dog out looks like someone coming in.
+
+## Names SIEM reads
+
+A few things SIEM can only tell from a name: the entity id, or the name you
+gave it. This is every one of them. A name decides where setup suggests
+putting an entity, which you can always change, and, for those marked
+**scoring**, how it counts. Case doesn't matter, and a space or an underscore
+between words is the same.
+
+| What | The name has | What it changes |
+| --- | --- | --- |
+| A contact on something you open, indoors | *fridge*, *freezer*, *refrigerator*, *pantry*, *cabinet*, *cupboard*, *drawer* or *closet*, anywhere | Setup suggests it under *Contacts on things you open* |
+| A contact on something you open, outdoors | A word starting *shed*, *storage*, *barn* or *outbuilding*, or one of the mailbox words below | Setup suggests it under *Contacts on things you open*. **Scoring:** in an outdoor room it scores `outbuilding_opened` |
+| A mailbox | A word starting *mail* (*mailbox*, *mail box*, but not *email*), *letterbox*, *letter box*, *postbox*, *post box* or *parcel* | **Scoring:** in an outdoor room, the first opening of the day is the mail carrier's; see [the mailbox](#contacts-on-things-you-open-the-fridge-a-closet-a-shed-the-mailbox) |
+| A gate | The word *gate* or *gates* (not *gateway* or *tailgate*) | **Scoring:** `gate_opened` instead of `exterior_door_opened`, and never a way in or out for guests |
+| A window | Device class *window*, or *window* anywhere | **Scoring:** never a way in or out for guests |
+| The garage door | Device class *garage door*, or *garage* anywhere | **Scoring:** a way out for guests only if you said people leave through it; see [the garage door](#the-garage-door) |
+| Camera person detection | The word *person*, *persons* or *people* | **Scoring:** the strongest occupancy source |
+| An outdoor room | An area named with *yard*, *driveway*, *porch*, *patio*, *outside*, *outdoor*, *exterior*, *garden*, *deck*, *balcony* or *pool*, anywhere | Setup ticks *Outdoors* for it |
+| Guest and service visits | A calendar event title starting *Guest:* or *Service:* | **Scoring:** guest or service mode; see [the calendar](#calendar-guest-sensors-and-service-sensors) |
+
+Whether a contact is a gate (for its points) and whether an occupancy sensor
+is person detection are read when you save the room, so after renaming one,
+save its room again in **Configure**. The rest are read as things happen.
 
 ## What never scores
 
