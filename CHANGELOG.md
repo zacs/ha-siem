@@ -3,7 +3,7 @@
 Changes in each release, newest first. Releases before 0.0.5 are described on
 the [releases page](https://github.com/zacs/ha-siem/releases).
 
-## Unreleased
+## 0.0.6
 
 ### Changed
 
@@ -50,9 +50,8 @@ the [releases page](https://github.com/zacs/ha-siem/releases).
 
 - **Sheds, storage boxes and the mailbox.** A contact on something outside
   the house, in an outdoor room's *things you open*, is told apart by a word
-  in its name. A
-  shed or storage box opening scores the new `outbuilding_opened`, 30 points
-  in an empty house. The mailbox's first opening of the day is the mail
+  in its name. A shed or storage box opening scores the new
+  `outbuilding_opened`, 30 points in an empty house. The mailbox's first opening of the day is the mail
   carrier and counts for nothing; any other is someone outside. Before, both
   only said someone was outside, and the setup form put them with the doors.
 - **Every name SIEM reads is listed** in the sensor docs, under *Names SIEM
