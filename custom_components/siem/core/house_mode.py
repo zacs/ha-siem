@@ -121,7 +121,7 @@ class HouseModeMachine:
         """Record whether any resident or resident tracker is home; a resident coming home ends guests let in."""
         if anyone_home and not self._anyone_home and self.guests_inside:
             # Often it was their own code, the phone a little late; either way the family is home to say who is.
-            self._end_latch("a resident came home")
+            self._forget_let_in("a resident came home")
         if anyone_home or self._anyone_home:
             self._last_home_seen = now
         self._anyone_home = anyone_home
@@ -214,7 +214,7 @@ class HouseModeMachine:
             return True
         return False
 
-    def _end_latch(self, why: str) -> None:
+    def _forget_let_in(self, why: str) -> None:
         self.guests_inside, self._entered = False, False
         self._let_in_at = self._entry_at = self._door_opened = None
         self.note = why
@@ -225,9 +225,9 @@ class HouseModeMachine:
             if not self._entered and self._let_in_at is not None and now - self._let_in_at > GUEST_ENTRY_S:
                 # No door opened for them: perhaps nobody came in. The guest clock runs from the letting in.
                 self._guest_end = max(self._guest_end or self._let_in_at, self._let_in_at)
-                self._end_latch(f"no door opened within {GUEST_ENTRY_S // 60} minutes of the letting in, so the guest clock runs instead")
+                self._forget_let_in(f"no door opened within {GUEST_ENTRY_S // 60} minutes of the letting in, so the guest clock runs instead")
             elif self._door_opened is not None and now - self._door_opened >= GUEST_LEFT_S:
-                self._end_latch(f"nobody moved inside for {GUEST_LEFT_S // 60} minutes after a door opened")
+                self._forget_let_in(f"nobody moved inside for {GUEST_LEFT_S // 60} minutes after a door opened")
         if self._guest_end is not None and self._anyone_home and now >= self._guest_end + GUEST_AFTER_END_S:
             # With the family home, their comings and goings say nothing about guests: the clock ends at the two hours.
             self._guest_end = None

@@ -8,16 +8,17 @@ the [releases page](https://github.com/zacs/ha-siem/releases).
 ### Changed
 
 - **Someone let in is inside until they go out.** With no resident home, a
-  code typed at the keypad, or Home Assistant unlocking a lock, followed by a
-  door opening for them, now holds guest mode until another exterior door
-  opens. Then it holds for 30 minutes more, and for good if someone moves
-  inside after the first five. Guests' phones dropping off the Wi-Fi, a quiet
-  day, the night and a restart no longer end it; a resident coming home does.
-  Only the first door to open is them coming in, so a visit of a minute and a
-  half ends it too. A letting in with no door opening for five minutes, a
-  garage door, gate or door cover opened from Home Assistant, and a code with
-  the family home start the guest clock, as before: two hours, and an hour of
-  quiet.
+  door lock opening for someone outside (a code at its keypad, or an unlock
+  from Home Assistant), followed by an exterior door contact sensor opening
+  for them, now holds guest mode until a door contact sensor opens again.
+  Then it holds for 30 minutes more, and for good if someone moves inside
+  after the first five. Guests' phones dropping off the Wi-Fi, a quiet day,
+  the night and a restart no longer end it; a resident coming home does.
+  Only the first door contact sensor to open is them coming in, so a visit of
+  a minute and a half ends it too. An unlock with no door opening for five
+  minutes, a garage door, gate or door cover opened from Home Assistant, and
+  a code with the family home start the guest clock, as before: two hours,
+  and an hour of quiet.
 - **A phone rejoining the Wi-Fi no longer cancels an open incident.** Every
   tracker at home still counts for who is home, straight away; only taking
   the points off waits for a real arrival. That needs the tracker to have

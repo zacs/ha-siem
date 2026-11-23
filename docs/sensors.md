@@ -111,19 +111,21 @@ Only an opening that counted starts the five minutes: one worth nothing (in
 service mode, or held at night as the household's) leaves the next free to
 count.
 
-Doors also say when guests go out. Someone let in with a code is inside, and
-the house in guest mode, until an exterior door opens; see
+Door contact sensors also say when guests come in and go out. Someone the
+door lock let in (with a code, or opened from Home Assistant) is inside, and
+the house in guest mode, from the first exterior door contact sensor opening
+until another one opens; see
 [Someone let in is inside until they go out](scoring.md#someone-let-in-is-inside-until-they-go-out).
-Windows and gates don't count for that. A contact with device class
-*window*, or *window* in its name, is a window; one with the word *gate* in
-its name is a gate (not *gateway* or *tailgate*); one with device class
-*garage door*, or *garage* in its name, is the garage door.
+Window and gate contact sensors don't count for that. A contact sensor with
+device class *window*, or *window* in its name, is on a window; one with the
+word *gate* in its name is on a gate (not *gateway* or *tailgate*); one with
+device class *garage door*, or *garage* in its name, is on the garage door.
 
 #### The garage door
 
 The whole-house question *Residents or guests sometimes leave the house
-through the garage door* says whether the garage door is a way out of the
-house. Leave it off, the default, for a detached garage, or one nobody walks
+through the garage door* says whether the garage door's contact sensor
+counts as a way out of the house. Leave it off, the default, for a detached garage, or one nobody walks
 through: opening it to get the bike out isn't leaving the house. Turn it on
 for an attached garage people go in and out through, and it counts like any
 other door.
@@ -299,7 +301,8 @@ Locks are whole-house settings for three reasons:
 
 How each lock event scores:
 
-- **A hand unlock** (a key from outside, or the thumb turn from inside)
+- **Unlocking the door lock by hand** (a key from outside, or the thumb turn
+  from inside)
   while the house is empty scores `manual_unlock`, 60 points, and sends a
   break-glass message. Either a resident whose phone is
   late, or someone with a key you didn't tell SIEM about, or someone who
@@ -308,7 +311,8 @@ How each lock event scores:
   it, so SIEM doesn't need to know whose it is. A code the lock turned away
   ("Unlock by RF with invalid user code") lets nobody in. The house goes to guest mode
   and 40 points come off the open incident. With the family away, whoever
-  typed it is inside, and the house stays in guest mode, until a door opens;
+  typed it is inside once a door contact sensor opens for them, and the house
+  stays in guest mode until one opens again;
   see
   [Someone let in is inside until they go out](scoring.md#someone-let-in-is-inside-until-they-go-out).
 - **A keypad lockout** after repeated bad codes scores `keypad_lockout`, 40

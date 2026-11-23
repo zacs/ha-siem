@@ -77,7 +77,7 @@ in bed; with nobody home, it's inside the night window.
 | Your own bedtime sensor and the panel, both picked | Family, night when either says bed | The clock only stands in for one that is unavailable |
 | Someone through the gate and at the back door at 3 a.m. while a house-sitter sleeps | Guest, night | Verify, deter, alarm: with only guests home, the night window is night |
 | The house-sitter lets the dog out at 2 a.m. | Guest, night | Nothing |
-| A house-sitter in with their code, their phone off the Wi-Fi overnight, up for water at 3 a.m. | Guest, night | Nothing: someone let in with a code is inside until a door opens |
+| A house-sitter in with their code, their phone off the Wi-Fi overnight, up for water at 3 a.m. | Guest, night | Nothing: someone let in with a code is inside until a door contact sensor opens again |
 | Someone at the side gate at 3 a.m. just as the house-sitter's phone rejoins the Wi-Fi | Guest, night | The score stands: the house-sitter was inside all along, so the phone explains nothing |
 | A window at 2:30 a.m. with the family asleep, as a phone rejoins the Wi-Fi | Family, night | Deter, and the score stands: a phone rejoining isn't someone coming home |
 | A window and then motion at 2:30 a.m., with guest mode forced and forgotten | Guest, night | Deter, then alarm: a forced guest mode still has its night |

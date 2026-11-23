@@ -186,34 +186,37 @@ and says so while a mode is forced, with the date it was set.
 
 ### Someone let in is inside until they go out
 
-A code typed at the keypad, or Home Assistant unlocking a lock, opens the
-door for someone outside. With no resident home (or only lingering: the
-house-sitter arriving ten minutes after you drive off), the next exterior
-door to open is them coming in, and from then on SIEM takes it that they are
-inside. It holds guest mode however quiet the house is, whatever their phone
-does, through the night, and across restarts: a house-sitter's phone
+When a door lock opens for someone outside (a code typed at its keypad, or
+Home Assistant unlocking it) and no resident is home, or only lingering (the
+house-sitter arriving ten minutes after you drive off), SIEM watches the door
+contact sensors for them coming in. Once one opens, SIEM takes it that they
+are inside. It holds guest mode however quiet the house is, whatever their
+phone does, through the night and across restarts: a house-sitter's phone
 dropping off the Wi-Fi at 1 a.m. doesn't leave an empty house.
 
-Coming in is the first door to open within five minutes of the code; the
-same door bouncing, or held open for the bags, within a minute of that is
-still coming in. If no door opens in those five minutes, perhaps nobody came
-in (the app unlock for a plumber who never turned up), and the guest clock
-runs from the code instead.
+Coming in is the first exterior door contact sensor to open within five
+minutes of the unlock. The same one opening again within a minute (the door
+bouncing, or held open for the bags) is still them coming in. If no door
+contact sensor opens in those five minutes, perhaps nobody came in (an unlock
+from the app for a plumber who never turned up), and the guest clock runs
+from the unlock instead.
 
-It lasts until another exterior door opens: the dog walker leaving a minute
-and a half after coming in counts. Then guest mode holds for 30 more
-minutes, in case whoever opened it is only taking the bins out. If someone moves inside after the first five minutes, not everyone
-left, and guest mode holds until the next door. Someone moving inside is
-motion or presence that isn't weak, a presence sensor that is still on, a
-light switched by hand, an inside door, the water or an appliance. If nobody does, the house
-is vacant 30 minutes after the door, unless a guest's tracker, the calendar
-or a guest sensor still says guests are home.
+Guest mode holds until an exterior door contact sensor opens again: someone
+may be going out. The dog walker leaving a minute and a half after coming in
+counts. Guest mode then holds for 30 more minutes, in case whoever opened the
+door is only taking the bins out. If someone moves inside after the first
+five minutes, not everyone left, and guest mode holds until a door opens
+again. Someone moving inside is motion or presence that isn't weak, a
+presence sensor that is still on, a light switched by hand, a contact on
+something you open (the fridge, a closet), the water or an appliance. If
+nobody does, the house is vacant 30 minutes after the door opened, unless a
+guest's tracker, the calendar or a guest sensor still says guests are home.
 
-- **A hand unlock isn't someone let in.** The thumb turn is someone already
-  inside, and on its own it starts nothing.
-- **Windows and gates aren't ways out.** The garage door is one only if you
-  said people leave the house through it; see
-  [the garage door](sensors.md#the-garage-door).
+- **Unlocking the door lock by hand isn't someone let in.** The thumb turn is
+  someone already inside, and on its own it starts nothing.
+- **Window and gate contact sensors don't count,** coming in or going out.
+  The garage door's counts only if you said people leave the house through
+  it; see [the garage door](sensors.md#the-garage-door).
 - **A garage door, gate or door cover opened from Home Assistant** lets
   someone in, but doesn't say anyone came inside, so it starts the guest
   clock instead.
