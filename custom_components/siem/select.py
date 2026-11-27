@@ -47,7 +47,7 @@ class SiemSelect(SiemEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Apply the override, or label the open or most recent incident; ``none`` labels nothing."""
         if self.key == OVERRIDE:
-            self.coordinator.set_house_mode(option)
+            self.coordinator.set_house_mode(option, self._context)
         elif option == LABEL_NONE:
             self.coordinator.publish(force=True)
         else:

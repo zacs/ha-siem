@@ -502,6 +502,17 @@ a contractor's day on the calendar is vacant, and watched, after dark.
 
 ## Seeing it happen
 
+The logbook says what made SIEM change. Open a change of the incident, the
+tier, the alarm trigger, the house mode or night in the logbook or an entity's
+activity, and *What happened* shows the cause: the door contact sensor or
+motion sensor that opened the incident or raised its tier, the person who came
+home, the action someone called. The alarm trigger, which turns on a minute
+after the alarm tier, names what took the incident there. A change the clock
+made (the score fading, an incident closing after half an hour of quiet) has
+no cause to show. SIEM writes its states under the context of what it reacted
+to, the way template and group entities do, so an automation that follows one
+of SIEM's sensors keeps the whole chain in its trace too.
+
 Turn on **Enable debug logging** on the integration's page, and SIEM logs one
 line for each thing it weighs: a door opening, motion starting, a light
 switched on, a power sensor crossing its threshold. Raw readings that change

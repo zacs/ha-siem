@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -23,3 +24,10 @@ class SiemEntity(CoordinatorEntity[SiemCoordinator]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)}, name=NAME, manufacturer=MANUFACTURER, model="ha-siem", sw_version=VERSION, entry_type=DeviceEntryType.SERVICE
         )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Write the new state under the context of what caused it, so the logbook can say what happened."""
+        if (cause := self.coordinator.cause) is not None:
+            self.async_set_context(cause)
+        super()._handle_coordinator_update()

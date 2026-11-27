@@ -56,7 +56,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         await coordinator().async_reset_weights()
 
     async def set_house_mode(call: ServiceCall) -> None:
-        coordinator().set_house_mode(call.data[c.ATTR_MODE])
+        coordinator().set_house_mode(call.data[c.ATTR_MODE], call.context)
 
     for name, handler, schema in (
         (c.SERVICE_LABEL_INCIDENT, label_incident, LABEL_SCHEMA),

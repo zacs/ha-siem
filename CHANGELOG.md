@@ -3,6 +3,16 @@
 Changes in each release, newest first. Releases before 0.0.5 are described on
 the [releases page](https://github.com/zacs/ha-siem/releases).
 
+## Unreleased
+
+### Added
+
+- **The logbook says what made SIEM change.** *What happened* on a change of
+  the incident, the tier, the alarm trigger, the house mode or night names the
+  sensor, person or action behind it, instead of "No cause was recorded". The
+  alarm trigger names what took the incident to alarm. An automation following
+  one of SIEM's sensors keeps the whole chain in its trace.
+
 ## 0.0.6
 
 ### Changed

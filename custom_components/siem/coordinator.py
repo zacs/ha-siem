@@ -28,7 +28,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
+from homeassistant.core import Context, Event, EventStateChangedData, HomeAssistant, State, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -115,14 +115,21 @@ def _parse_time(value: str | None, default: str) -> time:
 
 
 def _safe(func):
-    """Log and swallow anything a listener raises; a bad entity must never take the component down."""
+    """Log and swallow anything a listener raises; a bad entity must never take the component down.
+
+    While the listener runs, its event's context is the cause of whatever SIEM publishes, so the logbook can say what
+    happened: the door that opened, the person who came home, the action someone called.
+    """
 
     @functools.wraps(func)
     def wrapper(self, event):
+        previous, self.cause = self.cause, getattr(event, "context", None)
         try:
             func(self, event)
         except Exception:
             _LOGGER.exception("%s failed on %s", func.__name__, getattr(event, "data", event))
+        finally:
+            self.cause = previous
 
     return wrapper
 
@@ -175,6 +182,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # The house mode and night _process last announced, which a change first noticed elsewhere is compared with.
         self._processed: tuple[str, bool, bool] | None = None
         self.alarm_trigger = False
+        # The context of what SIEM is reacting to, which its entities write their states under (as template and group
+        # entities do), so the logbook's "What happened" names the door, the person or the action behind a change. The
+        # alarm trigger, which turns on a minute later, keeps the context of what took the incident to the alarm tier.
+        self.cause: Context | None = None
+        self._alarm_cause: Context | None = None
         self._alarm_held = False
         self._alarm_timer: Callable[[], None] | None = None
         self._last_let_in = -1e12
@@ -463,6 +475,7 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._alarm_timer()
             self._alarm_timer, self._alarm_held = None, False
         elif self._alarm_timer is None and not self._alarm_held:
+            self._alarm_cause = self.cause
             self._alarm_timer = async_call_later(self.hass, c.ALARM_GRACE_S, self._alarm_due)
         previous, self.alarm_trigger = self.alarm_trigger, at_alarm and self._alarm_held
         return previous != self.alarm_trigger
@@ -470,7 +483,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @callback
     def _alarm_due(self, _now: datetime) -> None:
         self._alarm_timer, self._alarm_held = None, True
-        self._process(self.now())
+        previous, self.cause = self.cause, self._alarm_cause
+        try:
+            self._process(self.now())
+        finally:
+            self.cause = previous
 
     def _score(
         self, rule_id: str, now: float, entity_id: str | None, room: str | None, detail: str, points: float | None = None, allow_open: bool = True, gated: bool = False
@@ -1032,8 +1049,11 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.publish(self.now(), force=True)
         return incident.id, True
 
-    def set_house_mode(self, mode: str) -> None:
-        """Force a house mode, or return to automatic; the choice survives restarts."""
+    def set_house_mode(self, mode: str, context: Context | None = None) -> None:
+        """Force a house mode, or return to automatic; the choice survives restarts.
+
+        ``context`` is the action or the select change that asked for it, which the house mode is then written under.
+        """
         previous = self.modes.override
         self.modes.set_override(mode)
         if self.modes.override != previous:
@@ -1041,8 +1061,12 @@ class SiemCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.store.override_since = dt_util.now().isoformat() if self.modes.override else None
         self.store.override = self.modes.override
         self.store.async_schedule_save()
-        self._process(self.now())
-        self.publish(self.now(), force=True)
+        previous_cause, self.cause = self.cause, context or self.cause
+        try:
+            self._process(self.now())
+            self.publish(self.now(), force=True)
+        finally:
+            self.cause = previous_cause
 
     async def async_reset_weights(self) -> None:
         """Return every rule weight to 1.0."""
